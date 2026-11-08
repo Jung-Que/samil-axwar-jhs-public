@@ -1,0 +1,11 @@
+version: axhub/v1
+name: samil-axwar-jhs
+
+runtime:
+  port: 8080
+  health_path: /healthz
+
+build:
+  dockerfile: Dockerfile
+  start: node server.js
+  deploy_method: docker
