@@ -47,7 +47,7 @@ Aurora Holdings(가상 화장품 그룹) 데이터로 **기업의 AI 기반 운�
 ### 앱·배포
 
 - **서버 Go**(`server/`, 1.26, 표준 라이브러리 + Postgres 드라이버 `pgx`만) · **화면 React + TypeScript**(`web/`, **Vite** 빌드). Go 서버가 `/api/*`와 빌드된 화면(`WEB_DIR`)을 함께 제공한다.
-- 로컬 실행: `go -C server run .`(`127.0.0.1:8080`, DB 없으면 메모리 저장소) + `cd web && npm ci && npm run dev`(Vite가 `/api`를 8080으로 넘김). Postgres는 로컬 Docker dev 테스트 `python tools/selftest.py devdb`(`compose.dev.yaml`, 호스트 포트 공개 없음)로 본다. 의존성은 `server/go.sum`·`web/package-lock.json`으로 고정하고, 새로 넣으면 PR에 이유를 적는다.
+- 로컬 실행: `go -C server run .`(`127.0.0.1:8080`, DB 없으면 메모리 저장소) + `cd web && npm ci && npm run dev`(Vite가 `/api`를 8080으로 넘김). Postgres는 로컬 Docker dev 테스트 `python tools/selftest.py devdb`(`compose.dev.yaml`, 호스트 포트 공개 없음)로 보고, 로컬 Docker로 띄워 브라우저로 볼 때는 `compose.local.yaml`(`127.0.0.1:8090`만)을 덧붙인다. 막을 것은 배포 서버가 이 PC의 localhost에 접속하는 일이다(개발용 로컬 포트는 괜찮다, 11/10). 의존성은 `server/go.sum`·`web/package-lock.json`으로 고정하고, 새로 넣으면 PR에 이유를 적는다.
 - axhub 배포(`axhub.yaml`), 헬스체크 `/healthz`, 포트는 `PORT` 환경변수, DB는 앱 전용 Postgres(`DATABASE_URL` 주입). `Dockerfile`은 3단계(화면 빌드 → Go 빌드 → alpine 실행), `.dockerignore`는 `server/`·`web/`만 보낸다. 새 폴더를 쓰면 둘 다 고친다. W05 원본 복사본은 `server/w05/data/raw/`(바이너리에 포함, 손으로 고치지 않음), AI 키는 `ANTHROPIC_API_KEY`(없으면 녹화 응답 [모의]).
 - 소스 zip 제출 시 `.claude` · `.codex` · `.agents`와 `analysis/03_1기_수상작/videos/`는 뺀다.
 

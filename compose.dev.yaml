@@ -1,6 +1,7 @@
 # 로컬 Docker dev 테스트 — Postgres로 저장소 통합 테스트와 배포 이미지를 확인한다.
 #
-# - 호스트에 포트를 공개하지 않는다(ports: 없음). 컨테이너끼리 compose 내부 네트워크로만 통신한다.
+# - 테스트는 호스트에 포트를 공개하지 않는다(ports: 없음). 컨테이너끼리 compose 내부 네트워크로만 통신한다.
+#   화면을 브라우저로 보려면 compose.local.yaml을 덧붙인다(127.0.0.1에만 포트를 연다).
 # - 배포에는 쓰지 않는다. axhub는 axhub.yaml(deploy_method: docker → Dockerfile)로 빌드하고,
 #   .dockerignore가 server/·web/만 보내므로 이 파일은 이미지에 들어가지 않는다.
 # - DB는 tmpfs라 매번 빈 상태에서 시작하고, 끝나면 사라진다. 아래 비밀번호는 이 내부 네트워크 전용이다.

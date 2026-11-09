@@ -1,0 +1,16 @@
+# 로컬 Docker 실행(개발용) — compose.dev.yaml에 덧붙여 화면을 브라우저로 본다.
+#
+# - 이 PC 안(127.0.0.1)에만 포트를 연다. 0.0.0.0(같은 네트워크의 다른 PC에 공개)은 쓰지 않는다.
+#   막아야 하는 것은 배포 서버가 이 PC의 localhost에 접속하는 일이고, 개발용 로컬 포트는 괜찮다(11/10 사용자 확인).
+# - 테스트(python tools/selftest.py devdb)는 compose.dev.yaml만 써서 포트 없이 돈다. 이 파일은 devdb 테스트에 쓰지 않는다.
+# - 배포에는 쓰지 않는다(.dockerignore가 server/·web/만 보내므로 이미지에 들어가지 않는다).
+#
+# 실행(프로젝트 이름을 따로 줘서 devdb 테스트가 내리지 않게 한다):
+#   docker compose -f compose.dev.yaml -f compose.local.yaml -p axwar-local up -d --build --wait app
+#   → http://127.0.0.1:8090  (포트 변경: AXWAR_LOCAL_PORT=9000)
+# 끄기:
+#   docker compose -f compose.dev.yaml -f compose.local.yaml -p axwar-local down -v
+services:
+  app:
+    ports:
+      - "127.0.0.1:${AXWAR_LOCAL_PORT:-8090}:8080"

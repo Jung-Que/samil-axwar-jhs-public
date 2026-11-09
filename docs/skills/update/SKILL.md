@@ -10,7 +10,7 @@ description: PR 병합 뒤 로컬을 최신으로 맞추고 실행해 확인한�
 | 상황 | 할 절차 |
 |---|---|
 | 새 세션 시작, 다른 세션·사람이 PR을 병합함 | 1 → 2 → 3 |
-| 화면을 브라우저로 보고 싶다 | 4 |
+| 화면을 브라우저로 보고 싶다 | 4 (Postgres까지 배포와 같게 보려면 `docker-build` 스킬 "로컬 실행") |
 | `Dockerfile`·저장소가 바뀌어 이미지를 다시 확인해야 한다 | 5 (`docker-build` 스킬) |
 | W05 원본이 바뀌었다(드묾) | 6 |
 
@@ -53,9 +53,16 @@ python tools/selftest.py app engine docs guard
 - `engine`: W05 원본 복사본 해시, 업무모델 기대값, 시연 3건
 - 저장소·이미지가 바뀌었으면 `docker-build` 스킬(`devdb`)도 돌린다
 
-## 4. 로컬 실행 (Docker 없이, 브라우저 확인)
+## 4. 로컬 실행 (브라우저 확인)
 
-서버는 `127.0.0.1`에만 열린다(이 PC 안). DB 주소가 없으면 **메모리 저장소**라 서버를 끄면 사건 로그가 사라진다.
+두 가지 방법이 있다.
+
+| 방법 | 저장소 | 주소 | 쓰는 때 |
+|---|---|---|---|
+| Go 서버 직접(아래) | 메모리 | http://127.0.0.1:8080, 개발 모드 http://localhost:5173 | 화면을 고치며 바로 볼 때 |
+| 로컬 Docker(`docker-build` 스킬 "로컬 실행") | Postgres | http://127.0.0.1:8090 | 배포와 같은 구성으로 볼 때 |
+
+Go 서버 직접 실행은 `127.0.0.1`에만 열린다(이 PC 안). DB 주소가 없으면 **메모리 저장소**라 서버를 끄면 사건 로그가 사라진다.
 
 **개발 모드(화면 수정을 바로 보며):** 터미널 두 개.
 
@@ -78,7 +85,9 @@ go -C server run .            # 화면과 API: http://127.0.0.1:8080
 
 ## 5. 이미지 업데이트
 
-`Dockerfile`, `.dockerignore`, `axhub.yaml`, `server/store/`, `server/go.mod`가 바뀌었으면 `docker-build` 스킬을 돌린다. `devdb`는 매번 `--build`로 이미지를 새로 만든다. 따로 띄워 둘 컨테이너는 없다(끝나면 모두 내림).
+`Dockerfile`, `.dockerignore`, `axhub.yaml`, `server/store/`, `server/go.mod`가 바뀌었으면 `docker-build` 스킬의 dev 테스트(`devdb`)를 돌린다. `devdb`는 매번 `--build`로 이미지를 새로 만들고 끝나면 모두 내린다.
+
+로컬 Docker로 띄워 둔 앱(`axwar-local`)이 있으면, 병합 뒤 같은 `up -d --build --wait app` 명령을 다시 실행해 새 코드로 바꾼다(`docker-build` 스킬 "로컬 실행").
 
 ## 6. W05 원본 복사본 다시 만들기
 

@@ -480,6 +480,26 @@ def check_no_published_ports():
     return not exposed
 
 
+LOCAL_COMPOSE = ROOT / "compose.local.yaml"  # 로컬 Docker 실행(개발용): 127.0.0.1에만 포트를 연다
+
+
+def check_local_ports():
+    # 로컬 실행 덧붙임 파일을 합친 설정에서 공개 포트가 모두 127.0.0.1인지 본다(0.0.0.0이면 같은 네트워크에 공개된다).
+    r = subprocess.run([*COMPOSE, "-f", str(LOCAL_COMPOSE), "config", "--format", "json"], cwd=ROOT, capture_output=True,
+                       text=True, encoding="utf-8", errors="replace", timeout=60)
+    if r.returncode != 0:
+        report("devdb", False, "compose.local.yaml 설정 읽기 실패\n    " + r.stderr.strip()[-400:])
+        return
+    services = json.loads(r.stdout).get("services", {})
+    ports = [(name, p) for name, s in services.items() for p in s.get("ports") or []]
+    bad = [f"{name}: {p.get('host_ip') or '0.0.0.0'}:{p.get('published')}" for name, p in ports if p.get("host_ip") != "127.0.0.1"]
+    if bad:
+        report("devdb", False, f"compose.local.yaml에 127.0.0.1이 아닌 공개 포트: {bad}")
+    else:
+        report("devdb", bool(ports), f"로컬 실행 덧붙임(compose.local.yaml) 공개 포트 {len(ports)}개, 모두 127.0.0.1" if ports
+               else "compose.local.yaml에 공개 포트가 없다(브라우저로 볼 수 없음)")
+
+
 def run_devdb():
     if not shutil.which("docker"):
         report("devdb", False, "docker 명령이 없다(Docker Desktop 필요)")
@@ -489,6 +509,8 @@ def run_devdb():
     if info.returncode != 0 or not info.stdout.strip():
         report("devdb", False, "Docker 엔진이 꺼져 있다 → Docker Desktop을 켜고 다시 실행")
         return
+    if LOCAL_COMPOSE.exists():
+        check_local_ports()
     if not check_no_published_ports():
         return
     try:
