@@ -13,8 +13,7 @@ import (
 // W05 업무 API. 상태는 사건 로그를 다시 적용해 만들고, 사건은 규칙에 맞을 때만 기록된다.
 //
 //	GET  /api/w05/state              현재 상태(평가·제안·확인 요청·작업·결정·사건 로그)
-//	POST /api/w05/events             사건 입력 {type, actor_role, payload, ai_call?}
-//	POST /api/w05/ai/structure       A1 미리보기 {kind, text} → 필드(상태 안 바뀜, 사람 확인 뒤 events로)
+//	POST /api/w05/events             사건 입력 {type, actor_role, payload} — payload는 고정 필드(자유 문장·LLM 현재 제외)
 //	POST /api/w05/reset              사건 로그 초기화
 //	POST /api/w05/scenarios/{id}     초기화 뒤 시연 시나리오 실행(normal | change | reject)
 func registerW05(mux *http.ServeMux, svc *w05.Service) {
@@ -42,7 +41,6 @@ func registerW05(mux *http.ServeMux, svc *w05.Service) {
 			Type    string          `json:"type"`
 			Actor   string          `json:"actor_role"`
 			Payload json.RawMessage `json:"payload"`
-			AiCall  *w05.AiCall     `json:"ai_call"`
 		}
 		if !decode(w, r, &in) {
 			return
@@ -51,26 +49,8 @@ func registerW05(mux *http.ServeMux, svc *w05.Service) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "type이 필요하다"})
 			return
 		}
-		v, err := svc.Submit(r.Context(), in.Type, in.Actor, in.Payload, in.AiCall)
+		v, err := svc.Submit(r.Context(), in.Type, in.Actor, in.Payload)
 		respond(w, v, err)
-	})
-
-	mux.HandleFunc("POST /api/w05/ai/structure", func(w http.ResponseWriter, r *http.Request) {
-		if unavailable(w) {
-			return
-		}
-		var in struct {
-			Kind string `json:"kind"`
-			Text string `json:"text"`
-		}
-		if !decode(w, r, &in) {
-			return
-		}
-		if strings.TrimSpace(in.Text) == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "text가 필요하다"})
-			return
-		}
-		writeJSON(w, http.StatusOK, svc.Structure(r.Context(), in.Kind, in.Text))
 	})
 
 	mux.HandleFunc("POST /api/w05/reset", func(w http.ResponseWriter, r *http.Request) {

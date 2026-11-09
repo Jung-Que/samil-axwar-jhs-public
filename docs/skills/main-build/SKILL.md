@@ -36,7 +36,7 @@ description: dev → main 릴리스와 axhub 배포. 릴리스 PR(merge commit)�
    axhub env list --app samil-axwar-jhs
    ```
 
-   - `ANTHROPIC_API_KEY`는 실제 AI 결합 지점을 사용자가 정한 뒤에만 넣는다(11/10). 없으면 배포본도 녹화 응답으로 돈다.
+   - LLM(AI API)은 현재 제외라(11/10) AI 키를 넣지 않는다. 앱은 고정 필드 입력만 받는다.
    - 비밀값은 `axhub env`로만 넣고 코드·이미지·커밋에 넣지 않는다.
 
 ## 2. 릴리스 PR

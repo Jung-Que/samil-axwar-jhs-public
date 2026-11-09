@@ -61,7 +61,7 @@ export default function App() {
           <span className="chip strong">입찰 {bid ? `${bid.state} · v${bid.version}` : "접수 전"}</span>
           <span className="chip">업무일 {v.state.scenario.sim_date}</span>
           <span className="chip">저장소 {v.store}</span>
-          <span className={`chip ai-${v.ai_mode}`}>{v.ai_mode === "live" ? `AI 실제 호출 · ${v.ai_model}` : "AI 키 없음 · 녹화 응답 [모의]"}</span>
+          <span className="chip">입력 {v.input_mode}</span>
           <span className="chip">원본 {v.raw_files_verified}개 해시 확인</span>
         </div>
         <div className="scenarios">

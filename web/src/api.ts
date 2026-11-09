@@ -1,4 +1,4 @@
-import type { AiCall, View } from "./types";
+import type { View } from "./types";
 
 // API 오류. 규칙 위반(409)이면 서버가 현재 상태(view)를 함께 보낸다.
 export class ApiError extends Error {
@@ -22,9 +22,8 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 
 export const api = {
   state: () => call<View>("GET", "/api/w05/state"),
-  event: (type: string, actor_role: string, payload: unknown, ai_call?: AiCall | null) =>
-    call<View>("POST", "/api/w05/events", { type, actor_role, payload, ai_call: ai_call ?? undefined }),
-  structure: (kind: string, text: string) => call<AiCall>("POST", "/api/w05/ai/structure", { kind, text }),
+  // 사건은 고정 필드로만 넣는다(자유 문장·LLM 현재 제외).
+  event: (type: string, actor_role: string, payload: unknown) => call<View>("POST", "/api/w05/events", { type, actor_role, payload }),
   reset: () => call<View>("POST", "/api/w05/reset"),
   scenario: (id: string) => call<View>("POST", `/api/w05/scenarios/${id}`),
 };

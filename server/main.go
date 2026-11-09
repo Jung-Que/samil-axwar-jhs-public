@@ -41,12 +41,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("W05 원본 적재 실패: %v", err)
 	}
-	ai := w05.NewAIFromEnv()
-	svc, err := w05.NewService(ctx, base, st, ai)
+	svc, err := w05.NewService(ctx, base, st)
 	if err != nil {
 		log.Fatalf("W05 서비스 시작 실패: %v", err)
 	}
-	log.Printf("W05: 원본 %d개 파일 해시 확인, AI %s(%s)", base.Files, ai.Mode(), ai.Model())
+	log.Printf("W05: 원본 %d개 파일 해시 확인, 입력은 고정 필드(LLM 현재 제외)", base.Files)
 
 	srv := &http.Server{
 		Addr:              listenAddr(),

@@ -36,14 +36,23 @@ const (
 )
 
 // Event는 사건 로그 한 줄이다. 저장소에는 이 구조를 JSON으로 넣는다.
+// 입력은 모두 고정 필드(구조화된 값)다. 자유 문장·LLM 경로는 현재 제외한다(11/10 사용자 결정).
 type Event struct {
 	Seq     int             `json:"seq"`
 	Type    string          `json:"type"`
 	Actor   string          `json:"actor_role"`
 	SimDate string          `json:"sim_date"`
 	Payload json.RawMessage `json:"payload"`
-	AiCall  *AiCall         `json:"ai_call,omitempty"`
 	At      string          `json:"created_at,omitempty"`
+}
+
+// RFPFields는 RFP를 정리한 고정 필드다(E1 입력).
+type RFPFields struct {
+	Items         []RFPItem `json:"items"`
+	Currency      string    `json:"currency"`
+	PenaltyRate   float64   `json:"penalty_rate_monthly"`
+	RecallBearer  string    `json:"recall_bearer"`
+	DeadlineWeeks int       `json:"deadline_weeks"`
 }
 
 // Bid는 입찰이다.
@@ -496,7 +505,7 @@ func (s *State) applyAnswer(id string, a map[string]any) error {
 	return nil
 }
 
-// DecisionFields는 승인권자 회신을 구조화한 필드다(A1 출력 또는 폼 입력).
+// DecisionFields는 승인권자 회신을 정리한 고정 필드다.
 type DecisionFields struct {
 	Participation string            `json:"participation"` // 승인 | 조건부 | 거절
 	Options       map[string]string `json:"options"`       // OPT-01·OPT-02 → 승인 | 보류 | 거절 | 언급없음
@@ -535,7 +544,7 @@ func (p DecisionFields) validate() error {
 	return nil
 }
 
-// BuyerReply는 바이어 회신을 구조화한 필드다(A1 출력 또는 폼 입력). 없는 값은 null.
+// BuyerReply는 바이어 회신을 정리한 고정 필드다. 없는 값은 null.
 type BuyerReply struct {
 	DeliveryStart      *string  `json:"delivery_start"`
 	SplitAllowed       *bool    `json:"split_allowed"`

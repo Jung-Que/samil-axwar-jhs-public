@@ -34,7 +34,7 @@ export function JudgmentCard({ v }: { v: View }) {
   const l2 = s.lines?.find((l) => l.product_id === "PL-02");
   const last = s.log?.[s.log.length - 1];
   return (
-    <Section title="판단 카드" mode={["real"]} note="숫자는 결정 모델(엔진)이 원본에서 다시 계산한다. AI는 숫자를 만들지 않고, 승인은 권한자가 한다.">
+    <Section title="판단 카드" mode={["real"]} note="숫자는 결정 모델(엔진)이 원본에서 다시 계산하고, 승인은 권한자가 한다. 입력은 고정 필드만 쓴다(LLM 현재 제외).">
       <div className="kpis">
         <Kpi label="PL-02 더마 제안 가능" value={`${ea(p2?.schedule_total)} EA`} sub={`요구 ${ea((p2?.monthly_demand ?? 0) * ev.scenario.contract_months)} 중 ${pct(p2?.coverage_pct)} · ${l2?.qty_status ?? "접수 전"}`} tone={p2 && p2.coverage_pct < 100 ? "warn" : "ok"} />
         <Kpi label="PL-01 기초" value={l1?.qty_status === "미확정" || !l1 ? "수량 미확정" : `${ea(p1?.schedule_total)} EA`} sub={`확인 전 상한 월 ${ea(p1?.months?.[0]?.supply)} EA · 요구 월 ${ea(p1?.monthly_demand)}`} tone="bad" />
@@ -53,7 +53,7 @@ export function JudgmentCard({ v }: { v: View }) {
       {last && (
         <>
           <h3>
-            직전 사건의 변화 <span className="muted small">설명은 결정 모델 템플릿(A3)</span>
+            직전 사건의 변화
           </h3>
           <p className="small">
             <b>{EVENT_LABEL[last.event.type] ?? last.event.type}</b> — {(last.changes ?? []).join(" · ")}
@@ -314,22 +314,12 @@ export function LogView({ v }: { v: View }) {
           <li key={e.event.seq}>
             <div>
               <b>#{e.event.seq} {EVENT_LABEL[e.event.type] ?? e.event.type}</b> <span className="muted small">{e.event.actor_role} · 업무일 {e.event.sim_date}</span>
-              {e.event.ai_call && <AiBadge c={e.event.ai_call} />}
             </div>
             <ul className="changes">{(e.changes ?? []).map((c, i) => <li key={i}>{c}</li>)}</ul>
           </li>
         ))}
       </ol>
     </Section>
-  );
-}
-
-export function AiBadge({ c }: { c: { mode: string; validation: string; human_edited: boolean; model: string } }) {
-  const label = c.mode === "live" ? `실제 호출(${c.model})` : c.mode === "recorded" ? "녹화 응답 [모의]" : "AI 미사용";
-  return (
-    <span className={`ai ai-${c.mode}`}>
-      A1 구조화 · {label} · 검증 {c.validation === "pass" ? "통과" : "실패"}{c.human_edited ? " · 사람이 수정" : " · 사람 확인"}
-    </span>
   );
 }
 
@@ -344,7 +334,7 @@ export function AssumptionsView({ v }: { v: View }) {
           ))}
         </tbody>
       </table>
-      <p className="muted small">설계 단계(구현 안 함): W01 Masil 수요 변경(E6) 연결, 손실부담·변동대가·리콜 노출(R10·R11·R17), 기존 고객 납기 변경 승인(영업 임원) 흐름.</p>
+      <p className="muted small">설계 단계(구현 안 함): LLM으로 자유 문장(RFP·회신) 필드화(현재 제외, 결합 지점은 추후 결정), W01 Masil 수요 변경(E6) 연결, 손실부담·변동대가·리콜 노출(R10·R11·R17), 기존 고객 납기 변경 승인(영업 임원) 흐름.</p>
     </Section>
   );
 }

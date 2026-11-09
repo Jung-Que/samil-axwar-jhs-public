@@ -185,16 +185,6 @@ textarea {
   font-weight: 600;
 }
 
-.chip.ai-live {
-  border-color: var(--ok);
-  color: var(--ok);
-}
-
-.chip.ai-recorded {
-  border-color: var(--warn);
-  color: var(--warn);
-}
-
 .error {
   background: var(--bad-soft);
   color: var(--bad);
@@ -557,24 +547,3 @@ table.grid td input {
   content: "→ ";
 }
 
-.ai {
-  font-size: 0.72rem;
-  border-radius: 4px;
-  padding: 1px 6px;
-  margin-left: 6px;
-}
-
-.ai-live {
-  background: var(--ok-soft);
-  color: var(--ok);
-}
-
-.ai-recorded {
-  background: var(--warn-soft);
-  color: var(--warn);
-}
-
-.ai-none {
-  background: var(--gray-soft);
-  color: var(--muted);
-}

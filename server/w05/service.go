@@ -1,7 +1,6 @@
 package w05
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,7 +16,6 @@ type Service struct {
 	mu     sync.Mutex
 	base   *Base
 	st     store.Store
-	ai     *AI
 	events []Event
 	state  *State
 }
@@ -26,8 +24,8 @@ type Service struct {
 var ErrInvalid = errors.New("사건을 적용할 수 없다")
 
 // NewService는 저장소의 사건을 읽어 상태를 만든다.
-func NewService(ctx context.Context, base *Base, st store.Store, ai *AI) (*Service, error) {
-	s := &Service{base: base, st: st, ai: ai, state: NewState(base)}
+func NewService(ctx context.Context, base *Base, st store.Store) (*Service, error) {
+	s := &Service{base: base, st: st, state: NewState(base)}
 	if err := s.sync(ctx); err != nil {
 		return nil, err
 	}
@@ -72,8 +70,7 @@ func replay(b *Base, evs []Event) (*State, error) {
 // View는 화면이 받는 전체 상태다.
 type View struct {
 	State       *State            `json:"state"`
-	AIMode      string            `json:"ai_mode"`
-	AIModel     string            `json:"ai_model"`
+	Input       string            `json:"input_mode"`
 	Store       string            `json:"store"`
 	Files       int               `json:"raw_files_verified"`
 	AsOf        string            `json:"as_of"`
@@ -92,7 +89,7 @@ type Assumption struct {
 }
 
 func (s *Service) view() View {
-	return View{State: s.state, AIMode: s.ai.Mode(), AIModel: s.ai.Model(), Store: s.st.Kind(), Files: s.base.Files,
+	return View{State: s.state, Input: "고정 필드(자유 문장·LLM 현재 제외)", Store: s.st.Kind(), Files: s.base.Files,
 		AsOf: AsOf, BoardDate: BoardDate, Assumptions: assumptions(s.base, s.state.Scenario), Scenarios: Scenarios(), Conditions: ConditionCodes}
 }
 
@@ -107,7 +104,7 @@ func (s *Service) Snapshot(ctx context.Context) (View, error) {
 }
 
 // Submit은 사건 하나를 검증·적용하고 저장한다. 규칙에 맞지 않으면 아무것도 저장하지 않는다.
-func (s *Service) Submit(ctx context.Context, typ, actor string, payload json.RawMessage, call *AiCall) (View, error) {
+func (s *Service) Submit(ctx context.Context, typ, actor string, payload json.RawMessage) (View, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.sync(ctx); err != nil {
@@ -116,10 +113,7 @@ func (s *Service) Submit(ctx context.Context, typ, actor string, payload json.Ra
 	if len(payload) == 0 {
 		payload = json.RawMessage(`{}`)
 	}
-	if call != nil && len(call.Output) > 0 {
-		call.HumanEdited = !sameJSON(call.Output, payload)
-	}
-	e := Event{Seq: len(s.events) + 1, Type: typ, Actor: actor, SimDate: s.state.Scenario.SimDate, Payload: payload, AiCall: call,
+	e := Event{Seq: len(s.events) + 1, Type: typ, Actor: actor, SimDate: s.state.Scenario.SimDate, Payload: payload,
 		At: time.Now().UTC().Format(time.RFC3339)}
 	evs := append(append([]Event(nil), s.events...), e)
 	ns, err := replay(s.base, evs)
@@ -141,11 +135,6 @@ func (s *Service) Submit(ctx context.Context, typ, actor string, payload json.Ra
 	return s.view(), nil
 }
 
-// Structure는 A1 미리보기다. 상태를 바꾸지 않는다(사람이 확인한 뒤 Submit).
-func (s *Service) Structure(ctx context.Context, kind, text string) *AiCall {
-	return s.ai.Structure(ctx, kind, text, false)
-}
-
 // Reset은 사건 로그를 비운다(시나리오 초기화).
 func (s *Service) Reset(ctx context.Context) (View, error) {
 	s.mu.Lock()
@@ -157,7 +146,7 @@ func (s *Service) Reset(ctx context.Context) (View, error) {
 	return s.view(), nil
 }
 
-// RunScenario는 초기화 뒤 시나리오의 사건을 차례로 넣는다. 문장 단계는 녹화 응답으로 구조화한다.
+// RunScenario는 초기화 뒤 시나리오의 사건을 고정 입력값으로 차례로 넣는다.
 func (s *Service) RunScenario(ctx context.Context, id string) (View, error) {
 	sc, err := ScenarioByID(id)
 	if err != nil {
@@ -168,28 +157,16 @@ func (s *Service) RunScenario(ctx context.Context, id string) (View, error) {
 	}
 	var v View
 	for i, step := range sc.Steps {
-		payload, call, err := s.stepPayload(ctx, step)
+		payload, err := stepJSON(step)
 		if err != nil {
 			return v, fmt.Errorf("시나리오 %s 단계 %d: %w", id, i+1, err)
 		}
-		v, err = s.Submit(ctx, step.Type, step.Actor, payload, call)
+		v, err = s.Submit(ctx, step.Type, step.Actor, payload)
 		if err != nil {
 			return v, fmt.Errorf("시나리오 %s 단계 %d(%s): %w", id, i+1, step.Type, err)
 		}
 	}
 	return v, nil
-}
-
-func (s *Service) stepPayload(ctx context.Context, step Step) (json.RawMessage, *AiCall, error) {
-	if step.Text == "" {
-		b, err := json.Marshal(step.Payload)
-		return b, nil, err
-	}
-	call := s.ai.Structure(ctx, step.Kind, step.Text, true)
-	if call.Validation != "pass" {
-		return nil, call, fmt.Errorf("구조화 실패: %s", call.Error)
-	}
-	return call.Output, call, nil
 }
 
 func assumptions(b *Base, sc Scenario) []Assumption {
@@ -227,16 +204,6 @@ func assumptions(b *Base, sc Scenario) []Assumption {
 		{"A-15", "확인 요청 기한", "부서 5~10영업일, 바이어 마감 −5영업일", "가정"},
 		{"D6", "capacity_qty 기간 단위", map[string]string{"annual": "연간 EA", "monthly": "월간(회신)"}[sc.CapacityPeriod], lbl(sc.UnitConfirmed)},
 	}
-}
-
-func sameJSON(a, b json.RawMessage) bool {
-	var x, y any
-	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
-		return bytes.Equal(a, b)
-	}
-	xa, _ := json.Marshal(x)
-	ya, _ := json.Marshal(y)
-	return bytes.Equal(xa, ya)
 }
 
 func unwrapLast(err error) error {

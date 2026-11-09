@@ -170,20 +170,7 @@ export type Decision = {
   freshness: "최신" | "낡음";
   seq: number;
 };
-export type AiCall = {
-  ai_call_id: string;
-  purpose: string;
-  kind: string;
-  mode: "live" | "recorded" | "none";
-  model: string;
-  input_summary: string;
-  output?: unknown;
-  validation: "pass" | "fail";
-  error?: string;
-  human_edited: boolean;
-  at: string;
-};
-export type EventRec = { seq: number; type: string; actor_role: string; sim_date: string; payload: unknown; ai_call?: AiCall; created_at?: string };
+export type EventRec = { seq: number; type: string; actor_role: string; sim_date: string; payload: unknown; created_at?: string };
 export type LogEntry = { event: EventRec; changes: string[] | null };
 export type Reservation = { product_id: string; month: string; qty: number; basis: string; state: string };
 export type State = {
@@ -200,13 +187,12 @@ export type State = {
   evaluation: Evaluation;
   last_blocks: string[] | null;
 };
-export type Step = { type: string; actor_role: string; kind?: string; text?: string; payload?: unknown };
+export type Step = { type: string; actor_role: string; label: string; payload: unknown };
 export type ScenarioInfo = { id: string; title: string; description: string; steps: Step[] };
 export type Assumption = { id: string; text: string; value: string; label: string };
 export type View = {
   state: State;
-  ai_mode: "live" | "recorded";
-  ai_model: string;
+  input_mode: string;
   store: string;
   raw_files_verified: number;
   as_of: string;

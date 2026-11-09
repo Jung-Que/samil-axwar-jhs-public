@@ -8,13 +8,12 @@ import (
 	"axwar/server/store"
 )
 
-// 명세 §10 시연 3건의 기대 상태·작업. 사건을 실제로 적용해 확인한다(녹화 AI 응답 사용).
+// 명세 §10 시연 3건의 기대 상태·작업. 고정 입력값 사건을 실제로 적용해 확인한다(LLM 현재 제외).
 
 func runScenario(t *testing.T, id string) *State {
 	t.Helper()
-	t.Setenv("ANTHROPIC_API_KEY", "")
 	b := loadBase(t)
-	svc, err := NewService(context.Background(), b, store.NewMemory(), NewAIFromEnv())
+	svc, err := NewService(context.Background(), b, store.NewMemory())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,9 +88,6 @@ func TestScenarioNormal(t *testing.T) {
 		t.Error("제출 뒤에도 '제안서 작성'이 열려 있음")
 	}
 	wantInt(t, "가예약 건수", int64(len(s.Reservations)), 12)
-	if s.Log[2].Event.AiCall == nil || s.Log[2].Event.AiCall.Mode != "recorded" {
-		t.Error("이사회 회신이 A1(녹화)으로 구조화되지 않음")
-	}
 }
 
 func TestScenarioChange(t *testing.T) {
@@ -150,14 +146,13 @@ func TestScenarioReject(t *testing.T) {
 
 // 잘못된 사건은 상태를 바꾸지 않고, 차단된 제출은 기록만 남긴다.
 func TestInvalidAndBlocked(t *testing.T) {
-	t.Setenv("ANTHROPIC_API_KEY", "")
 	b := loadBase(t)
-	svc, err := NewService(context.Background(), b, store.NewMemory(), NewAIFromEnv())
+	svc, err := NewService(context.Background(), b, store.NewMemory())
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if _, err := svc.Submit(ctx, EvForApprove, "영업", nil, nil); err == nil {
+	if _, err := svc.Submit(ctx, EvForApprove, "영업", nil); err == nil {
 		t.Fatal("입찰 접수 전 상신이 통과함")
 	}
 	if _, err := svc.RunScenario(ctx, "normal"); err != nil {
@@ -174,7 +169,7 @@ func TestInvalidAndBlocked(t *testing.T) {
 	}
 	var v View
 	for _, st := range steps {
-		if v, err = svc.Submit(ctx, st.typ, st.actor, []byte(st.payload), nil); err != nil {
+		if v, err = svc.Submit(ctx, st.typ, st.actor, []byte(st.payload)); err != nil {
 			t.Fatalf("%s: %v", st.typ, err)
 		}
 	}

@@ -14,7 +14,7 @@
   app       Go 서버(gofmt·vet·test·build), 화면 빌드(tsc + vite), 빌드한 서버 기동 후 /healthz · / · /api 응답,
             Dockerfile·.dockerignore 범위. 서버는 DB 없이(메모리 저장소) 127.0.0.1에 띄운다
   engine    W05 결정 모델: 원본 복사본(server/w05/data/raw) = SHA256SUMS = 원본, 업무모델 명세 기대값(§9),
-            시연 3건 기대 상태(§10), AI 구조화(A1) 요청 형식·실패 처리
+            시연 3건 기대 상태(§10, 고정 입력값)
   devdb     로컬 Docker dev 테스트(compose.dev.yaml): 호스트 공개 포트 0개, Postgres 통합 테스트(go test),
             배포 이미지를 Postgres 모드로 띄워 /healthz · /api/status 확인. Docker Desktop 필요, all에서 빠진다
   guard     보호 경로·원본 데이터 불변, 올리면 안 되는 파일이 스테이징됐는지, analysis/가 git 밖인지,
@@ -452,8 +452,6 @@ def run_engine():
              ["go", "test", "-count=1", "-run", "Manifest|Oracle", "./w05"], SERVER, group="engine")
     run_tool("시연 3건 기대 상태(명세 §10: 정상·변경·정보 부족·거절, 차단 기록)",
              ["go", "test", "-count=1", "-run", "Scenario|InvalidAndBlocked", "./w05"], SERVER, group="engine")
-    run_tool("AI 구조화(A1) 요청 형식·실패 처리(가짜 서버)",
-             ["go", "test", "-count=1", "-run", "Structure", "./w05"], SERVER, group="engine")
 
 
 # ---------------------------------------------------------------- devdb

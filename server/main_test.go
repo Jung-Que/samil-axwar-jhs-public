@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -38,8 +37,7 @@ func newTestService(t *testing.T, st store.Store) *w05.Service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("ANTHROPIC_API_KEY", "") // 테스트는 녹화 응답만 쓴다
-	svc, err := w05.NewService(context.Background(), base, st, w05.NewAIFromEnv())
+	svc, err := w05.NewService(context.Background(), base, st)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,11 +104,14 @@ func TestW05API(t *testing.T) {
 	if evs, _ := st.ListEvents(context.Background()); len(evs) != 4 {
 		t.Fatalf("거부된 사건이 기록됨: %d건", len(evs))
 	}
-	// A1 미리보기: 녹화 응답이 있는 문장은 구조화된다
-	body, _ := json.Marshal(map[string]string{"kind": "buyer_reply", "text": w05.TextBuyerChange})
-	rec = do("POST", "/api/w05/ai/structure", string(body))
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"validation":"pass"`) || !strings.Contains(rec.Body.String(), `"mode":"recorded"`) {
-		t.Fatalf("A1 미리보기: %d %.300s", rec.Code, rec.Body.String())
+	// 고정 필드 입력: 바이어 회신(단가 -7%) → 결정 낡음 → 재검토
+	rec = do("POST", "/api/w05/events", `{"type":"E4_BUYER_REPLY","actor_role":"영업","payload":{"price_cut_pct":-7}}`)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"state":"재검토"`) {
+		t.Fatalf("바이어 회신: %d %.300s", rec.Code, rec.Body.String())
+	}
+	// LLM은 현재 제외: 자유 문장 구조화 경로가 없다
+	if rec := do("POST", "/api/w05/ai/structure", `{"kind":"buyer_reply","text":"회신"}`); rec.Code != 404 {
+		t.Fatalf("AI 구조화 경로가 남아 있음: %d", rec.Code)
 	}
 	if rec := do("POST", "/api/w05/scenarios/nope", ""); rec.Code != 500 {
 		t.Fatalf("없는 시나리오: %d", rec.Code)

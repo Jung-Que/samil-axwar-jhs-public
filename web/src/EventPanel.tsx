@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import type { AiCall, ConfirmRequest, View } from "./types";
-import { AiBadge, Section } from "./panels";
+import type { ConfirmRequest, View } from "./types";
+import { Section } from "./panels";
 import { EVENT_LABEL, slug } from "./format";
 
 type Run = (fn: () => Promise<View>) => Promise<void>;
 type Fields = Record<string, unknown>;
 
-const TEXT_KIND: Record<string, string> = { E1_RFP: "rfp", E2_DECISION: "decision", E4_BUYER_REPLY: "buyer_reply" };
+// 구조화된 고정 필드로 입력하는 사건. 자유 문장·LLM은 현재 제외(11/10 사용자 결정).
+const FORM_KIND: Record<string, string> = { E1_RFP: "rfp", E2_DECISION: "decision", E4_BUYER_REPLY: "buyer_reply" };
 const ACTOR: Record<string, string> = {
   E0_CLOCK: "시스템", E1_RFP: "영업", E2_DECISION: "CEO/이사회", E4_BUYER_REPLY: "영업", E5_NEW_ORDER: "영업", E7_SUBMIT_PROPOSAL: "영업", E8_SUBMIT_APPROVAL: "영업",
 };
+
+// 입찰 흐름에서 다음에 오는 사건 순서(E0 시계·E5 신규 수주는 언제나 가능하므로 맨 뒤).
+const NEXT_ORDER = ["E1_RFP", "E8_SUBMIT_APPROVAL", "E2_DECISION", "E7_SUBMIT_PROPOSAL", "E4_BUYER_REPLY", "E0_CLOCK", "E5_NEW_ORDER"];
 
 function available(v: View): Record<string, boolean> {
   const st = v.state.bid?.state;
@@ -25,49 +29,42 @@ function available(v: View): Record<string, boolean> {
   };
 }
 
-function exampleText(v: View, type: string): string {
-  const all = v.scenarios.flatMap((s) => s.steps);
-  return all.find((s) => s.type === type && s.text)?.text ?? "";
+// 시나리오에 정해 둔 고정 입력값을 사건 종류별 프리셋으로 쓴다(같은 값은 한 번만).
+function presets(v: View, type: string): { label: string; payload: Fields }[] {
+  const seen = new Set<string>();
+  const out: { label: string; payload: Fields }[] = [];
+  for (const s of v.scenarios.flatMap((sc) => sc.steps)) {
+    if (s.type !== type || seen.has(s.label)) continue;
+    seen.add(s.label);
+    out.push({ label: s.label, payload: s.payload as Fields });
+  }
+  return out;
 }
 
-function blankFields(kind: string): Fields {
-  if (kind === "rfp")
-    return { items: [{ product_id: "PL-01", annual_qty: 0, unit_price_usd: 0 }, { product_id: "PL-02", annual_qty: 0, unit_price_usd: 0 }], currency: "USD", penalty_rate_monthly: 0.03, recall_bearer: "supplier", deadline_weeks: 3 };
-  if (kind === "decision") return { participation: "조건부", options: { "OPT-01": "언급없음", "OPT-02": "언급없음" }, conditions: [], price_floor_pct: null, note: "" };
-  return { delivery_start: null, split_allowed: null, price_cut_pct: null, penalty_basis: null, f2_acceptance: null, initial_qty_required: null, contract_months: null };
-}
-
-// 사건 입력: 자유 문장은 A1(AI)로 필드화 → 사람이 확인·수정 → 사건 기록. 폼 직접 입력도 된다(결정 모델 경로).
+// 사건 입력: 고정 값(프리셋)을 골라 필드에 채우고, 필요하면 필드를 고친 뒤 기록한다.
 export function EventPanel({ v, run }: { v: View; run: Run }) {
   const avail = available(v);
-  const first = Object.keys(EVENT_LABEL).find((k) => avail[k]) ?? "E0_CLOCK";
+  const first = NEXT_ORDER.find((k) => avail[k]) ?? "E0_CLOCK"; // 다음에 할 사건을 먼저 고른다
   const [type, setType] = useState(first);
-  const [text, setText] = useState("");
-  const [call, setCall] = useState<AiCall | null>(null);
+  const [preset, setPreset] = useState(0);
   const [fields, setFields] = useState<Fields | null>(null);
-  const [busy, setBusy] = useState(false);
   const [simple, setSimple] = useState<Fields>({ sim_date: v.state.scenario.sim_date, product_id: "PL-02", qty: 30000, customer_id: "C-102", note: "" });
-  const kind = TEXT_KIND[type];
+  const kind = FORM_KIND[type];
+  const choices = kind ? presets(v, type) : [];
 
   useEffect(() => {
     if (!avail[type]) setType(first);
   }, [v.state.bid?.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    setText(kind ? exampleText(v, type) : "");
-    setCall(null);
-    setFields(null);
+    setPreset(0);
+    const c = kind ? presets(v, type) : [];
+    setFields(c.length ? structuredClone(c[0].payload) : null);
   }, [type]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const structure = async () => {
-    setBusy(true);
-    try {
-      const c = await api.structure(kind, text);
-      setCall(c);
-      setFields(c.validation === "pass" && c.output ? (structuredClone(c.output) as Fields) : blankFields(kind));
-    } finally {
-      setBusy(false);
-    }
+  const pick = (i: number) => {
+    setPreset(i);
+    setFields(structuredClone(choices[i].payload));
   };
 
   const submit = async () => {
@@ -76,13 +73,11 @@ export function EventPanel({ v, run }: { v: View; run: Run }) {
     else if (type === "E0_CLOCK") payload = { sim_date: simple.sim_date };
     else if (type === "E5_NEW_ORDER") payload = { product_id: simple.product_id, qty: Number(simple.qty), customer_id: simple.customer_id };
     else if (type === "E8_SUBMIT_APPROVAL") payload = { note: simple.note };
-    await run(() => api.event(type, ACTOR[type], payload, kind && call?.validation === "pass" ? call : null));
-    setCall(null);
-    setFields(null);
+    await run(() => api.event(type, ACTOR[type], payload));
   };
 
   return (
-    <Section title="사건 입력" mode={["real", "mock"]} note="외부 회신(바이어·이사회)은 모의 입력이다. 규칙에 맞지 않는 사건은 거부되고 기록되지 않는다.">
+    <Section title="사건 입력" mode={["real", "mock"]} note="입력은 정리해 둔 고정 값(구조화 필드)만 쓴다. 바이어·이사회 회신은 모의 값이다. 규칙에 맞지 않는 사건은 거부되고 기록되지 않는다.">
       <label className="field">
         <span>사건</span>
         <select value={type} onChange={(e) => setType(e.target.value)}>
@@ -96,31 +91,22 @@ export function EventPanel({ v, run }: { v: View; run: Run }) {
         </select>
       </label>
 
-      {kind && (
-        <>
-          <label className="field">
-            <span>{type === "E1_RFP" ? "RFP 원문" : type === "E2_DECISION" ? "승인권자 회신 문장 [모의]" : "바이어 회신 문장 [모의]"}</span>
-            <textarea rows={type === "E1_RFP" ? 8 : 5} value={text} onChange={(e) => setText(e.target.value)} />
-          </label>
-          <div className="row">
-            <button onClick={structure} disabled={busy || !text.trim()}>{busy ? "구조화 중…" : `AI로 필드화 (A1 · ${v.ai_mode === "live" ? "실제 호출" : "녹화 응답"})`}</button>
-            <button className="ghost" onClick={() => { setCall(null); setFields(blankFields(kind)); }}>폼 직접 입력</button>
-          </div>
-          {call && (
-            <p className="small">
-              <AiBadge c={call} /> {call.error && <span className="bad">{call.error}</span>}
-            </p>
+      {kind && fields && (
+        <div className="fieldbox">
+          {choices.length > 1 && (
+            <label className="field">
+              <span>고정 값 선택</span>
+              <select value={preset} onChange={(e) => pick(Number(e.target.value))}>
+                {choices.map((c, i) => <option key={c.label} value={i}>{c.label}</option>)}
+              </select>
+            </label>
           )}
-          {fields && (
-            <div className="fieldbox">
-              <p className="muted small">아래 필드를 사람이 확인·수정한 뒤 기록한다. AI가 낸 값도 엔진 검증을 통과해야 반영된다.</p>
-              {kind === "rfp" && <RfpForm f={fields} set={setFields} />}
-              {kind === "decision" && <DecisionForm f={fields} set={setFields} codes={v.condition_codes} />}
-              {kind === "buyer_reply" && <BuyerForm f={fields} set={setFields} />}
-              <button onClick={submit} disabled={!avail[type]}>확인하고 사건 기록</button>
-            </div>
-          )}
-        </>
+          {choices.length === 1 && <p className="muted small">고정 값: {choices[0].label}</p>}
+          {kind === "rfp" && <RfpForm f={fields} set={setFields} />}
+          {kind === "decision" && <DecisionForm f={fields} set={setFields} codes={v.condition_codes} />}
+          {kind === "buyer_reply" && <BuyerForm f={fields} set={setFields} />}
+          <button onClick={submit} disabled={!avail[type]}>{EVENT_LABEL[type]} 기록</button>
+        </div>
       )}
 
       {type === "E0_CLOCK" && (
