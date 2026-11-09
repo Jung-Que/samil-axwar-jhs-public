@@ -8,11 +8,12 @@
   python tools/selftest.py all             # 전부
 
 그룹:
-  docs   CLAUDE.md 줄 수, 문서 속 경로 존재, research 목록 등록, 병합 충돌 표시
-  data   분석 스크립트를 다시 돌려 저장된 출력과 같은지(재현성)
-  app    JS 문법, 서버 기동 후 /healthz · / 응답, Dockerfile 복사 범위
-  guard  보호 경로·원본 데이터 불변, 올리면 안 되는 파일이 스테이징됐는지,
-         브랜치 규칙(훅 설치, 현재 브랜치 이름, main·dev에 직접 커밋 없음)
+  docs      CLAUDE.md 줄 수, 개발 규칙 문서(CLAUDE·AGENTS·docs/) 속 경로 존재, 병합 충돌 표시
+  analysis  개발 외 작업 폴더(analysis/, git 밖) 색인 경로 존재, README 등록. PR 없이 로컬에서 돌린다
+  data      분석 스크립트를 다시 돌려 저장된 출력과 같은지(재현성)
+  app       JS 문법, 서버 기동 후 /healthz · / 응답, Dockerfile 복사 범위
+  guard     보호 경로·원본 데이터 불변, 올리면 안 되는 파일이 스테이징됐는지, analysis/가 git 밖인지,
+            브랜치 규칙(훅 설치, 현재 브랜치 이름, main·dev에 직접 커밋 없음)
 
 종료 코드: 0 통과, 1 실패.
 """
@@ -40,24 +41,29 @@ TEXT_EXT = {".md", ".py", ".js", ".mjs", ".html", ".css", ".json", ".yaml", ".ym
 CLAUDE_LIMIT = 100
 CLAUDE_EXCLUDED_SECTION = "## 진행 중인 작업"
 
+# 개발 외 작업 폴더(리서치·문제 분석·기획·분석 스크립트·할 일). git에 올리지 않고(.git/info/exclude)
+# 이슈·PR 없이 고친다. 규칙: docs/브랜치_규칙.md §0
+ANALYSIS = "analysis"
+
 # 경로가 틀리면 실패시키는 색인 문서. 나머지 문서는 경고만 한다.
-STRICT_DOCS = ["CLAUDE.md", "AGENTS.md", "TODO.md", "research/README.md"]
+STRICT_DOCS = ["CLAUDE.md", "AGENTS.md"]  # docs 그룹(+ STRICT_DIRS 아래 .md)
 STRICT_DIRS = ["docs"]
+ANALYSIS_STRICT = [f"{ANALYSIS}/README.md", f"{ANALYSIS}/TODO.md"]  # analysis 그룹
 # 경로처럼 보이지만 참조가 아닌 이름(예: "열지 않는다"고 적은 파일).
 NOT_PATHS = {"auth.json"}
 
 # 분석 스크립트 → 저장된 출력. 스크립트를 추가하면 여기와 하네스 문서에 함께 등록한다.
 # 모두 `python <스크립트> <04_원본데이터 경로> <출력 경로>` 형식이다.
 DATA_SCRIPTS = [
-    ("research/05_데이터_연결/scripts/check_integrity.py", "research/05_데이터_연결/scripts/check_output.txt"),
-    ("research/05_데이터_연결/scripts/profile_schema.py", "research/05_데이터_연결/스키마_프로파일.md"),
-    ("research/06_W05_수주약속/scripts/w05_facts.py", "research/06_W05_수주약속/scripts/w05_facts_output.txt"),
+    ("analysis/05_데이터_연결/scripts/check_integrity.py", "analysis/05_데이터_연결/scripts/check_output.txt"),
+    ("analysis/05_데이터_연결/scripts/profile_schema.py", "analysis/05_데이터_연결/스키마_프로파일.md"),
+    ("analysis/06_W05_수주약속/scripts/w05_facts.py", "analysis/06_W05_수주약속/scripts/w05_facts_output.txt"),
 ]
 
 # 스테이징되면 안 되는 경로(앞부분 일치)와 크기 한도.
 FORBIDDEN_STAGED = [
     "01_참가자_배포용/",
-    "research/03_1기_수상작/videos/",
+    f"{ANALYSIS}/",  # git 밖 폴더. git add -f 로도 올리지 않는다
     ".claude/settings.local.json",
     ".codex/hooks.json",
     ".agents/hooks.json",
@@ -172,13 +178,9 @@ def check_claude_lines():
            f"CLAUDE.md {counted}/{CLAUDE_LIMIT}줄('진행 중인 작업' 제외, 전체 {len(lines)}줄)")
 
 
-def check_doc_paths():
+def check_doc_paths(group, strict, others):
+    """strict 문서의 없는 경로는 실패, others 문서의 없는 경로는 경고."""
     paths = all_paths()
-    strict = [ROOT / d for d in STRICT_DOCS if (ROOT / d).exists()]
-    for d in STRICT_DIRS:
-        strict += [p for p in walk(ROOT / d) if p.suffix == ".md"]
-    strict_set = {rel(p) for p in strict}
-    others = [p for p in walk(ROOT / "research") if p.suffix == ".md" and rel(p) not in strict_set]
     top = frozenset(p for p in paths if "/" not in p)
     miss_strict, miss_other = [], []
     for docs, bucket, is_strict in ((strict, miss_strict, True), (others, miss_other, False)):
@@ -192,8 +194,8 @@ def check_doc_paths():
                     if path_like(cand, is_strict, top) and not resolves(cand, doc_dir, paths):
                         bucket.append(f"{rel(doc)}:{n} `{cand}`")
     for m in miss_other:
-        warn("docs", f"경로 없음(참고) {m}")
-    report("docs", not miss_strict,
+        warn(group, f"경로 없음(참고) {m}")
+    report(group, not miss_strict,
            f"색인 문서 {len(strict)}개 경로 확인" + ("" if not miss_strict else " — 없는 경로:\n    " + "\n    ".join(miss_strict)))
 
 
@@ -204,22 +206,23 @@ def span_regex(span):
     return s.replace("QQRANGEQQ", r"[A-Za-z]*\d+").replace("QQDIRQQ", "[^/]+")
 
 
-def check_research_registry():
-    readme = ROOT / "research" / "README.md"
+def check_analysis_registry():
+    base = ROOT / ANALYSIS
+    readme = base / "README.md"
     # 등록은 표의 행(`|`로 시작)에 적힌 경로만 인정한다. 본문 언급(예: 핵심 결론의 폴더 경로)은 등록이 아니다.
     rows = [ln for ln in readme.read_text(encoding="utf-8").splitlines() if ln.lstrip().startswith("|")]
     spans = TICK.findall("\n".join(rows))
     rx_dir = [re.compile("^" + span_regex(s)) for s in spans if s.endswith("/")]
     rx_file = [re.compile("(^|/)" + span_regex(s) + "$") for s in spans if not s.endswith("/")]
     missing = []
-    for p in walk(ROOT / "research"):
-        r = p.relative_to(ROOT / "research").as_posix()
+    for p in walk(base):
+        r = p.relative_to(base).as_posix()
         if r == "README.md":
             continue
         if not any(x.match(r) for x in rx_dir) and not any(x.search(r) for x in rx_file):
             missing.append(r)
-    report("docs", not missing,
-           "research 파일이 모두 research/README.md에 등록됨" if not missing
+    report("analysis", not missing,
+           f"{ANALYSIS} 파일이 모두 {ANALYSIS}/README.md에 등록됨" if not missing
            else "README 미등록:\n    " + "\n    ".join(missing))
 
 
@@ -240,9 +243,23 @@ def check_conflict_markers():
 
 def run_docs():
     check_claude_lines()
-    check_doc_paths()
-    check_research_registry()
+    strict = [ROOT / d for d in STRICT_DOCS if (ROOT / d).exists()]
+    for d in STRICT_DIRS:
+        strict += [p for p in walk(ROOT / d) if p.suffix == ".md"]
+    check_doc_paths("docs", strict, [])
     check_conflict_markers()
+
+
+def run_analysis():
+    base = ROOT / ANALYSIS
+    if not (base / "README.md").exists():
+        report("analysis", False, f"{ANALYSIS}/README.md 없음 — 이 폴더는 git 밖이라 이 PC에만 있다")
+        return
+    strict = [ROOT / d for d in ANALYSIS_STRICT if (ROOT / d).exists()]
+    strict_set = {rel(p) for p in strict}
+    others = [p for p in walk(base) if p.suffix == ".md" and rel(p) not in strict_set]
+    check_doc_paths("analysis", strict, others)
+    check_analysis_registry()
 
 
 # ---------------------------------------------------------------- data
@@ -373,7 +390,20 @@ def run_guard():
     big = [s for s in staged if (ROOT / s).is_file() and (ROOT / s).stat().st_size > MAX_FILE_MB * 2**20]
     report("guard", not bad and not big, f"스테이징 {len(staged)}개 파일에 금지·대용량(>{MAX_FILE_MB}MB) 없음"
            if not bad and not big else f"금지 {bad} 대용량 {big}")
+    check_analysis_outside_git()
     check_branch_rules(staged)
+
+
+def check_analysis_outside_git():
+    # 추적 중인 파일이 하나라도 있으면 실패. 무시 설정(.git/info/exclude의 /analysis/)이 빠져도 실패.
+    tracked = [s for s in git("ls-files", "-z", "--", ANALYSIS).split("\0") if s]
+    # --no-index: 이미 추적 중인 파일도 무시 규칙에 걸리는지 본다(없으면 추적 파일은 늘 '무시 안 됨'으로 나온다).
+    ignored = subprocess.run(["git", "check-ignore", "-q", "--no-index", f"{ANALYSIS}/README.md"],
+                             cwd=ROOT).returncode == 0
+    ok = not tracked and ignored
+    report("guard", ok, f"{ANALYSIS}/는 git 밖(추적 0개, 무시 설정 있음)" if ok
+           else f"{ANALYSIS}/가 git 밖이 아님: 추적 {len(tracked)}개{' ' + str(tracked[:3]) if tracked else ''}, "
+                f"무시 설정 {'있음' if ignored else '없음 → .git/info/exclude에 /' + ANALYSIS + '/ 추가'}")
 
 
 def check_branch_rules(staged):
@@ -400,7 +430,7 @@ def check_branch_rules(staged):
 
 # ---------------------------------------------------------------- main
 
-GROUPS = {"docs": run_docs, "data": run_data, "app": run_app, "guard": run_guard}
+GROUPS = {"docs": run_docs, "analysis": run_analysis, "data": run_data, "app": run_app, "guard": run_guard}
 
 
 def main(argv):
