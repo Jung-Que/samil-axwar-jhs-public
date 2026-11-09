@@ -50,6 +50,7 @@ NOT_PATHS = {"auth.json"}
 DATA_SCRIPTS = [
     ("research/05_데이터_연결/scripts/check_integrity.py", "research/05_데이터_연결/scripts/check_output.txt"),
     ("research/05_데이터_연결/scripts/profile_schema.py", "research/05_데이터_연결/스키마_프로파일.md"),
+    ("research/06_W05_수주약속/scripts/w05_facts.py", "research/06_W05_수주약속/scripts/w05_facts_output.txt"),
 ]
 
 # 스테이징되면 안 되는 경로(앞부분 일치)와 크기 한도.
@@ -98,18 +99,25 @@ TICK = re.compile(r"`([^`\n]+)`")
 PATH_EXT = re.compile(r"\.(md|py|txt|html|pdf|js|json|ya?ml|csv|jpg|png|mp4)$", re.I)
 
 
-def path_like(s, strict=True):
+COMMANDS = {"python", "node", "git", "gh", "ffmpeg", "npm", "cd", "ls", "axhub", "curl"}
+PLANNED = "(예정)"  # 문서에서 `경로`(예정)처럼 쓰면 아직 없는 경로로 보고 건너뛴다
+
+
+def path_like(s, strict=True, top_level=frozenset()):
     s = s.strip()
     if not s or s in NOT_PATHS or "://" in s or any(c in s for c in "~*<>|\"'$=(){}"):
         return False
-    # 일반 문서는 `Lot/Batch` 같은 표기가 많아 "폴더/…확장자" 또는 "폴더/" 꼴만 본다.
-    if not strict and not ("/" in s and (PATH_EXT.search(s) or s.endswith("/"))):
-        return False
     if s.startswith(("-", ".", "/", "#")):
         return False
-    if " " in s and not PATH_EXT.search(s):  # 명령어 예시
+    if " " in s and (s.split()[0] in COMMANDS or not PATH_EXT.search(s)):  # 명령어 예시
         return False
-    return "/" in s or bool(PATH_EXT.search(s))
+    has_ext, is_dir = bool(PATH_EXT.search(s)), s.endswith("/")
+    if not strict:
+        # 일반 문서는 `Lot/Batch` 같은 표기가 많아 "폴더/…확장자" 또는 "폴더/" 꼴만 본다.
+        return "/" in s and (has_ext or is_dir)
+    # 색인 문서: 확장자·끝 슬래시가 있거나, 첫 부분이 실제 최상위 폴더·파일일 때만 경로로 본다
+    # (`미확정/잠정` 같은 상태 표기 제외).
+    return has_ext or is_dir or ("/" in s and s.split("/")[0] in top_level)
 
 
 def all_paths():
@@ -153,13 +161,17 @@ def check_doc_paths():
         strict += [p for p in walk(ROOT / d) if p.suffix == ".md"]
     strict_set = {rel(p) for p in strict}
     others = [p for p in walk(ROOT / "research") if p.suffix == ".md" and rel(p) not in strict_set]
+    top = frozenset(p for p in paths if "/" not in p)
     miss_strict, miss_other = [], []
     for docs, bucket, is_strict in ((strict, miss_strict, True), (others, miss_other, False)):
         for doc in docs:
             doc_dir = Path(rel(doc)).parent.as_posix()
             for n, line in enumerate(doc.read_text(encoding="utf-8").splitlines(), 1):
-                for cand in TICK.findall(line):
-                    if path_like(cand, is_strict) and not resolves(cand, doc_dir, paths):
+                for m in TICK.finditer(line):
+                    cand = m.group(1)
+                    if line[m.end():].startswith(PLANNED):
+                        continue
+                    if path_like(cand, is_strict, top) and not resolves(cand, doc_dir, paths):
                         bucket.append(f"{rel(doc)}:{n} `{cand}`")
     for m in miss_other:
         warn("docs", f"경로 없음(참고) {m}")
@@ -176,7 +188,9 @@ def span_regex(span):
 
 def check_research_registry():
     readme = ROOT / "research" / "README.md"
-    spans = TICK.findall(readme.read_text(encoding="utf-8"))
+    # 등록은 표의 행(`|`로 시작)에 적힌 경로만 인정한다. 본문 언급(예: 핵심 결론의 폴더 경로)은 등록이 아니다.
+    rows = [ln for ln in readme.read_text(encoding="utf-8").splitlines() if ln.lstrip().startswith("|")]
+    spans = TICK.findall("\n".join(rows))
     rx_dir = [re.compile("^" + span_regex(s)) for s in spans if s.endswith("/")]
     rx_file = [re.compile("(^|/)" + span_regex(s) + "$") for s in spans if not s.endswith("/")]
     missing = []
