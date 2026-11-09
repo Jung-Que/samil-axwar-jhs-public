@@ -3,7 +3,6 @@ package w05
 import (
 	"fmt"
 	"math"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +31,8 @@ type OptionDecision struct {
 
 // Scenario는 평가 입력이다. 가정(A-xx)과 회신으로 바뀐 값이 모두 여기에 모인다.
 type Scenario struct {
+	AsOf               string                    `json:"as_of"`      // 세션 기준일(E00_SESSION). 비면 DefaultAsOf
+	BoardDate          string                    `json:"board_date"` // 이사회 = 기준일 + 5일
 	SimDate            string                    `json:"sim_date"`
 	Items              []RFPItem                 `json:"items"`
 	PriceCut           float64                   `json:"price_cut"`       // 0, -0.07 …
@@ -61,10 +62,16 @@ func DefaultItems() []RFPItem {
 	return []RFPItem{{ProductBasic, 6_000_000, 11.80}, {ProductDerma, 1_500_000, 15.80}}
 }
 
-// DefaultScenario는 명세 §7 가정의 기본값이다.
-func DefaultScenario() Scenario {
+// DefaultScenario는 명세 §7 가정의 기본값이다(기준일 2026-07-01).
+func DefaultScenario() Scenario { return SessionScenario(DefaultAsOf) }
+
+// SessionScenario는 기준일 D에서 시작하는 시나리오다. 이사회 = D + 5일, 납품 개시 가정(A-04) = D 뒤 3개월째 달.
+// D = 2026-07-01이면 이사회 2026-07-06, 개시 2026-10으로 기존 값과 같다.
+func SessionScenario(asOf string) Scenario {
+	d := mustDate(asOf)
 	return Scenario{
-		SimDate: AsOf, Items: DefaultItems(), DeliveryStart: "2026-10", ContractMonths: 12, Validation: "A",
+		AsOf: asOf, BoardDate: fmtDate(d.AddDate(0, 0, BoardLagDays)), SimDate: asOf, Items: DefaultItems(),
+		DeliveryStart: d.AddDate(0, 3, 0).Format("2006-01"), ContractMonths: 12, Validation: "A",
 		PenaltyBasis: "backlog", CapacityPeriod: "annual", NewOrders: map[string]int64{},
 		Options: map[string]OptionDecision{"OPT-01": {Status: OptProposed}, "OPT-02": {Status: OptProposed}},
 	}
@@ -167,6 +174,8 @@ type Flag struct {
 // Evaluation은 한 시점의 엔진 계산 결과다.
 type Evaluation struct {
 	Scenario        Scenario               `json:"scenario"`
+	Cutoff          string                 `json:"cutoff"`          // 이 평가가 쓴 기록의 마지막 날
+	FutureSnapshot  bool                   `json:"future_snapshot"` // 능력 스냅샷이 기준일보다 뒤 자료(T2)
 	FX              float64                `json:"fx"`
 	FXDate          string                 `json:"fx_date"`
 	Lines           []LineEval             `json:"lines"`
@@ -194,12 +203,16 @@ func Evaluate(b *Base, sc Scenario) *Evaluation {
 	if len(sc.Items) == 0 {
 		sc.Items = DefaultItems()
 	}
-	ev := &Evaluation{Scenario: sc, FX: b.FX, FXDate: b.FXDate, Products: map[string]ProductEval{},
+	at := b.At(sc.SimDate) // 시계 날짜까지의 기록만 쓴다(데이터 끝에서 자름)
+	if sc.BoardDate == "" {
+		sc.BoardDate = SessionScenario(DefaultAsOf).BoardDate
+	}
+	ev := &Evaluation{Scenario: sc, FX: at.FX, FXDate: at.FXDate, Cutoff: at.Cutoff, FutureSnapshot: at.FutureSnapshot, Products: map[string]ProductEval{},
 		RevenueAt: map[string]float64{}, ContribAt: map[string]float64{}}
 
 	// R1: 라인 여유와 Masil 보호
 	masil := map[string]int64{}
-	for _, s := range b.SPOs {
+	for _, s := range at.SPOs {
 		masil[s.ProductID] += s.Qty
 	}
 	var capF1, wF1, sF1 float64
@@ -253,8 +266,8 @@ func Evaluate(b *Base, sc Scenario) *Evaluation {
 		items[it.ProductID] = it
 		usdTotal += float64(it.AnnualQty) * it.UnitPriceUSD
 	}
-	unit := func(p string, cut float64) float64 { return items[p].UnitPriceUSD * (1 + cut) * b.FX }
-	contrib := func(p string, cut float64) float64 { return unit(p, cut) - b.MatCost[p].PerEA }
+	unit := func(p string, cut float64) float64 { return items[p].UnitPriceUSD * (1 + cut) * at.FX }
+	contrib := func(p string, cut float64) float64 { return unit(p, cut) - at.MatCost[p].PerEA }
 	for _, c := range []struct {
 		k   string
 		cut float64
@@ -266,11 +279,11 @@ func Evaluate(b *Base, sc Scenario) *Evaluation {
 		}
 		ev.RevenueAt[c.k], ev.ContribAt[c.k] = rev, con
 	}
-	ev.ContractAnnual = usdTotal * (1 + sc.PriceCut) * b.FX
+	ev.ContractAnnual = usdTotal * (1 + sc.PriceCut) * at.FX
 	ev.PenaltyMonthly = ev.ContractAnnual * PenaltyRate
 	var matUSD float64
 	for _, it := range sc.Items {
-		if mc := b.MatCost[it.ProductID]; mc.USD && mc.EffectiveFX > 0 {
+		if mc := at.MatCost[it.ProductID]; mc.USD && mc.EffectiveFX > 0 {
 			matUSD += float64(it.AnnualQty) * mc.PerEA / mc.EffectiveFX
 		}
 	}
@@ -294,7 +307,7 @@ func Evaluate(b *Base, sc Scenario) *Evaluation {
 		}
 		oe.DecisionDate, oe.DateAssumed = d.DecisionDate, false
 		if oe.Status != OptApproved || oe.DecisionDate == "" {
-			oe.DecisionDate, oe.DateAssumed = BoardDate, true // A-09
+			oe.DecisionDate, oe.DateAssumed = sc.BoardDate, true // A-09
 		}
 		inst := mustDate(oe.DecisionDate).AddDate(0, 0, 7*cx.LeadWeeks)
 		qual := inst.AddDate(0, 0, 7*vw)
@@ -327,7 +340,7 @@ func Evaluate(b *Base, sc Scenario) *Evaluation {
 	for _, it := range sc.Items {
 		p := it.ProductID
 		pe := ProductEval{ProductID: p, AnnualQty: it.AnnualQty, UnitPriceUSD: it.UnitPriceUSD, UnitKRW: unit(p, sc.PriceCut),
-			MaterialPerEA: b.MatCost[p].PerEA, CogsPerEA: b.CogsPerEA[p], ContribPerEA: contrib(p, sc.PriceCut), MonthlyDemand: it.AnnualQty / 12}
+			MaterialPerEA: at.MatCost[p].PerEA, CogsPerEA: at.CogsPerEA[p], ContribPerEA: contrib(p, sc.PriceCut), MonthlyDemand: it.AnnualQty / 12}
 		if l, ok := b.LineOf(p); ok {
 			pe.LineID = l.LineID
 		}
@@ -388,11 +401,7 @@ func Evaluate(b *Base, sc Scenario) *Evaluation {
 		ev.InitialGap = sc.InitialQtyRequired - d.Months[0].Supply
 	}
 
-	if b.commit != nil {
-		ev.Commitments = *b.commit
-	} else {
-		ev.Commitments = commitments(b)
-	}
+	ev.Commitments = at.Commit
 	ev.Flags = flags(ev, sc)
 	return ev
 }
@@ -417,34 +426,25 @@ func optionPhase(oe OptionEval, simDate string) string {
 	}
 }
 
-// commitments는 진행 중 B2B 약속(가동률 포함, A-06)과 Masil 발주(보호, A-07)를 요약한다.
-func commitments(b *Base) Commitments {
+// commitments는 잘라 낸 날 기준 진행 중 B2B 약속(가동률 포함, A-06)과 Masil 발주(보호, A-07)를 요약한다.
+func (b *Base) commitments(a *AsOfData) Commitments {
 	c := Commitments{ByProduct: map[string]int64{}, CountByProduct: map[string]int{}, EstDue: map[string]map[string]int64{},
-		T12MonthlyProd: map[string]int64{}, MasilSPOs: b.SPOs}
-	last := mustDate(SnapshotDate)
-	for _, o := range b.Orders {
-		if o.Shipped || o.CustomerID == "NONE" || o.OrderDate < "2024-01-01" {
-			continue
-		}
+		T12MonthlyProd: map[string]int64{}, MasilSPOs: a.SPOs}
+	for _, o := range b.OpenOrders(a.Cutoff) {
 		c.InProgressCount++
 		c.InProgressQty += o.Qty
 		c.ByProduct[o.ProductID] += o.Qty
 		c.CountByProduct[o.ProductID]++
-		// A-14: 추정 납기 = 주문일 + median_low{리드타임 | 리드타임 > 경과일}
-		od := mustDate(o.OrderDate)
-		age := int(last.Sub(od).Hours() / 24)
-		lt := b.LeadTimes[o.ProductID]
-		i := sort.SearchInts(lt, age+1)
-		if i >= len(lt) {
+		due := EstDue(a, o) // A-14
+		if due == "" {
 			continue
 		}
-		due := od.AddDate(0, 0, medianLow(lt[i:])).Format("2006-01")
 		if c.EstDue[o.ProductID] == nil {
 			c.EstDue[o.ProductID] = map[string]int64{}
 		}
-		c.EstDue[o.ProductID][due] += o.Qty
+		c.EstDue[o.ProductID][due[:7]] += o.Qty
 	}
-	for p, q := range b.T12Prod {
+	for p, q := range a.T12Prod {
 		c.T12MonthlyProd[p] = int64(math.RoundToEven(float64(q) / 12)) // 재현 스크립트(F03)와 같은 반올림
 	}
 	return c
@@ -455,6 +455,9 @@ func flags(ev *Evaluation, sc Scenario) []Flag {
 	var f []Flag
 	add := func(code, level, rule, msg string, a ...any) {
 		f = append(f, Flag{Code: code, Level: level, Rule: rule, Message: fmt.Sprintf(msg, a...)})
+	}
+	if ev.FutureSnapshot {
+		add("FUTURE_SNAPSHOT", "미확인", "T2", "능력 스냅샷은 %s 자료다. 기준일(자료 %s까지)보다 뒤에 만들어진 자료를 쓰고 있다", DataEnd, ev.Cutoff)
 	}
 	if !sc.UnitConfirmed {
 		add("UNIT_UNCONFIRMED", "미확인", "R4", "capacity_qty 단위가 원본에 없어 연간 EA로 읽었다(D6). 생산관리 확인 전까지 '단위 미확인'")

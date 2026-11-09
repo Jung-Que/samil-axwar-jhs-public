@@ -12,6 +12,7 @@ import (
 
 // 사건 종류(명세 §5). E6(Masil 수요 변경)은 설계 단계라 없다.
 const (
+	EvSession    = "E00_SESSION" // 테스트 세션 기준일(첫 사건). 없으면 기준일 2026-07-01
 	EvClock      = "E0_CLOCK"
 	EvRFP        = "E1_RFP"
 	EvDecision   = "E2_DECISION"
@@ -183,6 +184,23 @@ func (s *State) Apply(b *Base, e Event) error {
 	}
 
 	switch e.Type {
+	case EvSession:
+		var p struct {
+			AsOf string `json:"as_of"`
+		}
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return err
+		}
+		if len(s.Log) > 0 || s.Bid != nil {
+			return fmt.Errorf("세션 기준일은 첫 사건으로만 정한다(초기화 후 다시)")
+		}
+		if _, ok := parseDate(p.AsOf); !ok || p.AsOf < AsOfMin || p.AsOf > AsOfMax {
+			return fmt.Errorf("기준일은 %s~%s 사이(YYYY-MM-DD): %q", AsOfMin, AsOfMax, p.AsOf)
+		}
+		s.Scenario = SessionScenario(p.AsOf)
+		e.SimDate = p.AsOf
+		note("테스트 세션 시작: 기준일 %s(자료 %s까지), 이사회 %s, 납품 개시 가정 %s", p.AsOf, CutoffOf(p.AsOf), s.Scenario.BoardDate, s.Scenario.DeliveryStart)
+
 	case EvClock:
 		var p struct {
 			SimDate string `json:"sim_date"`
@@ -242,7 +260,7 @@ func (s *State) Apply(b *Base, e Event) error {
 		s.Bid.ApprovalRoute = []string{"CEO/이사회"}
 		note("상신(제안 v%d) → 승인 라우팅: 입찰 참여·투자 = CEO/이사회(R14)", s.Bid.Version)
 		s.closeTasks("상신안 검토", "재상신")
-		s.addTask("CEO/이사회", fmt.Sprintf("승인 검토: C-201 참여·OPT-01/02 투자(제안 v%d)", s.Bid.Version), BoardDate, e.Seq)
+		s.addTask("CEO/이사회", fmt.Sprintf("승인 검토: C-201 참여·OPT-01/02 투자(제안 v%d)", s.Bid.Version), maxDate(s.Scenario.BoardDate, e.SimDate), e.Seq)
 
 	case EvDecision:
 		if s.Bid == nil || s.Bid.State != BidSubmitted {
@@ -257,8 +275,8 @@ func (s *State) Apply(b *Base, e Event) error {
 		}
 		if p.DecidedAt == "" {
 			p.DecidedAt = e.SimDate
-			if p.DecidedAt < BoardDate { // 승인권자(CEO/이사회) 결정은 이사회 날부터(A-09)
-				p.DecidedAt = BoardDate
+			if p.DecidedAt < s.Scenario.BoardDate { // 승인권자(CEO/이사회) 결정은 이사회 날부터(A-09)
+				p.DecidedAt = s.Scenario.BoardDate
 			}
 		}
 		var floor *float64
@@ -850,6 +868,13 @@ func addBusinessDays(date string, n int) string {
 		}
 	}
 	return fmtDate(t)
+}
+
+func maxDate(a, b string) string {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func num(v any) float64 {

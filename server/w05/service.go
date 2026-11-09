@@ -73,8 +73,14 @@ type View struct {
 	Input       string            `json:"input_mode"`
 	Store       string            `json:"store"`
 	Files       int               `json:"raw_files_verified"`
-	AsOf        string            `json:"as_of"`
-	BoardDate   string            `json:"board_date"`
+	AsOf        string            `json:"as_of"`      // 세션 기준일
+	BoardDate   string            `json:"board_date"` // 이사회 = 기준일 + 5일
+	Cutoff      string            `json:"cutoff"`     // 지금 쓰는 기록의 마지막 날
+	AsOfMin     string            `json:"as_of_min"`
+	AsOfMax     string            `json:"as_of_max"`
+	DataEnd     string            `json:"data_end"`
+	Lanes       []Lane            `json:"lanes"`
+	Lines       []LineRow         `json:"line_board"`
 	Assumptions []Assumption      `json:"assumptions"`
 	Scenarios   []ScenarioInfo    `json:"scenarios"`
 	Conditions  map[string]string `json:"condition_codes"`
@@ -89,8 +95,11 @@ type Assumption struct {
 }
 
 func (s *Service) view() View {
+	sc := s.state.Scenario
 	return View{State: s.state, Input: "고정 필드(자유 문장·LLM 현재 제외)", Store: s.st.Kind(), Files: s.base.Files,
-		AsOf: AsOf, BoardDate: BoardDate, Assumptions: assumptions(s.base, s.state.Scenario), Scenarios: Scenarios(), Conditions: ConditionCodes}
+		AsOf: sc.AsOf, BoardDate: sc.BoardDate, Cutoff: CutoffOf(sc.SimDate), AsOfMin: AsOfMin, AsOfMax: AsOfMax, DataEnd: DataEnd,
+		Lanes: s.state.Lanes(s.base), Lines: s.state.LineBoard(s.base),
+		Assumptions: assumptions(s.base, sc), Scenarios: Scenarios(sc.AsOf), Conditions: ConditionCodes}
 }
 
 // Snapshot은 현재 상태를 돌려준다.
@@ -135,24 +144,60 @@ func (s *Service) Submit(ctx context.Context, typ, actor string, payload json.Ra
 	return s.view(), nil
 }
 
-// Reset은 사건 로그를 비운다(시나리오 초기화).
-func (s *Service) Reset(ctx context.Context) (View, error) {
+// Reset은 사건 로그를 비우고, asOf가 있으면 그 기준일로 테스트 세션을 시작한다(E00_SESSION).
+func (s *Service) Reset(ctx context.Context, asOf string) (View, error) {
+	if asOf != "" {
+		if _, ok := parseDate(asOf); !ok || asOf < AsOfMin || asOf > AsOfMax {
+			return View{}, fmt.Errorf("%w: 기준일은 %s~%s 사이(YYYY-MM-DD): %q", ErrInvalid, AsOfMin, AsOfMax, asOf)
+		}
+	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if err := s.st.ResetEvents(ctx); err != nil {
+		s.mu.Unlock()
 		return View{}, err
 	}
 	s.events, s.state = nil, NewState(s.base)
-	return s.view(), nil
+	s.mu.Unlock()
+	if asOf == "" || asOf == DefaultAsOf {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.view(), nil
+	}
+	return s.Submit(ctx, EvSession, "시스템", json.RawMessage(fmt.Sprintf(`{"as_of":%q}`, asOf)))
 }
 
-// RunScenario는 초기화 뒤 시나리오의 사건을 고정 입력값으로 차례로 넣는다.
-func (s *Service) RunScenario(ctx context.Context, id string) (View, error) {
-	sc, err := ScenarioByID(id)
+// Inbox는 접수함이다(최근 days일, 최대 limit건).
+func (s *Service) Inbox(ctx context.Context, days, limit int) (Inbox, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.sync(ctx); err != nil {
+		return Inbox{}, err
+	}
+	return s.state.Inbox(s.base, days, limit), nil
+}
+
+// Backtest는 정답 비교다.
+func (s *Service) Backtest(ctx context.Context) (Backtest, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.sync(ctx); err != nil {
+		return Backtest{}, err
+	}
+	return s.state.Backtest(s.base), nil
+}
+
+// RunScenario는 기준일 asOf(비면 지금 세션 기준일)로 초기화한 뒤 시나리오의 사건을 고정 입력값으로 차례로 넣는다.
+func (s *Service) RunScenario(ctx context.Context, id, asOf string) (View, error) {
+	if asOf == "" {
+		s.mu.Lock()
+		asOf = s.state.Scenario.AsOf
+		s.mu.Unlock()
+	}
+	sc, err := ScenarioByID(id, asOf)
 	if err != nil {
 		return View{}, err
 	}
-	if _, err := s.Reset(ctx); err != nil {
+	if _, err := s.Reset(ctx, asOf); err != nil {
 		return View{}, err
 	}
 	var v View
@@ -170,6 +215,7 @@ func (s *Service) RunScenario(ctx context.Context, id string) (View, error) {
 }
 
 func assumptions(b *Base, sc Scenario) []Assumption {
+	at := b.At(sc.SimDate)
 	lbl := func(confirmed bool) string {
 		if confirmed {
 			return "회신 반영"
@@ -187,21 +233,22 @@ func assumptions(b *Base, sc Scenario) []Assumption {
 	}
 	pen := map[string]string{"backlog": "지연분 × 3%/월", "contract": "계약 총액 × 3%/월"}[sc.PenaltyBasis]
 	return []Assumption{
-		{"A-01", "기준일 / 이사회", AsOf + " / " + BoardDate, "원본"},
-		{"A-02", "환율(as-of 종가)", fmt.Sprintf("%s %.2f", b.FXDate, b.FX), "원본"},
+		{"A-01", "기준일 / 이사회 / 쓰는 기록의 마지막 날", sc.AsOf + " / " + sc.BoardDate + " / " + at.Cutoff, "원본"},
+		{"A-02", "환율(기준일 이전 마지막 종가)", fmt.Sprintf("%s %.2f", at.FXDate, at.FX), "원본"},
 		{"A-03", "입찰 접수일 → 마감(RFP는 '3주'만 적음)", "접수일 = 사건 날짜, +3주", "가정"},
 		{"A-04", "납품 개시월", sc.DeliveryStart, lbl(sc.StartConfirmed)},
 		{"A-05", "계약 기간·월 균등 납품", fmt.Sprintf("%d개월, 연 수량 ÷ 12", sc.ContractMonths), "가정"},
 		{"A-06", "스냅샷 이전 B2B 진행 주문은 가동률에 포함", "포함(다시 빼지 않음)", "가정"},
 		{"A-07", "Masil SPO와 가동률", masil, lbl(sc.MasilInUtil)},
 		{"A-08", "설치 후 적격까지", val, lbl(vw > 0)},
-		{"A-09", "OPT 승인일(결정 전)", BoardDate + " 가정, 적격 다음 달부터 산입", "가정"},
+		{"A-09", "OPT 승인일(결정 전)", sc.BoardDate + " 가정, 적격 다음 달부터 산입", "가정"},
 		{"A-10", "OPT-01 → L-02, OPT-02 → F2 신규 더마 라인", "target_line 자유 텍스트 매핑", "합성"},
-		{"A-11", "원료비/EA(최근월 applied × T12 원단위)", fmt.Sprintf("PL-01 %.0f원 · PL-02 %.0f원", b.MatCost[ProductBasic].PerEA, b.MatCost[ProductDerma].PerEA), "계산"},
+		{"A-11", "원료비/EA(최근월 applied × T12 원단위)", fmt.Sprintf("PL-01 %.0f원 · PL-02 %.0f원(단가 기준월 %s)", at.MatCost[ProductBasic].PerEA, at.MatCost[ProductDerma].PerEA, at.MatCost[ProductDerma].LastMonth), "계산"},
 		{"A-12", "환율 변동 시 USD 원료비 1:1 연동", "적용", "가정"},
 		{"A-13", "지체상금 기준·상한", pen + ", 상한 없음", lbl(sc.PenaltyConfirmed)},
 		{"A-14", "추정 납기(검산용)", "주문일 + 조건부 리드타임 중앙값", "계산"},
 		{"A-15", "확인 요청 기한", "부서 5~10영업일, 바이어 마감 −5영업일", "가정"},
+		{"T2", "능력 스냅샷", DataEnd + map[bool]string{true: " 자료를 더 이른 기준일에 씀", false: " 자료"}[at.FutureSnapshot], map[bool]string{true: "미래 자료", false: "원본"}[at.FutureSnapshot]},
 		{"D6", "capacity_qty 기간 단위", map[string]string{"annual": "연간 EA", "monthly": "월간(회신)"}[sc.CapacityPeriod], lbl(sc.UnitConfirmed)},
 	}
 }

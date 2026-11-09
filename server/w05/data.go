@@ -2,6 +2,9 @@
 //
 // 원본 CSV(data/raw, 수정 없는 복사본)를 바이너리에 넣고, 업무모델 명세의 규칙으로 계산하며,
 // 사건(이벤트)을 순서대로 적용해 상태를 만든다. 명세: analysis/06_W05_수주약속/05_업무모델_명세.md(git 밖).
+//
+// 기준일 재현(플랜 06_기준일_재현_플랜.md): 원본 표는 한 번 읽고, 날짜별 값(환율·원가·리드타임·진행 주문 등)은
+// Base.At(날짜)가 그날까지의 기록만으로 계산한다. 그날 뒤의 기록은 판단에 쓰지 않는다(정답 비교에서만).
 package w05
 
 import (
@@ -16,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -26,19 +30,19 @@ const rawRoot = "data/raw"
 
 // 기준값(명세 §0·§7). 원본 문서에서 온 값만 상수로 둔다.
 const (
-	AsOf          = "2026-07-01" // 업무 기준일 [원본 A05]
-	BoardDate     = "2026-07-06" // 이사회 = 기준일 + 5일 [원본 data_dictionary]
-	SnapshotDate  = "2026-06-30" // 능력 스냅샷·데이터 마지막 날 [원본]
-	T12From       = "2025-07"    // 최근 12개월
-	T12To         = "2026-06"
-	H1From        = "2026-01"
-	PenaltyRate   = 0.03 // 납기 지연 페널티 월 3% [원본 rfp_c201]
+	DefaultAsOf   = "2026-07-01" // 업무 기준일 [원본 A05]. 세션 기준일을 따로 주지 않으면 이 날짜
+	DataEnd       = "2026-06-30" // 원본 데이터 마지막 날·능력 스냅샷 날 [원본]
+	AsOfMin       = "2024-07-01" // 고를 수 있는 첫 기준일: 환율 시작일(T1)
+	AsOfMax       = "2026-07-01" // 고를 수 있는 마지막 기준일(T1)
+	BoardLagDays  = 5            // 이사회 = 기준일 + 5일 [원본 data_dictionary]
+	PenaltyRate   = 0.03         // 납기 지연 페널티 월 3% [원본 rfp_c201]
 	BidID         = "C-201"
 	ProductBasic  = "PL-01"
 	ProductDerma  = "PL-02"
 	LineBasic     = "L-01"
 	LineDerma     = "L-02"
 	LineF2NewDerm = "F2-NEW-DERMA" // OPT-02 대상 [합성 매핑, 명세 A-10]
+	openFrom      = "2024-01-01"   // 출하표 시작일. 그 전 수주는 출하 기록이 없어 진행 주문에서 뺀다(경계 효과)
 )
 
 // VerifyManifest는 넣어 둔 원본 복사본이 SHA256SUMS와 같은지 확인한다(D4).
@@ -139,15 +143,17 @@ type CapexRow struct {
 	Note        string `json:"note"`
 }
 
-// Order는 수주 1건이다(sales_orders_cv). 출하 여부는 Shipped로 붙인다.
+// Order는 수주 1건이다(sales_orders_cv + 출하일).
 type Order struct {
 	OrderID    string `json:"order_id"`
 	OrderDate  string `json:"order_date"`
 	CustomerID string `json:"customer_id"`
+	AgencyID   string `json:"agency_id"`
+	Team       string `json:"sales_team"`
 	ProductID  string `json:"product_id"`
 	Qty        int64  `json:"qty"`
 	AmountKRW  int64  `json:"amount_krw"`
-	Shipped    bool   `json:"-"`
+	ShipDate   string `json:"-"` // 출하일(없으면 ""). 기준일 뒤 출하는 판단에 쓰지 않는다
 }
 
 // SPO는 Masil이 Corevia에 낸 발주다(sc_purchase_orders_ms + m_sku_ms.product_id).
@@ -162,6 +168,16 @@ type SPO struct {
 	PayDue    string `json:"payment_due_date"`
 }
 
+// Batch는 생산 배치 1건이다(prod_batch_log_cv).
+type Batch struct {
+	BatchID   string `json:"batch_id"`
+	ProductID string `json:"product_id"`
+	Plant     string `json:"plant"`
+	Date      string `json:"production_date"`
+	Qty       int64  `json:"produced_qty"`
+	QC        string `json:"qc_result"`
+}
+
 // MaterialCost는 C-201 원가 기준이다(rfp_c201 지정: applied_unit_cost_krw, F07).
 type MaterialCost struct {
 	MaterialID  string  `json:"material_id"`
@@ -169,25 +185,62 @@ type MaterialCost struct {
 	AppliedKRW  float64 `json:"applied_krw_per_kg"`
 	KgPerEA     float64 `json:"kg_per_ea_t12"`
 	PerEA       float64 `json:"material_cost_per_ea"`
-	EffectiveFX float64 `json:"effective_fx"` // applied ÷ 같은 달 USD 구매단가(USD 원료만)
+	EffectiveFX float64 `json:"effective_fx"` // applied ÷ USD 구매단가(USD 원료만)
 	USD         bool    `json:"usd"`
 }
 
-// Base는 원본에서 읽은 W05 기초 자료다. 한 번 읽고 바꾸지 않는다.
+type consRow struct {
+	product, ym, date string
+	kg, applied       float64
+	ea                int64
+}
+
+type purchRow struct {
+	material, ym, date, currency string
+	price                        float64
+}
+
+type isRow struct {
+	ym, product string
+	cogs        int64
+}
+
+type fxRow struct {
+	date string
+	rate float64
+}
+
+// Base는 원본에서 읽은 W05 표다. 한 번 읽고 바꾸지 않는다. 날짜별 값은 At이 만든다.
 type Base struct {
 	Lines       []Line
 	Capex       []CapexRow
 	Orders      []Order
-	LeadTimes   map[string][]int // 제품별 수주→출하 일수(정렬)
 	SPOs        []SPO
-	MatCost     map[string]MaterialCost
-	CogsPerEA   map[string]float64 // 2026H1 IS 매출원가 ÷ 출하수량
-	T12Prod     map[string]int64   // 최근 12개월 생산량
-	FXDate      string
-	FX          float64
+	Batches     []Batch
 	Files       int // 해시를 확인한 원본 파일 수
 	CustomerIDs []string
-	commit      *Commitments // 시나리오와 무관한 기존 약속 요약(한 번만 계산)
+	mainMat     map[string]string
+	cons        []consRow
+	purch       []purchRow
+	is          []isRow
+	fx          []fxRow // 날짜순
+
+	mu    sync.Mutex
+	cache map[string]*AsOfData
+}
+
+// AsOfData는 한 날짜(잘라 낸 날 Cutoff)까지의 기록만으로 계산한 값이다.
+type AsOfData struct {
+	Cutoff         string                  `json:"cutoff"` // min(날짜, DataEnd)
+	FX             float64                 `json:"fx"`
+	FXDate         string                  `json:"fx_date"`
+	MatCost        map[string]MaterialCost `json:"material_cost"`
+	CogsPerEA      map[string]float64      `json:"cogs_per_ea"`
+	T12Prod        map[string]int64        `json:"t12_prod"`
+	LeadTimes      map[string][]int        `json:"-"`
+	SPOs           []SPO                   `json:"masil_spos"`
+	Commit         Commitments             `json:"commitments"`
+	FutureSnapshot bool                    `json:"future_snapshot"` // 능력 스냅샷이 잘라 낸 날보다 뒤 자료(T2)
 }
 
 // LoadBase는 원본 복사본을 검사하고 읽는다.
@@ -196,16 +249,15 @@ func LoadBase() (*Base, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := &Base{Files: n, LeadTimes: map[string][]int{}, MatCost: map[string]MaterialCost{}, CogsPerEA: map[string]float64{}, T12Prod: map[string]int64{}}
+	b := &Base{Files: n, mainMat: map[string]string{}, cache: map[string]*AsOfData{}}
 
 	prod, err := readTable("01_corevia/master/m_product_cv.csv")
 	if err != nil {
 		return nil, err
 	}
-	mainMat := map[string]string{}
 	dedicated := map[string]bool{}
 	for _, r := range prod {
-		mainMat[r["product_id"]] = r["main_material_id"]
+		b.mainMat[r["product_id"]] = r["main_material_id"]
 		dedicated[r["product_id"]] = r["is_f1_dedicated"] == "True"
 	}
 
@@ -247,30 +299,20 @@ func LoadBase() (*Base, error) {
 		return nil, err
 	}
 	shipDate := map[string]string{}
-	shipQtyH1 := map[string]int64{}
 	for _, s := range ships {
 		shipDate[s["order_id"]] = s["ship_date"]
-		if ym := s["ship_date"][:7]; ym >= H1From && ym <= T12To {
-			shipQtyH1[s["product_id"]] += atoi(s["shipped_qty"])
-		}
 	}
 	cust := map[string]bool{}
 	for _, r := range orders {
-		o := Order{OrderID: r["order_id"], OrderDate: r["order_date"], CustomerID: r["customer_id"], ProductID: r["product_id"],
-			Qty: atoi(r["order_qty"]), AmountKRW: atoi(r["order_amount_krw"])}
-		if sd, ok := shipDate[o.OrderID]; ok {
-			o.Shipped = true
-			days := int(mustDate(sd).Sub(mustDate(o.OrderDate)).Hours() / 24)
-			b.LeadTimes[o.ProductID] = append(b.LeadTimes[o.ProductID], days)
-		}
+		o := Order{OrderID: r["order_id"], OrderDate: r["order_date"], CustomerID: r["customer_id"], AgencyID: r["agency_id"],
+			Team: r["sales_team"], ProductID: r["product_id"], Qty: atoi(r["order_qty"]), AmountKRW: atoi(r["order_amount_krw"]),
+			ShipDate: shipDate[r["order_id"]]}
 		if o.CustomerID != "NONE" {
 			cust[o.CustomerID] = true
 		}
 		b.Orders = append(b.Orders, o)
 	}
-	for p := range b.LeadTimes {
-		sort.Ints(b.LeadTimes[p])
-	}
+	sort.SliceStable(b.Orders, func(i, j int) bool { return b.Orders[i].OrderDate < b.Orders[j].OrderDate })
 	for c := range cust {
 		b.CustomerIDs = append(b.CustomerIDs, c)
 	}
@@ -294,113 +336,220 @@ func LoadBase() (*Base, error) {
 			Qty: atoi(r["order_qty"]), LeadWeeks: lw, ArriveBy: fmtDate(mustDate(r["order_date"]).AddDate(0, 0, 7*lw)), PayDue: r["payment_due_date"]})
 	}
 
-	if err := b.loadCost(mainMat, shipQtyH1); err != nil {
+	batches, err := readTable("01_corevia/production/prod_batch_log_cv.csv")
+	if err != nil {
 		return nil, err
 	}
+	produced := map[string]int64{}
+	for _, r := range batches {
+		bt := Batch{BatchID: r["batch_id"], ProductID: r["product_id"], Plant: r["production_line"], Date: r["production_date"],
+			Qty: atoi(r["produced_qty"]), QC: r["qc_result"]}
+		produced[bt.BatchID] = bt.Qty
+		b.Batches = append(b.Batches, bt)
+	}
+	sort.SliceStable(b.Batches, func(i, j int) bool { return b.Batches[i].Date < b.Batches[j].Date })
 
+	cons, err := readTable("01_corevia/production/production_material_consumption_cv.csv")
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range cons {
+		b.cons = append(b.cons, consRow{product: r["product_id"], ym: r["consumption_date"][:7], date: r["consumption_date"],
+			kg: atof(r["consumed_qty"]), applied: atof(r["applied_unit_cost_krw"]), ea: produced[r["batch_id"]]})
+	}
+	purchases, err := readTable("01_corevia/procurement/procurement_material_purchase_cv.csv")
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range purchases {
+		b.purch = append(b.purch, purchRow{material: r["material_id"], ym: r["purchase_date"][:7], date: r["purchase_date"],
+			currency: r["currency"], price: atof(r["unit_price_fx"])})
+	}
+	is, err := readTable("01_corevia/financials/fin_income_statement_cv.csv")
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range is {
+		b.is = append(b.is, isRow{ym: r["period_ym"], product: r["product_id"], cogs: atoi(r["cogs_krw"])})
+	}
 	fx, err := readTable("05_external/fx/ext_fx_daily.csv")
 	if err != nil {
 		return nil, err
 	}
 	for _, r := range fx {
-		if r["date"] > b.FXDate && r["date"] <= SnapshotDate {
-			b.FXDate, b.FX = r["date"], atof(r["usdkrw_close"])
-		}
+		b.fx = append(b.fx, fxRow{date: r["date"], rate: atof(r["usdkrw_close"])})
 	}
-	c := commitments(b)
-	b.commit = &c
+	sort.Slice(b.fx, func(i, j int) bool { return b.fx[i].date < b.fx[j].date })
 	return b, nil
 }
 
-// loadCost는 원료비/EA(F07), IS 매출원가/EA(F06), 최근 12개월 생산량(F03)을 계산한다.
-func (b *Base) loadCost(mainMat map[string]string, shipQtyH1 map[string]int64) error {
-	batches, err := readTable("01_corevia/production/prod_batch_log_cv.csv")
-	if err != nil {
-		return err
+// CutoffOf는 날짜를 데이터 끝에서 자른다. 기준일 2026-07-01이면 2026-06-30까지의 기록을 쓴다.
+func CutoffOf(date string) string {
+	if date == "" || date > DataEnd {
+		return DataEnd
 	}
-	produced := map[string]int64{}
-	for _, r := range batches {
-		q := atoi(r["produced_qty"])
-		produced[r["batch_id"]] = q
-		if ym := r["production_date"][:7]; ym >= T12From && ym <= T12To {
-			b.T12Prod[r["product_id"]] += q
+	return date
+}
+
+// At은 날짜까지의 기록만으로 계산한 값을 돌려준다(같은 날짜는 캐시).
+func (b *Base) At(date string) *AsOfData {
+	c := CutoffOf(date)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if a, ok := b.cache[c]; ok {
+		return a
+	}
+	if len(b.cache) >= 64 { // 날짜를 많이 오가도 메모리가 늘지 않게(한 항목 = 리드타임 표본 약 1.8만 개)
+		b.cache = map[string]*AsOfData{}
+	}
+	a := b.compute(c)
+	b.cache[c] = a
+	return a
+}
+
+func (b *Base) compute(c string) *AsOfData {
+	a := &AsOfData{Cutoff: c, MatCost: map[string]MaterialCost{}, CogsPerEA: map[string]float64{}, T12Prod: map[string]int64{},
+		LeadTimes: map[string][]int{}, FutureSnapshot: c < DataEnd}
+
+	for _, r := range b.fx { // 잘라 낸 날 이전 마지막 종가
+		if r.date <= c {
+			a.FXDate, a.FX = r.date, r.rate
 		}
 	}
-	cons, err := readTable("01_corevia/production/production_material_consumption_cv.csv")
-	if err != nil {
-		return err
+	lastClosed := lastClosedMonth(c)
+
+	// 최근 12개월(닫힌 달) 생산량
+	t12 := monthsBack(lastClosed, 12)
+	for _, bt := range b.Batches {
+		if bt.Date <= c && inMonths(bt.Date[:7], t12) {
+			a.T12Prod[bt.ProductID] += bt.Qty
+		}
 	}
+
+	// 원료비/EA = 최근월 applied × 그 달까지 12개월 원단위(F07)
 	type acc struct {
 		kg      float64
 		ea      int64
 		applied float64
 	}
-	byPM := map[string]map[string]*acc{} // product → ym → 합
-	for _, r := range cons {
-		p, ym := r["product_id"], r["consumption_date"][:7]
-		if byPM[p] == nil {
-			byPM[p] = map[string]*acc{}
+	byPM := map[string]map[string]*acc{}
+	for _, r := range b.cons {
+		if r.date > c {
+			continue
 		}
-		a := byPM[p][ym]
-		if a == nil {
-			a = &acc{applied: math.Inf(1)}
-			byPM[p][ym] = a
+		if byPM[r.product] == nil {
+			byPM[r.product] = map[string]*acc{}
 		}
-		a.kg += atof(r["consumed_qty"])
-		a.ea += produced[r["batch_id"]]
-		a.applied = math.Min(a.applied, atof(r["applied_unit_cost_krw"]))
-	}
-	purchases, err := readTable("01_corevia/procurement/procurement_material_purchase_cv.csv")
-	if err != nil {
-		return err
+		x := byPM[r.product][r.ym]
+		if x == nil {
+			x = &acc{applied: math.Inf(1)}
+			byPM[r.product][r.ym] = x
+		}
+		x.kg += r.kg
+		x.ea += r.ea
+		x.applied = math.Min(x.applied, r.applied)
 	}
 	for p, months := range byPM {
 		last := ""
-		var kg float64
-		var ea int64
-		for ym, a := range months {
+		for ym := range months {
 			if ym > last {
 				last = ym
 			}
-			if ym >= T12From && ym <= T12To {
-				kg += a.kg
-				ea += a.ea
+		}
+		win := monthsBack(last, 12)
+		var kg float64
+		var ea int64
+		for ym, x := range months {
+			if inMonths(ym, win) {
+				kg += x.kg
+				ea += x.ea
 			}
 		}
-		mc := MaterialCost{MaterialID: mainMat[p], LastMonth: last, AppliedKRW: months[last].applied}
+		mc := MaterialCost{MaterialID: b.mainMat[p], LastMonth: last, AppliedKRW: months[last].applied}
 		if ea > 0 {
 			mc.KgPerEA = kg / float64(ea)
 		}
 		mc.PerEA = mc.AppliedKRW * mc.KgPerEA
-		var lastUSD float64
-		for _, r := range purchases {
-			if r["material_id"] == mc.MaterialID && r["currency"] == "USD" && r["purchase_date"][:7] == last {
-				lastUSD = math.Max(lastUSD, atof(r["unit_price_fx"]))
+		// 실효환율: 최근월(없으면 그 전 가장 가까운 달)의 USD 구매단가 최댓값
+		bestYM, price := "", 0.0
+		for _, r := range b.purch {
+			if r.material != mc.MaterialID || r.currency != "USD" || r.date > c || r.ym > last {
+				continue
+			}
+			if r.ym > bestYM {
+				bestYM, price = r.ym, r.price
+			} else if r.ym == bestYM {
+				price = math.Max(price, r.price)
 			}
 		}
-		if lastUSD > 0 {
+		if price > 0 {
 			mc.USD = true
-			mc.EffectiveFX = mc.AppliedKRW / lastUSD
+			mc.EffectiveFX = mc.AppliedKRW / price
 		}
-		b.MatCost[p] = mc
+		a.MatCost[p] = mc
 	}
 
-	is, err := readTable("01_corevia/financials/fin_income_statement_cv.csv")
-	if err != nil {
-		return err
-	}
+	// IS 매출원가/EA = 닫힌 최근 6개월 매출원가 ÷ 같은 달 출하수량(F06)
+	h6 := monthsBack(lastClosed, 6)
 	cogs := map[string]int64{}
-	for _, r := range is {
-		if ym := r["period_ym"]; ym >= H1From && ym <= T12To {
-			cogs[r["product_id"]] += atoi(r["cogs_krw"])
+	for _, r := range b.is {
+		if inMonths(r.ym, h6) {
+			cogs[r.product] += r.cogs
 		}
 	}
-	for p, q := range shipQtyH1 {
+	shipQty := map[string]int64{}
+	for _, o := range b.Orders {
+		if o.ShipDate != "" && o.ShipDate <= c {
+			days := int(mustDate(o.ShipDate).Sub(mustDate(o.OrderDate)).Hours() / 24)
+			a.LeadTimes[o.ProductID] = append(a.LeadTimes[o.ProductID], days)
+			if inMonths(o.ShipDate[:7], h6) {
+				shipQty[o.ProductID] += o.Qty
+			}
+		}
+	}
+	for p := range a.LeadTimes {
+		sort.Ints(a.LeadTimes[p])
+	}
+	for p, q := range shipQty {
 		if q > 0 {
-			b.CogsPerEA[p] = float64(cogs[p]) / float64(q)
+			a.CogsPerEA[p] = float64(cogs[p]) / float64(q)
 		}
 	}
-	return nil
+
+	for _, s := range b.SPOs {
+		if s.OrderDate <= c {
+			a.SPOs = append(a.SPOs, s)
+		}
+	}
+	a.Commit = b.commitments(a)
+	return a
+}
+
+// OpenOrders는 잘라 낸 날 기준 진행 중 B2B 주문이다(2024년 이후 접수, 그날까지 미출하).
+func (b *Base) OpenOrders(c string) []Order {
+	var out []Order
+	for _, o := range b.Orders {
+		if o.OrderDate > c {
+			break // 접수일 순 정렬
+		}
+		if o.CustomerID == "NONE" || o.OrderDate < openFrom || (o.ShipDate != "" && o.ShipDate <= c) {
+			continue
+		}
+		out = append(out, o)
+	}
+	return out
+}
+
+// EstDue는 A-14 추정 납기다: 주문일 + median_low{리드타임 | 리드타임 > 경과일}. 남은 분포가 없으면 "".
+func EstDue(a *AsOfData, o Order) string {
+	od := mustDate(o.OrderDate)
+	age := int(mustDate(a.Cutoff).Sub(od).Hours() / 24)
+	lt := a.LeadTimes[o.ProductID]
+	i := sort.SearchInts(lt, age+1)
+	if i >= len(lt) {
+		return ""
+	}
+	return fmtDate(od.AddDate(0, 0, medianLow(lt[i:])))
 }
 
 // LineOf는 제품군을 만드는 기존 라인을 찾는다(라인 1개 = 제품군 1개).
@@ -411,6 +560,37 @@ func (b *Base) LineOf(product string) (Line, bool) {
 		}
 	}
 	return Line{}, false
+}
+
+// lastClosedMonth는 날짜까지 끝난 마지막 달이다(월말이면 그 달, 아니면 전달).
+func lastClosedMonth(c string) string {
+	t := mustDate(c)
+	if t.AddDate(0, 0, 1).Month() != t.Month() {
+		return c[:7]
+	}
+	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, -1, 0).Format("2006-01")
+}
+
+// monthsBack은 ym을 포함해 거꾸로 n개월이다.
+func monthsBack(ym string, n int) []string {
+	t, err := time.Parse("2006-01", ym)
+	if err != nil {
+		return nil
+	}
+	out := make([]string, n)
+	for i := 0; i < n; i++ {
+		out[i] = t.AddDate(0, -i, 0).Format("2006-01")
+	}
+	return out
+}
+
+func inMonths(ym string, months []string) bool {
+	for _, m := range months {
+		if m == ym {
+			return true
+		}
+	}
+	return false
 }
 
 func atoi(s string) int64 {

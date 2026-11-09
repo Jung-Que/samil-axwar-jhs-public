@@ -121,6 +121,33 @@ func TestW05API(t *testing.T) {
 	}
 }
 
+// 기준일 재현 API: 기준일 세션 시작 → 접수함·정답 비교·레인/라인 보드.
+func TestW05AsOfAPI(t *testing.T) {
+	st := store.NewMemory()
+	h := newHandler(fakeBuild(t), st, newTestService(t, st))
+	do := func(method, path, body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)))
+		return rec
+	}
+	rec := do("POST", "/api/w05/reset", `{"as_of":"2025-12-31"}`)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"as_of":"2025-12-31"`) || !strings.Contains(rec.Body.String(), `"line_board"`) {
+		t.Fatalf("기준일 세션: %d %.300s", rec.Code, rec.Body.String())
+	}
+	if rec := do("GET", "/api/w05/inbox?days=7&limit=5", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"last7":47`) {
+		t.Fatalf("접수함: %d %.300s", rec.Code, rec.Body.String())
+	}
+	if rec := do("GET", "/api/w05/backtest", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"available":true`) {
+		t.Fatalf("정답 비교: %d %.200s", rec.Code, rec.Body.String())
+	}
+	if rec := do("POST", "/api/w05/scenarios/normal", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"board_date":"2026-01-05"`) {
+		t.Fatalf("세션 기준일로 시나리오: %d %.300s", rec.Code, rec.Body.String())
+	}
+	if rec := do("POST", "/api/w05/reset", `{"as_of":"2030-01-01"}`); rec.Code != http.StatusConflict {
+		t.Fatalf("범위 밖 기준일: %d", rec.Code)
+	}
+}
+
 func TestNoBuild(t *testing.T) {
 	h := newHandler(t.TempDir(), store.NewMemory(), nil) // index.html 없음
 	rec := httptest.NewRecorder()

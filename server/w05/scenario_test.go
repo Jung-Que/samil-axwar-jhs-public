@@ -17,7 +17,7 @@ func runScenario(t *testing.T, id string) *State {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, err := svc.RunScenario(context.Background(), id)
+	v, err := svc.RunScenario(context.Background(), id, "")
 	if err != nil {
 		t.Fatalf("시나리오 %s: %v", id, err)
 	}
@@ -155,7 +155,7 @@ func TestInvalidAndBlocked(t *testing.T) {
 	if _, err := svc.Submit(ctx, EvForApprove, "영업", nil); err == nil {
 		t.Fatal("입찰 접수 전 상신이 통과함")
 	}
-	if _, err := svc.RunScenario(ctx, "normal"); err != nil {
+	if _, err := svc.RunScenario(ctx, "normal", ""); err != nil {
 		t.Fatal(err)
 	}
 	// 단가 -12% 회신 → 결정 낡음 → 재상신·재승인(하한 -10%) 뒤 제출하면 COND_PRICE_FLOOR로 차단
