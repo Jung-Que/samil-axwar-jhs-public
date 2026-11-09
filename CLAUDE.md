@@ -92,6 +92,7 @@ Aurora Holdings(가상 화장품 그룹) 데이터로 **기업의 AI 기반 운�
 | 회수·현금·공급 실제 사례 | `analysis/04_운영사례조사/` |
 | 자체 테스트 분기(무엇을 바꾸면 무엇을 돌리나) | `docs/테스트_하네스.md` (실행기 `tools/selftest.py`) |
 | 브랜치 규칙(dev·main·이름·릴리스·훅) | `docs/브랜치_규칙.md` |
+| 용도별 실행 절차: Docker 빌드·병합 뒤 업데이트·메인 빌드(릴리스·배포) | `docs/skills/docker-build/SKILL.md`, `docs/skills/update/SKILL.md`, `docs/skills/main-build/SKILL.md` |
 | 할 일·지금 하는 일 | `analysis/TODO.md` |
 
 ## 이 파일 관리
