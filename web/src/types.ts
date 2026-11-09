@@ -86,6 +86,8 @@ export type Commitments = {
   masil_spos: SPO[];
 };
 export type Scenario = {
+  as_of: string;
+  board_date: string;
   sim_date: string;
   price_cut: number;
   delivery_start: string;
@@ -102,6 +104,8 @@ export type Scenario = {
 };
 export type Evaluation = {
   scenario: Scenario;
+  cutoff: string;
+  future_snapshot: boolean;
   fx: number;
   fx_date: string;
   lines: LineEval[];
@@ -197,7 +201,84 @@ export type View = {
   raw_files_verified: number;
   as_of: string;
   board_date: string;
+  cutoff: string;
+  as_of_min: string;
+  as_of_max: string;
+  data_end: string;
+  lanes: Lane[];
+  line_board: LineRow[];
   assumptions: Assumption[];
   scenarios: ScenarioInfo[];
   condition_codes: Record<string, string>;
+};
+
+// 기준일 재현 보기(server/w05/boards.go)
+export type LaneItem = { text: string; source: string };
+export type LaneAction = { event: string; label: string; enabled: boolean; reason?: string; request_id?: string };
+export type Lane = { role: string; incoming: LaneItem[] | null; can: LaneAction[] | null; doing: LaneItem[] | null; blocked: LaneItem[] | null };
+export type MonthLoad = { month: string; orders: number; c201: number };
+export type LineRow = {
+  line_id: string;
+  plant_id: string;
+  product_id: string;
+  kind: "existing" | "new";
+  dedicated: boolean;
+  capacity_annual: number;
+  monthly_cap: number;
+  utilization_pct: number;
+  spare_annual: number;
+  future_snapshot: boolean;
+  batches_done: number;
+  batches_typical: number;
+  last_batch_date: string;
+  last_batch_qty: number;
+  hold_batches_90d: number;
+  t12_monthly: number;
+  open_orders: number;
+  open_qty: number;
+  masil_protected: number;
+  load: MonthLoad[];
+  status: string;
+  note?: string;
+};
+export type InboxOrder = {
+  order_id: string;
+  order_date: string;
+  customer_id: string;
+  agency_id: string;
+  sales_team: string;
+  product_id: string;
+  qty: number;
+  amount_krw: number;
+  line_id: string;
+  status: string;
+  ship_date?: string;
+  est_due?: string;
+};
+export type Inbox = {
+  as_of: string;
+  sim_date: string;
+  cutoff: string;
+  days: number;
+  today: number;
+  last7: number;
+  last30: number;
+  window_count: number;
+  qty_by_product: Record<string, number>;
+  count_by_team: Record<string, number>;
+  shipped7: number;
+  open_count: number;
+  orders: InboxOrder[] | null;
+  truncated: boolean;
+  masil: SPO[] | null;
+  bid: Bid | null;
+};
+export type BacktestRow = { month: string; estimated: number; actual: number };
+export type Backtest = {
+  cutoff: string;
+  available: boolean;
+  note: string;
+  rows: Record<string, BacktestRow[]>;
+  hit_rate: Record<string, number>;
+  orders: Record<string, number>;
 };

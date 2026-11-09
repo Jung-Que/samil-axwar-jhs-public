@@ -547,3 +547,146 @@ table.grid td input {
   content: "→ ";
 }
 
+
+/* 기준일 막대 */
+.asof {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+
+.asof-pick,
+.asof-clock,
+.presets,
+.lane-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.field.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.field.inline input,
+.field.inline select {
+  width: auto;
+}
+
+button.active {
+  background: var(--accent-soft);
+}
+
+.chip.warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+/* 업무 레인 보드 */
+.lanes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.lane {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--bg);
+}
+
+.lane h3 {
+  margin: 0 0 6px;
+}
+
+.lane-box {
+  margin-bottom: 8px;
+}
+
+.lane-box ul {
+  margin: 2px 0 0;
+  padding-left: 16px;
+  font-size: 0.82rem;
+}
+
+.lane-title {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.lane-blocked ul {
+  color: var(--bad);
+}
+
+.src {
+  font-size: 0.68rem;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 3px;
+  margin-left: 2px;
+  white-space: nowrap;
+}
+
+/* 생산 라인 보드 */
+.row-new td {
+  background: var(--accent-soft);
+}
+
+.loadcell {
+  min-width: 120px;
+}
+
+.loadbar {
+  display: flex;
+  height: 6px;
+  background: var(--gray-soft);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.lb-orders {
+  background: var(--accent);
+}
+
+.lb-c201 {
+  background: var(--warn);
+}
+
+.status-여유,
+.pill-진행 {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.status-포화 {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.status-초과 {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.status-신규 {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.pill-출하-완료 {
+  background: var(--gray-soft);
+  color: var(--muted);
+}

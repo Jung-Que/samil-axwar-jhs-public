@@ -89,7 +89,7 @@ func (s *State) Lanes(b *Base) []Lane {
 	}
 
 	sales := lanes["영업"]
-	add("영업", &sales.Incoming, "원본", "자료 마지막 날(%s) 접수 %d건 · 최근 7일 %d건 %s EA", c, today, last7, Commas(q7))
+	add("영업", &sales.Incoming, "원본", "기록 마지막 날(%s) 접수 %d건 · 최근 7일 %d건 %s EA", c, today, last7, Commas(q7))
 	if s.Bid != nil {
 		add("영업", &sales.Incoming, "모의", "입찰 %s RFP 접수(%s) · 상태 %s · 마감 %s", s.Bid.ID, s.Bid.Received, st, s.Bid.Deadline)
 	}
@@ -115,7 +115,7 @@ func (s *State) Lanes(b *Base) []Lane {
 
 	masil := lanes["Masil SCM"]
 	if len(at.SPOs) == 0 {
-		add("Masil SCM", &masil.Incoming, "원본", "자료 마지막 날(%s)까지 Corevia 앞 발주 없음(첫 발주 2026-06-22)", c)
+		add("Masil SCM", &masil.Incoming, "원본", "기록 마지막 날(%s)까지 Corevia 앞 발주 없음(첫 발주 2026-06-22)", c)
 	}
 	for _, sp := range at.SPOs {
 		if sp.ProductID == ProductBasic || sp.ProductID == ProductDerma {

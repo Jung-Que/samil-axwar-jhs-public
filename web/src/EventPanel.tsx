@@ -42,19 +42,25 @@ function presets(v: View, type: string): { label: string; payload: Fields }[] {
 }
 
 // 사건 입력: 고정 값(프리셋)을 골라 필드에 채우고, 필요하면 필드를 고친 뒤 기록한다.
-export function EventPanel({ v, run }: { v: View; run: Run }) {
+export function EventPanel({ v, run, focus }: { v: View; run: Run; focus?: { event: string; n: number } | null }) {
   const avail = available(v);
   const first = NEXT_ORDER.find((k) => avail[k]) ?? "E0_CLOCK"; // 다음에 할 사건을 먼저 고른다
   const [type, setType] = useState(first);
   const [preset, setPreset] = useState(0);
   const [fields, setFields] = useState<Fields | null>(null);
   const [simple, setSimple] = useState<Fields>({ sim_date: v.state.scenario.sim_date, product_id: "PL-02", qty: 30000, customer_id: "C-102", note: "" });
+  useEffect(() => setSimple((s) => ({ ...s, sim_date: v.state.scenario.sim_date })), [v.state.scenario.sim_date]);
   const kind = FORM_KIND[type];
   const choices = kind ? presets(v, type) : [];
 
   useEffect(() => {
     if (!avail[type]) setType(first);
   }, [v.state.bid?.state]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 업무 레인 보드에서 고른 사건으로 바꾼다.
+  useEffect(() => {
+    if (focus && avail[focus.event]) setType(focus.event);
+  }, [focus?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setPreset(0);
