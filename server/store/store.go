@@ -1,20 +1,35 @@
 // Package store는 앱 상태를 어디에 저장하는지 감춘다.
 //
 // DATABASE_URL이 있으면 Postgres(AXHub 배포·로컬 Docker dev 테스트), 없으면 메모리(로컬 개발·단위 테스트)를 쓴다.
-// 업무 표(사건·판단·작업)는 업무모델이 정해지면 migrations에 추가하고 두 구현에 같은 메서드를 늘린다.
+// 업무 상태는 사건 로그(Event)만 저장하고, 상태는 로그를 순서대로 다시 적용해 만든다(이벤트 소싱).
 package store
 
 import (
 	"context"
+	"errors"
 	"os"
 	"time"
 )
+
+// Event는 업무 사건 로그 한 줄이다. Body는 사건 내용(JSON)이다.
+type Event struct {
+	Seq       int
+	Type      string
+	Body      []byte
+	CreatedAt time.Time
+}
+
+// ErrSeqTaken은 같은 순번의 사건이 이미 있을 때 돌려준다(동시에 두 사건을 쓰려 할 때).
+var ErrSeqTaken = errors.New("사건 순번이 이미 있다")
 
 // Store는 서버가 쓰는 저장소다.
 type Store interface {
 	Kind() string // "memory" 또는 "postgres"
 	Ping(ctx context.Context) error
 	SchemaVersion(ctx context.Context) (int, error)
+	AppendEvent(ctx context.Context, seq int, typ string, body []byte) error
+	ListEvents(ctx context.Context) ([]Event, error)
+	ResetEvents(ctx context.Context) error
 	Close()
 }
 

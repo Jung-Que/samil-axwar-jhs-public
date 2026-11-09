@@ -27,6 +27,38 @@ func TestOpenWithoutURLIsMemory(t *testing.T) {
 	}
 }
 
+// 사건 로그: 순서대로 읽히고, 같은 순번은 거부되고, 초기화하면 비어야 한다(메모리·Postgres 공통).
+func checkEvents(t *testing.T, st Store) {
+	t.Helper()
+	ctx := context.Background()
+	if err := st.ResetEvents(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for i, typ := range []string{"E1_RFP", "E8_SUBMIT_APPROVAL"} {
+		if err := st.AppendEvent(ctx, i+1, typ, []byte(`{"k":"값"}`)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.AppendEvent(ctx, 2, "E2_DECISION", []byte(`{}`)); !errors.Is(err, ErrSeqTaken) {
+		t.Fatalf("중복 순번이 거부되지 않음: %v", err)
+	}
+	evs, err := st.ListEvents(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(evs) != 2 || evs[0].Seq != 1 || evs[1].Type != "E8_SUBMIT_APPROVAL" || !strings.Contains(string(evs[0].Body), "값") {
+		t.Fatalf("사건 로그 왕복 실패: %+v", evs)
+	}
+	if err := st.ResetEvents(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if evs, _ := st.ListEvents(ctx); len(evs) != 0 {
+		t.Fatalf("초기화 후 %d건 남음", len(evs))
+	}
+}
+
+func TestMemoryEvents(t *testing.T) { checkEvents(t, NewMemory()) }
+
 func TestFromEnv(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://a@h/db")
 	t.Setenv("DIRECT_DATABASE_URL", "postgres://a@h2/db")
@@ -153,6 +185,7 @@ func TestPostgresOpenMigratesIdempotently(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT value FROM app_meta WHERE key = 'selftest'").Scan(&got); err != nil || got != "ok" {
 		t.Fatalf("app_meta 왕복 실패: %q %v", got, err)
 	}
+	checkEvents(t, st)
 }
 
 func TestPostgresRejectsNewerSchema(t *testing.T) {

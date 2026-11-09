@@ -6,3 +6,5 @@ server/go.mod text eol=lf
 # 컨테이너 빌드가 읽는 파일도 LF로 둔다(CRLF면 RUN 줄 끝에 \r이 붙을 수 있다).
 Dockerfile text eol=lf
 .dockerignore text eol=lf
+# W05 원본 복사본은 바이트 그대로 둔다(줄바꿈 변환 금지). SHA256SUMS로 원본과 같은지 검사한다.
+server/w05/data/raw/** -text

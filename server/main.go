@@ -1,6 +1,6 @@
 // AX 인재전쟁 앱 서버 — Go 표준 라이브러리 + Postgres 드라이버(pgx)만 쓴다.
 //
-// 하는 일: 상태 확인(/healthz), 업무 API(/api/*), 빌드된 React 화면(WEB_DIR) 제공.
+// 하는 일: 상태 확인(/healthz), W05 업무 API(/api/w05/*, api_w05.go), 빌드된 React 화면(WEB_DIR) 제공.
 // axhub는 앱이 열 포트를 PORT 환경변수로, 앱 전용 DB 주소를 DATABASE_URL로 넣어 주고 /healthz로 상태를 확인한다.
 // DATABASE_URL이 없으면 메모리 저장소로 뜬다(로컬 개발). 주소는 HOST(기본 127.0.0.1)에만 열린다.
 package main
@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"axwar/server/store"
+	"axwar/server/w05"
 )
 
 func main() {
@@ -35,9 +36,21 @@ func main() {
 	}
 	defer st.Close()
 
+	// W05 원본 복사본은 바이너리에 들어 있다. 해시가 다르면 뜨지 않는다(D4).
+	base, err := w05.LoadBase()
+	if err != nil {
+		log.Fatalf("W05 원본 적재 실패: %v", err)
+	}
+	ai := w05.NewAIFromEnv()
+	svc, err := w05.NewService(ctx, base, st, ai)
+	if err != nil {
+		log.Fatalf("W05 서비스 시작 실패: %v", err)
+	}
+	log.Printf("W05: 원본 %d개 파일 해시 확인, AI %s(%s)", base.Files, ai.Mode(), ai.Model())
+
 	srv := &http.Server{
 		Addr:              listenAddr(),
-		Handler:           newHandler(webDir, st),
+		Handler:           newHandler(webDir, st, svc),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
@@ -59,7 +72,7 @@ func listenAddr() string {
 	return net.JoinHostPort(envOr("HOST", "127.0.0.1"), envOr("PORT", "8080"))
 }
 
-func newHandler(webDir string, st store.Store) http.Handler {
+func newHandler(webDir string, st store.Store, svc *w05.Service) http.Handler {
 	mux := http.NewServeMux()
 
 	// 상태 확인 전용 경로: 로그인·DB 없이 바로 200을 준다. GET 패턴은 HEAD도 받는다.
@@ -72,7 +85,7 @@ func newHandler(webDir string, st store.Store) http.Handler {
 	mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
-		body := map[string]any{"app": "samil-axwar-jhs", "stage": "skeleton", "store": st.Kind(), "db": "ok"}
+		body := map[string]any{"app": "samil-axwar-jhs", "stage": "draft", "work": "W05", "store": st.Kind(), "db": "ok"}
 		status := http.StatusOK
 		v, err := st.SchemaVersion(ctx)
 		if err == nil {
@@ -87,6 +100,8 @@ func newHandler(webDir string, st store.Store) http.Handler {
 		}
 		writeJSON(w, status, body)
 	})
+
+	registerW05(mux, svc)
 
 	// 없는 API는 화면(index.html)이 아니라 JSON 404로 답한다.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

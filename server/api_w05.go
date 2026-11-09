@@ -1,0 +1,113 @@
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"log"
+	"net/http"
+	"strings"
+
+	"axwar/server/w05"
+)
+
+// W05 업무 API. 상태는 사건 로그를 다시 적용해 만들고, 사건은 규칙에 맞을 때만 기록된다.
+//
+//	GET  /api/w05/state              현재 상태(평가·제안·확인 요청·작업·결정·사건 로그)
+//	POST /api/w05/events             사건 입력 {type, actor_role, payload, ai_call?}
+//	POST /api/w05/ai/structure       A1 미리보기 {kind, text} → 필드(상태 안 바뀜, 사람 확인 뒤 events로)
+//	POST /api/w05/reset              사건 로그 초기화
+//	POST /api/w05/scenarios/{id}     초기화 뒤 시연 시나리오 실행(normal | change | reject)
+func registerW05(mux *http.ServeMux, svc *w05.Service) {
+	unavailable := func(w http.ResponseWriter) bool {
+		if svc == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "W05 서비스가 준비되지 않았다(저장소 확인)"})
+			return true
+		}
+		return false
+	}
+
+	mux.HandleFunc("GET /api/w05/state", func(w http.ResponseWriter, r *http.Request) {
+		if unavailable(w) {
+			return
+		}
+		v, err := svc.Snapshot(r.Context())
+		respond(w, v, err)
+	})
+
+	mux.HandleFunc("POST /api/w05/events", func(w http.ResponseWriter, r *http.Request) {
+		if unavailable(w) {
+			return
+		}
+		var in struct {
+			Type    string          `json:"type"`
+			Actor   string          `json:"actor_role"`
+			Payload json.RawMessage `json:"payload"`
+			AiCall  *w05.AiCall     `json:"ai_call"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		if strings.TrimSpace(in.Type) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "type이 필요하다"})
+			return
+		}
+		v, err := svc.Submit(r.Context(), in.Type, in.Actor, in.Payload, in.AiCall)
+		respond(w, v, err)
+	})
+
+	mux.HandleFunc("POST /api/w05/ai/structure", func(w http.ResponseWriter, r *http.Request) {
+		if unavailable(w) {
+			return
+		}
+		var in struct {
+			Kind string `json:"kind"`
+			Text string `json:"text"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		if strings.TrimSpace(in.Text) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "text가 필요하다"})
+			return
+		}
+		writeJSON(w, http.StatusOK, svc.Structure(r.Context(), in.Kind, in.Text))
+	})
+
+	mux.HandleFunc("POST /api/w05/reset", func(w http.ResponseWriter, r *http.Request) {
+		if unavailable(w) {
+			return
+		}
+		v, err := svc.Reset(r.Context())
+		respond(w, v, err)
+	})
+
+	mux.HandleFunc("POST /api/w05/scenarios/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if unavailable(w) {
+			return
+		}
+		v, err := svc.RunScenario(r.Context(), r.PathValue("id"))
+		respond(w, v, err)
+	})
+}
+
+func decode(w http.ResponseWriter, r *http.Request, v any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "JSON 형식 오류: " + err.Error()})
+		return false
+	}
+	return true
+}
+
+// respond는 규칙 위반(ErrInvalid)이면 409와 함께 현재 상태를 돌려준다(화면이 바로 갱신되게).
+func respond(w http.ResponseWriter, v w05.View, err error) {
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, v)
+	case errors.Is(err, w05.ErrInvalid):
+		writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error(), "view": v})
+	default:
+		log.Printf("api/w05: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+	}
+}

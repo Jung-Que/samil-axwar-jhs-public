@@ -19,6 +19,13 @@ var migrations = []string{
 		value      text NOT NULL,
 		updated_at timestamptz NOT NULL DEFAULT now()
 	)`,
+	// 2: W05 사건 로그. 상태는 이 로그를 순서대로 다시 적용해 만든다(순번 중복은 PK가 막는다).
+	`CREATE TABLE w05_events (
+		seq        integer PRIMARY KEY,
+		type       text NOT NULL,
+		body       jsonb NOT NULL,
+		created_at timestamptz NOT NULL DEFAULT now()
+	)`,
 }
 
 // CurrentSchema는 이 코드가 기대하는 스키마 버전이다.
@@ -140,4 +147,42 @@ func (p *postgres) SchemaVersion(ctx context.Context) (int, error) {
 	var v int
 	err := p.pool.QueryRow(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&v)
 	return v, err
+}
+
+// AppendEvent는 사건 한 줄을 넣는다. 같은 순번이 이미 있으면 ErrSeqTaken.
+func (p *postgres) AppendEvent(ctx context.Context, seq int, typ string, body []byte) error {
+	tag, err := p.pool.Exec(ctx,
+		"INSERT INTO w05_events (seq, type, body) VALUES ($1, $2, $3::jsonb) ON CONFLICT (seq) DO NOTHING",
+		seq, typ, string(body))
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrSeqTaken
+	}
+	return nil
+}
+
+func (p *postgres) ListEvents(ctx context.Context) ([]Event, error) {
+	rows, err := p.pool.Query(ctx, "SELECT seq, type, body::text, created_at FROM w05_events ORDER BY seq")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Event
+	for rows.Next() {
+		var e Event
+		var body string
+		if err := rows.Scan(&e.Seq, &e.Type, &body, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		e.Body = []byte(body)
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+func (p *postgres) ResetEvents(ctx context.Context) error {
+	_, err := p.pool.Exec(ctx, "DELETE FROM w05_events")
+	return err
 }

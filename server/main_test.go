@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"axwar/server/store"
+	"axwar/server/w05"
 )
 
 // 빌드된 프런트 흉내: index.html과 번들 하나.
@@ -30,8 +32,23 @@ func must(t *testing.T, err error) {
 	}
 }
 
+func newTestService(t *testing.T, st store.Store) *w05.Service {
+	t.Helper()
+	base, err := w05.LoadBase()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ANTHROPIC_API_KEY", "") // 테스트는 녹화 응답만 쓴다
+	svc, err := w05.NewService(context.Background(), base, st, w05.NewAIFromEnv())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return svc
+}
+
 func TestRoutes(t *testing.T) {
-	h := newHandler(fakeBuild(t), store.NewMemory())
+	st := store.NewMemory()
+	h := newHandler(fakeBuild(t), st, newTestService(t, st))
 	cases := []struct {
 		name, method, path string
 		status             int
@@ -39,7 +56,8 @@ func TestRoutes(t *testing.T) {
 	}{
 		{"상태 확인", "GET", "/healthz", 200, "ok"},
 		{"상태 확인 HEAD", "HEAD", "/healthz", 200, ""},
-		{"API 상태", "GET", "/api/status", 200, `"stage":"skeleton"`},
+		{"API 상태", "GET", "/api/status", 200, `"stage":"draft"`},
+		{"W05 상태", "GET", "/api/w05/state", 200, `"raw_files_verified":15`},
 		{"API 상태: 메모리 저장소", "GET", "/api/status", 200, `"store":"memory"`},
 		{"API 상태: 스키마", "GET", "/api/status", 200, `"db":"ok"`},
 		{"없는 API는 JSON 404", "GET", "/api/nope", 404, `"error":"not found"`},
@@ -64,8 +82,46 @@ func TestRoutes(t *testing.T) {
 	}
 }
 
+// W05 API: 시나리오 실행, 규칙에 맞지 않는 사건은 409로 거부되고 기록되지 않는다.
+func TestW05API(t *testing.T) {
+	st := store.NewMemory()
+	h := newHandler(fakeBuild(t), st, newTestService(t, st))
+	do := func(method, path, body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)))
+		return rec
+	}
+	if rec := do("POST", "/api/w05/scenarios/normal", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"state":"회신 대기"`) {
+		t.Fatalf("정상 시나리오: %d %.300s", rec.Code, rec.Body.String())
+	}
+	evs, _ := st.ListEvents(context.Background())
+	if len(evs) != 4 {
+		t.Fatalf("사건 %d건, 기대 4건", len(evs))
+	}
+	// 회신 대기 상태에서 다시 제출하면 규칙 위반
+	rec := do("POST", "/api/w05/events", `{"type":"E7_SUBMIT_PROPOSAL","actor_role":"영업","payload":{}}`)
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "제출은 승인") {
+		t.Fatalf("잘못된 제출: %d %.300s", rec.Code, rec.Body.String())
+	}
+	if evs, _ := st.ListEvents(context.Background()); len(evs) != 4 {
+		t.Fatalf("거부된 사건이 기록됨: %d건", len(evs))
+	}
+	// A1 미리보기: 녹화 응답이 있는 문장은 구조화된다
+	body, _ := json.Marshal(map[string]string{"kind": "buyer_reply", "text": w05.TextBuyerChange})
+	rec = do("POST", "/api/w05/ai/structure", string(body))
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"validation":"pass"`) || !strings.Contains(rec.Body.String(), `"mode":"recorded"`) {
+		t.Fatalf("A1 미리보기: %d %.300s", rec.Code, rec.Body.String())
+	}
+	if rec := do("POST", "/api/w05/scenarios/nope", ""); rec.Code != 500 {
+		t.Fatalf("없는 시나리오: %d", rec.Code)
+	}
+	if rec := do("POST", "/api/w05/reset", ""); rec.Code != 200 {
+		t.Fatalf("초기화: %d", rec.Code)
+	}
+}
+
 func TestNoBuild(t *testing.T) {
-	h := newHandler(t.TempDir(), store.NewMemory()) // index.html 없음
+	h := newHandler(t.TempDir(), store.NewMemory(), nil) // index.html 없음
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
 	if rec.Code != http.StatusServiceUnavailable {
@@ -85,10 +141,17 @@ type downStore struct{}
 func (downStore) Kind() string                               { return "postgres" }
 func (downStore) Ping(context.Context) error                 { return errors.New("db down") }
 func (downStore) SchemaVersion(context.Context) (int, error) { return 0, errors.New("db down") }
-func (downStore) Close()                                     {}
+func (downStore) AppendEvent(context.Context, int, string, []byte) error {
+	return errors.New("db down")
+}
+func (downStore) ListEvents(context.Context) ([]store.Event, error) {
+	return nil, errors.New("db down")
+}
+func (downStore) ResetEvents(context.Context) error { return errors.New("db down") }
+func (downStore) Close()                            {}
 
 func TestStoreDown(t *testing.T) {
-	h := newHandler(fakeBuild(t), downStore{})
+	h := newHandler(fakeBuild(t), downStore{}, nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/status", nil))
 	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), `"db":"error"`) {

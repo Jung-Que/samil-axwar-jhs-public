@@ -13,6 +13,8 @@
   data      분석 스크립트를 다시 돌려 저장된 출력과 같은지(재현성)
   app       Go 서버(gofmt·vet·test·build), 화면 빌드(tsc + vite), 빌드한 서버 기동 후 /healthz · / · /api 응답,
             Dockerfile·.dockerignore 범위. 서버는 DB 없이(메모리 저장소) 127.0.0.1에 띄운다
+  engine    W05 결정 모델: 원본 복사본(server/w05/data/raw) = SHA256SUMS = 원본, 업무모델 명세 기대값(§9),
+            시연 3건 기대 상태(§10), AI 구조화(A1) 요청 형식·실패 처리
   devdb     로컬 Docker dev 테스트(compose.dev.yaml): 호스트 공개 포트 0개, Postgres 통합 테스트(go test),
             배포 이미지를 Postgres 모드로 띄워 /healthz · /api/status 확인. Docker Desktop 필요, all에서 빠진다
   guard     보호 경로·원본 데이터 불변, 올리면 안 되는 파일이 스테이징됐는지, analysis/가 git 밖인지,
@@ -412,6 +414,48 @@ def run_app():
     check_dockerfile()
 
 
+# ---------------------------------------------------------------- engine
+
+W05_RAW = SERVER / "w05" / "data" / "raw"  # W05 원본 복사본(수정 없음, go:embed로 바이너리에 포함)
+
+
+def sha256_file(p):
+    return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+def run_engine():
+    # 1) 복사본 = SHA256SUMS = 이 PC의 원본(원본이 있을 때). 복사본을 손으로 고치면 여기서 잡힌다.
+    sums = W05_RAW / "SHA256SUMS"
+    if not sums.exists():
+        report("engine", False, f"{rel(sums)} 없음")
+    else:
+        listed = [ln.split("  ", 1) for ln in sums.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        bad = []
+        for h, name in listed:
+            cp = W05_RAW / name
+            if not cp.exists() or sha256_file(cp) != h:
+                bad.append(f"{name}: 복사본이 SHA256SUMS와 다름")
+            if RAW.exists() and (not (RAW / name).exists() or sha256_file(RAW / name) != h):
+                bad.append(f"{name}: 원본(01_참가자_배포용/04_원본데이터)과 다름")
+        names = {n for _, n in listed}
+        extra = [p.relative_to(W05_RAW).as_posix() for p in W05_RAW.rglob("*")
+                 if p.is_file() and p.name != "SHA256SUMS" and p.relative_to(W05_RAW).as_posix() not in names]
+        bad += [f"{x}: SHA256SUMS에 없는 파일" for x in extra]
+        against = " = 원본" if RAW.exists() else " (원본 없는 PC라 원본 비교 생략)"
+        report("engine", not bad, f"W05 원본 복사본 {len(listed)}개 = SHA256SUMS{against}" if not bad
+               else "복사본 검사 실패:\n    " + "\n    ".join(bad))
+    if not shutil.which("go"):
+        report("engine", False, "go 명령이 없다(Go 1.26 이상 필요)")
+        return
+    # 2) 엔진 기대값(업무모델 명세 §9)과 시연 3건 기대 상태(§10)
+    run_tool("엔진 기대값(명세 §9: 여유·Masil·적격일·부족·지체상금·경제성)",
+             ["go", "test", "-count=1", "-run", "Manifest|Oracle", "./w05"], SERVER, group="engine")
+    run_tool("시연 3건 기대 상태(명세 §10: 정상·변경·정보 부족·거절, 차단 기록)",
+             ["go", "test", "-count=1", "-run", "Scenario|InvalidAndBlocked", "./w05"], SERVER, group="engine")
+    run_tool("AI 구조화(A1) 요청 형식·실패 처리(가짜 서버)",
+             ["go", "test", "-count=1", "-run", "Structure", "./w05"], SERVER, group="engine")
+
+
 # ---------------------------------------------------------------- devdb
 
 COMPOSE_FILE = ROOT / "compose.dev.yaml"  # 로컬 Docker dev 테스트(포트 공개 없음)
@@ -548,8 +592,8 @@ def check_branch_rules(staged):
 
 # ---------------------------------------------------------------- main
 
-GROUPS = {"docs": run_docs, "analysis": run_analysis, "data": run_data, "app": run_app, "guard": run_guard,
-          "devdb": run_devdb}
+GROUPS = {"docs": run_docs, "analysis": run_analysis, "data": run_data, "app": run_app, "engine": run_engine,
+          "guard": run_guard, "devdb": run_devdb}
 NOT_IN_ALL = {"devdb"}  # Docker Desktop이 필요해 all에서 뺀다. 필요한 PR에서 따로 고른다(하네스 분기표)
 
 
