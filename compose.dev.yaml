@@ -1,0 +1,68 @@
+# 로컬 Docker dev 테스트 — Postgres로 저장소 통합 테스트와 배포 이미지를 확인한다.
+#
+# - 호스트에 포트를 공개하지 않는다(ports: 없음). 컨테이너끼리 compose 내부 네트워크로만 통신한다.
+# - 배포에는 쓰지 않는다. axhub는 axhub.yaml(deploy_method: docker → Dockerfile)로 빌드하고,
+#   .dockerignore가 server/·web/만 보내므로 이 파일은 이미지에 들어가지 않는다.
+# - DB는 tmpfs라 매번 빈 상태에서 시작하고, 끝나면 사라진다. 아래 비밀번호는 이 내부 네트워크 전용이다.
+#
+# 실행: python tools/selftest.py devdb   (Docker Desktop 필요, 끝나면 컨테이너를 내린다)
+name: axwar-devdb
+
+x-db-url: &db_url postgres://axwar:axwar-dev-only@db:5432/axwar?sslmode=disable
+
+services:
+  db:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: axwar
+      POSTGRES_PASSWORD: axwar-dev-only
+      POSTGRES_DB: axwar
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U axwar -d axwar"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  # 저장소 통합 테스트: server/를 읽기 전용으로 붙여 go test를 컨테이너 안에서 돌린다.
+  test:
+    image: golang:1.26-alpine
+    working_dir: /src
+    volumes:
+      - ./server:/src:ro
+      - gomod:/go/pkg/mod
+      - gocache:/root/.cache/go-build
+    environment:
+      CGO_ENABLED: "0"
+      TEST_DATABASE_URL: *db_url
+    command: ["go", "test", "-count=1", "./..."]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # 배포와 같은 이미지(Dockerfile)를 Postgres 모드로 띄운다.
+  app:
+    build: .
+    environment:
+      DATABASE_URL: *db_url
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # 같은 네트워크 안에서 app을 불러 본다(호스트 포트 없이).
+  smoke:
+    image: alpine:3.22
+    command: ["sh", "-c", "wget -qO- http://app:8080/healthz && echo && wget -qO- http://app:8080/api/status"]
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  gomod:
+  gocache:

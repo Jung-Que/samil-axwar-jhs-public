@@ -5,14 +5,16 @@
 
 사용:
   python tools/selftest.py docs guard      # 그룹을 골라 실행
-  python tools/selftest.py all             # 전부
+  python tools/selftest.py all             # devdb를 뺀 전부
 
 그룹:
   docs      CLAUDE.md 줄 수, 개발 규칙 문서(CLAUDE·AGENTS·docs/) 속 경로 존재, 병합 충돌 표시
   analysis  개발 외 작업 폴더(analysis/, git 밖) 색인 경로 존재, README 등록. PR 없이 로컬에서 돌린다
   data      분석 스크립트를 다시 돌려 저장된 출력과 같은지(재현성)
   app       Go 서버(gofmt·vet·test·build), 화면 빌드(tsc + vite), 빌드한 서버 기동 후 /healthz · / · /api 응답,
-            Dockerfile·.dockerignore 범위
+            Dockerfile·.dockerignore 범위. 서버는 DB 없이(메모리 저장소) 127.0.0.1에 띄운다
+  devdb     로컬 Docker dev 테스트(compose.dev.yaml): 호스트 공개 포트 0개, Postgres 통합 테스트(go test),
+            배포 이미지를 Postgres 모드로 띄워 /healthz · /api/status 확인. Docker Desktop 필요, all에서 빠진다
   guard     보호 경로·원본 데이터 불변, 올리면 안 되는 파일이 스테이징됐는지, analysis/가 git 밖인지,
             브랜치 규칙(훅 설치, 현재 브랜치 이름, main·dev에 직접 커밋 없음)
 
@@ -20,6 +22,7 @@
 """
 import difflib
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -314,21 +317,21 @@ def http_fetch(url):
         return None, ""
 
 
-def run_tool(label, args, cwd, timeout=300):
-    """명령을 돌려 app 그룹에 결과를 보고한다. Windows의 npm.cmd도 찾도록 shutil.which로 실행 파일을 고른다."""
+def run_tool(label, args, cwd, timeout=300, group="app"):
+    """명령을 돌려 그룹에 결과를 보고한다. Windows의 npm.cmd도 찾도록 shutil.which로 실행 파일을 고른다."""
     exe = shutil.which(args[0])
     if not exe:
-        report("app", False, f"{label}: '{args[0]}' 명령이 없다")
+        report(group, False, f"{label}: '{args[0]}' 명령이 없다")
         return False, ""
     try:
         r = subprocess.run([exe, *args[1:]], cwd=cwd, capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
-        report("app", False, f"{label}: {timeout}초 안에 끝나지 않음")
+        report(group, False, f"{label}: {timeout}초 안에 끝나지 않음")
         return False, ""
     ok = r.returncode == 0
     tail = (r.stdout + r.stderr).strip()[-800:]
-    report("app", ok, label if ok else f"{label} 실패\n    " + tail.replace("\n", "\n    "))
+    report(group, ok, label if ok else f"{label} 실패\n    " + tail.replace("\n", "\n    "))
     return ok, r.stdout
 
 
@@ -350,9 +353,10 @@ def check_dockerfile():
 
 
 def serve_check(exe, dist):
-    # 빌드한 서버를 빈 포트로 띄워 배포와 같은 경로를 확인한다.
+    # 빌드한 서버를 빈 포트로 띄워 배포와 같은 경로를 확인한다. DB 주소는 지워 메모리 저장소로 띄운다.
     port = free_port()
-    env = dict(os.environ, PORT=str(port), WEB_DIR=str(dist))
+    env = {k: v for k, v in os.environ.items() if k not in ("DATABASE_URL", "DIRECT_DATABASE_URL")}
+    env.update(PORT=str(port), WEB_DIR=str(dist), HOST="127.0.0.1")
     proc = subprocess.Popen([str(exe)], cwd=SERVER, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         base = f"http://127.0.0.1:{port}"
@@ -368,6 +372,7 @@ def serve_check(exe, dist):
             return
         for path, want, has in (("/", 200, 'id="root"'),
                                 ("/api/status", 200, '"stage"'),
+                                ("/api/status", 200, '"store":"memory"'),
                                 ("/api/__selftest_404__", 404, '"error"'),
                                 ("/__selftest_route__", 200, 'id="root"')):  # 화면 주소 새로고침
             got, body = http_fetch(base + path)
@@ -405,6 +410,67 @@ def run_app():
         if built and web_ok:
             serve_check(exe, dist)
     check_dockerfile()
+
+
+# ---------------------------------------------------------------- devdb
+
+COMPOSE_FILE = ROOT / "compose.dev.yaml"  # 로컬 Docker dev 테스트(포트 공개 없음)
+COMPOSE = ["docker", "compose", "-f", str(COMPOSE_FILE)]
+
+
+def compose(*args, timeout=900):
+    return subprocess.run([*COMPOSE, *args], cwd=ROOT, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=timeout)
+
+
+def check_no_published_ports():
+    # compose 설정을 풀어 본 뒤 어떤 서비스에도 ports(호스트 공개)가 없는지 본다.
+    r = compose("config", "--format", "json", timeout=60)
+    if r.returncode != 0:
+        report("devdb", False, "compose 설정 읽기 실패\n    " + r.stderr.strip()[-400:])
+        return False
+    services = json.loads(r.stdout).get("services", {})
+    exposed = {name: s["ports"] for name, s in services.items() if s.get("ports")}
+    report("devdb", not exposed, f"compose 서비스 {len(services)}개, 호스트 공개 포트 0개" if not exposed
+           else f"호스트에 포트를 공개하는 서비스: {exposed}")
+    return not exposed
+
+
+def run_devdb():
+    if not shutil.which("docker"):
+        report("devdb", False, "docker 명령이 없다(Docker Desktop 필요)")
+        return
+    info = subprocess.run(["docker", "info", "--format", "{{.ServerVersion}}"],
+                          capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if info.returncode != 0 or not info.stdout.strip():
+        report("devdb", False, "Docker 엔진이 꺼져 있다 → Docker Desktop을 켜고 다시 실행")
+        return
+    if not check_no_published_ports():
+        return
+    try:
+        run_tool("Postgres 통합 테스트(go test, Docker 안)", [*COMPOSE, "run", "--rm", "test"], ROOT,
+                 timeout=900, group="devdb")
+        up = compose("up", "-d", "--build", "--wait", "app")
+        report("devdb", up.returncode == 0, "배포 이미지 빌드·기동(Postgres 모드), healthcheck 통과"
+               if up.returncode == 0 else "배포 이미지 빌드·기동 실패\n    "
+               + (up.stdout + up.stderr).strip()[-800:].replace("\n", "\n    "))
+        if up.returncode != 0:
+            return
+        r = compose("run", "--rm", "smoke", timeout=120)
+        for want in ("ok", '"store":"postgres"', '"db":"ok"', '"schema":'):
+            ok = r.returncode == 0 and want in r.stdout
+            report("devdb", ok, f"컨테이너 안에서 app 호출 → {want} 포함" if ok
+                   else f"app 응답에 {want} 없음: {(r.stdout + r.stderr).strip()[-300:]}")
+        # 실제로 떠 있는 컨테이너에도 호스트 공개 포트가 없는지 본다(Publishers의 PublishedPort가 0이 아닌 것).
+        published = []
+        for line in compose("ps", "--format", "json", timeout=60).stdout.splitlines():
+            if line.strip():
+                c = json.loads(line)
+                published += [p for p in c.get("Publishers") or [] if p.get("PublishedPort")]
+        report("devdb", not published, "실행 중 컨테이너의 호스트 공개 포트 0개" if not published
+               else f"공개된 포트가 있다: {published[:3]}")
+    finally:
+        compose("down", "-v", "--remove-orphans", timeout=300)
 
 
 # ---------------------------------------------------------------- guard
@@ -482,12 +548,14 @@ def check_branch_rules(staged):
 
 # ---------------------------------------------------------------- main
 
-GROUPS = {"docs": run_docs, "analysis": run_analysis, "data": run_data, "app": run_app, "guard": run_guard}
+GROUPS = {"docs": run_docs, "analysis": run_analysis, "data": run_data, "app": run_app, "guard": run_guard,
+          "devdb": run_devdb}
+NOT_IN_ALL = {"devdb"}  # Docker Desktop이 필요해 all에서 뺀다. 필요한 PR에서 따로 고른다(하네스 분기표)
 
 
 def main(argv):
     sys.stdout.reconfigure(encoding="utf-8")
-    picked = list(GROUPS) if argv == ["all"] else argv
+    picked = [g for g in GROUPS if g not in NOT_IN_ALL] if argv == ["all"] else argv
     unknown = [g for g in picked if g not in GROUPS]
     if not picked or unknown:
         print(__doc__)

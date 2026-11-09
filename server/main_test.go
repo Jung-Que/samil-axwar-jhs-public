@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"axwar/server/store"
 )
 
 // 빌드된 프런트 흉내: index.html과 번들 하나.
@@ -27,7 +31,7 @@ func must(t *testing.T, err error) {
 }
 
 func TestRoutes(t *testing.T) {
-	h := newHandler(fakeBuild(t))
+	h := newHandler(fakeBuild(t), store.NewMemory())
 	cases := []struct {
 		name, method, path string
 		status             int
@@ -36,6 +40,8 @@ func TestRoutes(t *testing.T) {
 		{"상태 확인", "GET", "/healthz", 200, "ok"},
 		{"상태 확인 HEAD", "HEAD", "/healthz", 200, ""},
 		{"API 상태", "GET", "/api/status", 200, `"stage":"skeleton"`},
+		{"API 상태: 메모리 저장소", "GET", "/api/status", 200, `"store":"memory"`},
+		{"API 상태: 스키마", "GET", "/api/status", 200, `"db":"ok"`},
 		{"없는 API는 JSON 404", "GET", "/api/nope", 404, `"error":"not found"`},
 		{"없는 API는 POST도 JSON 404", "POST", "/api/nope", 404, `"error":"not found"`},
 		{"첫 화면", "GET", "/", 200, `id="root"`},
@@ -59,7 +65,7 @@ func TestRoutes(t *testing.T) {
 }
 
 func TestNoBuild(t *testing.T) {
-	h := newHandler(t.TempDir()) // index.html 없음
+	h := newHandler(t.TempDir(), store.NewMemory()) // index.html 없음
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
 	if rec.Code != http.StatusServiceUnavailable {
@@ -70,5 +76,41 @@ func TestNoBuild(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/healthz", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("healthz status %d, want 200", rec.Code)
+	}
+}
+
+// DB가 응답하지 않는 저장소(예: 배포 중 DB 장애)
+type downStore struct{}
+
+func (downStore) Kind() string                               { return "postgres" }
+func (downStore) Ping(context.Context) error                 { return errors.New("db down") }
+func (downStore) SchemaVersion(context.Context) (int, error) { return 0, errors.New("db down") }
+func (downStore) Close()                                     {}
+
+func TestStoreDown(t *testing.T) {
+	h := newHandler(fakeBuild(t), downStore{})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/status", nil))
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), `"db":"error"`) {
+		t.Fatalf("status %d body %q, want 503 db error", rec.Code, rec.Body.String())
+	}
+	// DB가 죽어도 배포 상태 확인(/healthz)은 살아 있어야 axhub가 앱을 내리지 않는다.
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/healthz", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("healthz status %d, want 200", rec.Code)
+	}
+}
+
+func TestListenAddr(t *testing.T) {
+	t.Setenv("HOST", "")
+	t.Setenv("PORT", "")
+	if got := listenAddr(); got != "127.0.0.1:8080" {
+		t.Fatalf("기본 주소 %q, want 127.0.0.1:8080 (로컬은 이 PC 안에만 연다)", got)
+	}
+	t.Setenv("HOST", "0.0.0.0")
+	t.Setenv("PORT", "9090")
+	if got := listenAddr(); got != "0.0.0.0:9090" {
+		t.Fatalf("%q, want 0.0.0.0:9090", got)
 	}
 }

@@ -11,7 +11,7 @@ Aurora Holdings(가상 화장품 그룹) 데이터로 **기업의 AI 기반 운�
 ## 진행 중인 작업
 
 - 분석·기획 진행 상황은 `analysis/TODO.md`(git 밖) 맨 위 "지금 하는 일"에 있다. 세션을 시작하면 먼저 읽는다.
-- 개발 진행 상황은 열린 이슈·PR이다(`gh pr list --state open`). 앱은 골격만 있다(Go `server/` + React `web/`, 업무 기능 없음).
+- 개발 진행 상황은 열린 이슈·PR이다(`gh pr list --state open`). 앱은 골격과 저장소 연결만 있다(Go `server/` + React `web/`, 메모리·Postgres 저장소, 업무 기능 없음).
 
 ## 필수로 알아야 할 사항
 
@@ -46,9 +46,9 @@ Aurora Holdings(가상 화장품 그룹) 데이터로 **기업의 AI 기반 운�
 
 ### 앱·배포
 
-- **서버 Go**(`server/`, 1.26, 표준 라이브러리만) · **화면 React + TypeScript**(`web/`, **Vite** 빌드). Go 서버가 `/api/*`와 빌드된 화면(`WEB_DIR`)을 함께 제공한다.
-- 로컬 실행: `go -C server run .`(8080) + `cd web && npm ci && npm run dev`(Vite가 `/api`를 8080으로 넘김). 화면 의존성은 `web/package-lock.json`으로 고정하고, 새로 넣으면 PR에 이유를 적는다.
-- axhub 배포(`axhub.yaml`), 헬스체크 `/healthz`, 포트는 `PORT` 환경변수. `Dockerfile`은 3단계(화면 빌드 → Go 빌드 → alpine 실행), `.dockerignore`는 `server/`·`web/`만 보낸다. 새 폴더를 쓰면 둘 다 고친다.
+- **서버 Go**(`server/`, 1.26, 표준 라이브러리 + Postgres 드라이버 `pgx`만) · **화면 React + TypeScript**(`web/`, **Vite** 빌드). Go 서버가 `/api/*`와 빌드된 화면(`WEB_DIR`)을 함께 제공한다.
+- 로컬 실행: `go -C server run .`(`127.0.0.1:8080`, DB 없으면 메모리 저장소) + `cd web && npm ci && npm run dev`(Vite가 `/api`를 8080으로 넘김). Postgres는 로컬 Docker dev 테스트 `python tools/selftest.py devdb`(`compose.dev.yaml`, 호스트 포트 공개 없음)로 본다. 의존성은 `server/go.sum`·`web/package-lock.json`으로 고정하고, 새로 넣으면 PR에 이유를 적는다.
+- axhub 배포(`axhub.yaml`), 헬스체크 `/healthz`, 포트는 `PORT` 환경변수, DB는 앱 전용 Postgres(`DATABASE_URL` 주입). `Dockerfile`은 3단계(화면 빌드 → Go 빌드 → alpine 실행), `.dockerignore`는 `server/`·`web/`만 보낸다. 새 폴더를 쓰면 둘 다 고친다.
 - 소스 zip 제출 시 `.claude` · `.codex` · `.agents`와 `analysis/03_1기_수상작/videos/`는 뺀다.
 
 ### Git 작업 흐름 (CI/CD 없음)

@@ -9,3 +9,8 @@ build:
   dockerfile: Dockerfile
   start: ./server
   deploy_method: docker
+
+# 앱 전용 Postgres. axhub가 DATABASE_URL(트랜잭션 풀러)·DIRECT_DATABASE_URL을 넣어 준다.
+# 선언을 지워도 DB와 데이터는 남는다(끄려면 axhub apps raw-db disable).
+database:
+  engine: postgres

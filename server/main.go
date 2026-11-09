@@ -1,34 +1,65 @@
-// AX 인재전쟁 앱 서버 — Go 표준 라이브러리만 쓴다.
+// AX 인재전쟁 앱 서버 — Go 표준 라이브러리 + Postgres 드라이버(pgx)만 쓴다.
 //
 // 하는 일: 상태 확인(/healthz), 업무 API(/api/*), 빌드된 React 화면(WEB_DIR) 제공.
-// axhub는 앱이 열 포트를 PORT 환경변수로 넣어 주고 /healthz로 상태를 확인한다.
+// axhub는 앱이 열 포트를 PORT 환경변수로, 앱 전용 DB 주소를 DATABASE_URL로 넣어 주고 /healthz로 상태를 확인한다.
+// DATABASE_URL이 없으면 메모리 저장소로 뜬다(로컬 개발). 주소는 HOST(기본 127.0.0.1)에만 열린다.
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
+	"syscall"
 	"time"
+
+	"axwar/server/store"
 )
 
 func main() {
-	port := envOr("PORT", "8080")
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	// 기본값은 server/ 안에서 실행할 때(go run .) 기준이다. 컨테이너는 WEB_DIR을 넣어 준다.
 	webDir := envOr("WEB_DIR", filepath.Join("..", "web", "dist"))
 
+	st, err := store.Open(ctx, store.FromEnv())
+	if err != nil {
+		log.Fatalf("저장소 열기 실패: %v", err)
+	}
+	defer st.Close()
+
 	srv := &http.Server{
-		Addr:              "0.0.0.0:" + port,
-		Handler:           newHandler(webDir),
+		Addr:              listenAddr(),
+		Handler:           newHandler(webDir, st),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	log.Printf("listening on http://%s (web: %s)", srv.Addr, webDir)
-	log.Fatal(srv.ListenAndServe())
+	go func() {
+		<-ctx.Done()
+		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdown)
+	}()
+
+	log.Printf("listening on http://%s (web: %s, store: %s)", srv.Addr, webDir, st.Kind())
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatal(err)
+	}
 }
 
-func newHandler(webDir string) http.Handler {
+// listenAddr는 서버가 열 주소다. 로컬에서는 이 PC 안(127.0.0.1)에만 열고,
+// 컨테이너(Dockerfile)는 HOST=0.0.0.0을 넣어 바깥(axhub 라우터)에서 들어오게 한다.
+func listenAddr() string {
+	return net.JoinHostPort(envOr("HOST", "127.0.0.1"), envOr("PORT", "8080"))
+}
+
+func newHandler(webDir string, st store.Store) http.Handler {
 	mux := http.NewServeMux()
 
 	// 상태 확인 전용 경로: 로그인·DB 없이 바로 200을 준다. GET 패턴은 HEAD도 받는다.
@@ -37,8 +68,24 @@ func newHandler(webDir string) http.Handler {
 		_, _ = w.Write([]byte("ok"))
 	})
 
+	// 앱·저장소 상태. DB가 응답하지 않으면 503으로 알린다(/healthz는 그대로 200).
 	mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"app": "samil-axwar-jhs", "stage": "skeleton"})
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		body := map[string]any{"app": "samil-axwar-jhs", "stage": "skeleton", "store": st.Kind(), "db": "ok"}
+		status := http.StatusOK
+		v, err := st.SchemaVersion(ctx)
+		if err == nil {
+			err = st.Ping(ctx)
+		}
+		if err != nil {
+			log.Printf("api/status: 저장소 오류: %v", err)
+			body["db"] = "error"
+			status = http.StatusServiceUnavailable
+		} else {
+			body["schema"] = v
+		}
+		writeJSON(w, status, body)
 	})
 
 	// 없는 API는 화면(index.html)이 아니라 JSON 404로 답한다.
