@@ -11,7 +11,8 @@
   docs      CLAUDE.md 줄 수, 개발 규칙 문서(CLAUDE·AGENTS·docs/) 속 경로 존재, 병합 충돌 표시
   analysis  개발 외 작업 폴더(analysis/, git 밖) 색인 경로 존재, README 등록. PR 없이 로컬에서 돌린다
   data      분석 스크립트를 다시 돌려 저장된 출력과 같은지(재현성)
-  app       JS 문법, 서버 기동 후 /healthz · / 응답, Dockerfile 복사 범위
+  app       Go 서버(gofmt·vet·test·build), 화면 빌드(tsc + vite), 빌드한 서버 기동 후 /healthz · / · /api 응답,
+            Dockerfile·.dockerignore 범위
   guard     보호 경로·원본 데이터 불변, 올리면 안 되는 파일이 스테이징됐는지, analysis/가 git 밖인지,
             브랜치 규칙(훅 설치, 현재 브랜치 이름, main·dev에 직접 커밋 없음)
 
@@ -21,6 +22,7 @@ import difflib
 import hashlib
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -51,6 +53,8 @@ STRICT_DIRS = ["docs"]
 ANALYSIS_STRICT = [f"{ANALYSIS}/README.md", f"{ANALYSIS}/TODO.md"]  # analysis 그룹
 # 경로처럼 보이지만 참조가 아닌 이름(예: "열지 않는다"고 적은 파일).
 NOT_PATHS = {"auth.json"}
+# 설치·빌드 때 생기는 폴더(없을 수 있고, node_modules는 경로 수집에서도 빠진다).
+NOT_PATHS |= {"web/node_modules", "web/node_modules/", "web/dist", "web/dist/"}
 
 # 분석 스크립트 → 저장된 출력. 스크립트를 추가하면 여기와 하네스 문서에 함께 등록한다.
 # 모두 `python <스크립트> <04_원본데이터 경로> <출력 경로>` 형식이다.
@@ -64,6 +68,8 @@ DATA_SCRIPTS = [
 FORBIDDEN_STAGED = [
     "01_참가자_배포용/",
     f"{ANALYSIS}/",  # git 밖 폴더. git add -f 로도 올리지 않는다
+    "web/node_modules/",  # 화면 설치·빌드 산출물(web/.gitignore로 빠지지만 강제 추가도 막는다)
+    "web/dist/",
     ".claude/settings.local.json",
     ".codex/hooks.json",
     ".agents/hooks.json",
@@ -294,64 +300,110 @@ def free_port():
         return s.getsockname()[1]
 
 
-def http_get(url):
+SERVER = ROOT / "server"  # Go 서버(표준 라이브러리만)
+WEB = ROOT / "web"  # React + TypeScript 화면(Vite 빌드)
+
+
+def http_fetch(url):
     try:
         with urllib.request.urlopen(url, timeout=2) as r:
-            return r.status
+            return r.status, r.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
-        return e.code
+        return e.code, e.read().decode("utf-8", "replace")
     except OSError:
-        return None
+        return None, ""
+
+
+def run_tool(label, args, cwd, timeout=300):
+    """명령을 돌려 app 그룹에 결과를 보고한다. Windows의 npm.cmd도 찾도록 shutil.which로 실행 파일을 고른다."""
+    exe = shutil.which(args[0])
+    if not exe:
+        report("app", False, f"{label}: '{args[0]}' 명령이 없다")
+        return False, ""
+    try:
+        r = subprocess.run([exe, *args[1:]], cwd=cwd, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=timeout)
+    except subprocess.TimeoutExpired:
+        report("app", False, f"{label}: {timeout}초 안에 끝나지 않음")
+        return False, ""
+    ok = r.returncode == 0
+    tail = (r.stdout + r.stderr).strip()[-800:]
+    report("app", ok, label if ok else f"{label} 실패\n    " + tail.replace("\n", "\n    "))
+    return ok, r.stdout
 
 
 def check_dockerfile():
-    text = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    # 빌드 단계가 server/·web/ 폴더 전체를 복사하는지(web/package.json만 복사하면 소스가 빠진다),
+    # .dockerignore가 둘만 보내고 로컬 설치물은 빼는지 본다.
     copied = set()
-    for line in text.splitlines():
+    for line in (ROOT / "Dockerfile").read_text(encoding="utf-8").splitlines():
         parts = line.split()
-        if parts and parts[0].upper() == "COPY":
-            copied.update(Path(x).parts[0] for x in parts[1:-1] if not x.startswith("--"))
-    server = (ROOT / "server.js").read_text(encoding="utf-8")
-    used = set(re.findall(r"require\(\s*['\"]\./([^/'\"]+)", server))
-    used |= set(re.findall(r"path\.join\(\s*__dirname\s*,\s*['\"]([^/'\"]+)", server))
-    used |= {"server.js", "package.json"}
-    missing = sorted(u for u in used if u not in copied)
-    report("app", not missing,
-           f"Dockerfile 복사 범위 {sorted(copied)}" + ("" if not missing else f" — 빠짐: {missing}"))
+        if parts and parts[0].upper() == "COPY" and not any(p.startswith("--from") for p in parts):
+            copied.update(x.rstrip("/") for x in parts[1:-1] if not x.startswith("--"))
+    missing = sorted({"server", "web"} - copied)
+    di = ROOT / ".dockerignore"
+    rules = {ln.strip() for ln in di.read_text(encoding="utf-8").splitlines()} if di.exists() else set()
+    lacking = sorted({"*", "!server", "!web", "web/node_modules", "web/dist"} - rules)
+    ok = not missing and not lacking
+    report("app", ok, f"Dockerfile 복사 {sorted(copied)}, .dockerignore는 server·web만 보냄" if ok
+           else f"Dockerfile 복사 빠짐 {missing}, .dockerignore에 필요한 줄 없음 {lacking}")
 
 
-def run_app():
-    js = [ROOT / "server.js"] + [p for p in walk(ROOT / "public") if p.suffix in (".js", ".mjs")]
-    bad = []
-    for f in js:
-        r = subprocess.run(["node", "--check", str(f)], capture_output=True, text=True, encoding="utf-8")
-        if r.returncode != 0:
-            bad.append(f"{rel(f)}: {r.stderr.strip()[:300]}")
-    report("app", not bad, f"JS 문법 {len(js)}개 파일" + ("" if not bad else "\n    " + "\n    ".join(bad)))
-
+def serve_check(exe, dist):
+    # 빌드한 서버를 빈 포트로 띄워 배포와 같은 경로를 확인한다.
     port = free_port()
-    proc = subprocess.Popen(["node", "server.js"], cwd=ROOT, env=dict(os.environ, PORT=str(port)),
-                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    env = dict(os.environ, PORT=str(port), WEB_DIR=str(dist))
+    proc = subprocess.Popen([str(exe)], cwd=SERVER, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         base = f"http://127.0.0.1:{port}"
-        status, deadline = None, time.time() + 10
+        status, deadline = None, time.time() + 15
         while time.time() < deadline and status is None:
             if proc.poll() is not None:
                 break
-            status = http_get(base + "/healthz")
+            status, _ = http_fetch(base + "/healthz")
             if status is None:
                 time.sleep(0.2)
         report("app", status == 200, f"서버 기동 /healthz → {status}")
-        if status == 200:
-            for path, want in (("/", 200), ("/__selftest_404__", 404)):
-                got = http_get(base + path)
-                report("app", got == want, f"GET {path} → {got} (기대 {want})")
+        if status != 200:
+            return
+        for path, want, has in (("/", 200, 'id="root"'),
+                                ("/api/status", 200, '"stage"'),
+                                ("/api/__selftest_404__", 404, '"error"'),
+                                ("/__selftest_route__", 200, 'id="root"')):  # 화면 주소 새로고침
+            got, body = http_fetch(base + path)
+            report("app", got == want and has in body, f"GET {path} → {got} (기대 {want}, {has} 포함)")
     finally:
         proc.terminate()
         try:
             proc.wait(5)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+
+def run_app():
+    gofmt = shutil.which("gofmt")
+    if not gofmt or not shutil.which("go"):
+        report("app", False, "go·gofmt 명령이 없다(Go 1.26 이상 필요)")
+    else:
+        r = subprocess.run([gofmt, "-l", "."], cwd=SERVER, capture_output=True, text=True, encoding="utf-8")
+        unformatted = r.stdout.strip()
+        report("app", r.returncode == 0 and not unformatted,
+               "gofmt 형식 맞음" if not unformatted else f"gofmt로 고칠 파일: {unformatted}")
+        run_tool("go vet", ["go", "vet", "./..."], SERVER)
+        run_tool("go test", ["go", "test", "./..."], SERVER)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        exe = Path(tmp) / ("server.exe" if os.name == "nt" else "server")
+        built, _ = run_tool("go build", ["go", "build", "-o", str(exe), "."], SERVER) if shutil.which("go") else (False, "")
+        dist = Path(tmp) / "dist"  # 작업 폴더의 web/dist를 건드리지 않게 임시 폴더로 빌드한다
+        if not (WEB / "node_modules").exists():
+            report("app", False, "web/node_modules 없음 → cd web && npm ci")
+            web_ok = False
+        else:
+            web_ok, _ = run_tool("화면 빌드(tsc + vite build)",
+                                 ["npm", "run", "build", "--", "--outDir", str(dist), "--emptyOutDir"], WEB)
+        if built and web_ok:
+            serve_check(exe, dist)
     check_dockerfile()
 
 

@@ -11,7 +11,7 @@ Aurora Holdings(가상 화장품 그룹) 데이터로 **기업의 AI 기반 운�
 ## 진행 중인 작업
 
 - 분석·기획 진행 상황은 `analysis/TODO.md`(git 밖) 맨 위 "지금 하는 일"에 있다. 세션을 시작하면 먼저 읽는다.
-- 개발 진행 상황은 열린 이슈·PR이다(`gh pr list --state open`). 앱은 아직 빈 껍데기다(`server.js` + `public/index.html`).
+- 개발 진행 상황은 열린 이슈·PR이다(`gh pr list --state open`). 앱은 골격만 있다(Go `server/` + React `web/`, 업무 기능 없음).
 
 ## 필수로 알아야 할 사항
 
@@ -46,8 +46,9 @@ Aurora Holdings(가상 화장품 그룹) 데이터로 **기업의 AI 기반 운�
 
 ### 앱·배포
 
-- Node 22, 외부 의존성 없음. axhub 배포(`axhub.yaml`), 헬스체크 `/healthz`, 포트는 `PORT` 환경변수.
-- `Dockerfile`은 `package.json`, `server.js`, `public/`만 복사한다. 앱이 새 파일·폴더를 쓰면 Dockerfile도 고친다.
+- **서버 Go**(`server/`, 1.26, 표준 라이브러리만) · **화면 React + TypeScript**(`web/`, **Vite** 빌드). Go 서버가 `/api/*`와 빌드된 화면(`WEB_DIR`)을 함께 제공한다.
+- 로컬 실행: `go -C server run .`(8080) + `cd web && npm ci && npm run dev`(Vite가 `/api`를 8080으로 넘김). 화면 의존성은 `web/package-lock.json`으로 고정하고, 새로 넣으면 PR에 이유를 적는다.
+- axhub 배포(`axhub.yaml`), 헬스체크 `/healthz`, 포트는 `PORT` 환경변수. `Dockerfile`은 3단계(화면 빌드 → Go 빌드 → alpine 실행), `.dockerignore`는 `server/`·`web/`만 보낸다. 새 폴더를 쓰면 둘 다 고친다.
 - 소스 zip 제출 시 `.claude` · `.codex` · `.agents`와 `analysis/03_1기_수상작/videos/`는 뺀다.
 
 ### Git 작업 흐름 (CI/CD 없음)

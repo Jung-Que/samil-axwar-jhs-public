@@ -1,0 +1,7 @@
+# 빌드에 필요한 server/ 와 web/ 만 보낸다.
+# 기록 키(.claude·.codex·.agents), 원본 자료, analysis/, 로컬 설치·빌드 산출물이 이미지 빌드에 섞이지 않게 한다.
+*
+!server
+!web
+web/node_modules
+web/dist
