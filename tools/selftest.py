@@ -11,7 +11,8 @@
   docs   CLAUDE.md 줄 수, 문서 속 경로 존재, research 목록 등록, 병합 충돌 표시
   data   분석 스크립트를 다시 돌려 저장된 출력과 같은지(재현성)
   app    JS 문법, 서버 기동 후 /healthz · / 응답, Dockerfile 복사 범위
-  guard  보호 경로·원본 데이터 불변, 올리면 안 되는 파일이 스테이징됐는지
+  guard  보호 경로·원본 데이터 불변, 올리면 안 되는 파일이 스테이징됐는지,
+         브랜치 규칙(훅 설치, 현재 브랜치 이름, main·dev에 직접 커밋 없음)
 
 종료 코드: 0 통과, 1 실패.
 """
@@ -65,6 +66,11 @@ FORBIDDEN_STAGED = [
 MAX_FILE_MB = 20
 PROTECTED_TRACKED = [".gitignore", ".claude", ".codex", ".agents"]
 
+# 브랜치 규칙(docs/브랜치_규칙.md). 이름 정규식은 pre-push 훅의 BRANCH_RE 줄 한 곳에만 둔다.
+HOOKS_DIR = "tools/git-hooks"
+PRE_PUSH = ROOT / HOOKS_DIR / "pre-push"
+LONG_LIVED = {"main", "dev"}  # PR 병합으로만 바뀌는 브랜치
+
 results = []  # (그룹, 통과 여부, 메시지)
 
 
@@ -93,6 +99,16 @@ def rel(p):
     return Path(p).relative_to(ROOT).as_posix()
 
 
+def branch_re():
+    if not PRE_PUSH.exists():
+        return None
+    m = re.search(r"^BRANCH_RE='([^']+)'", PRE_PUSH.read_text(encoding="utf-8"), re.M)
+    return re.compile(m.group(1)) if m else None
+
+
+BRANCH_NAME = branch_re()
+
+
 # ---------------------------------------------------------------- docs
 
 TICK = re.compile(r"`([^`\n]+)`")
@@ -108,6 +124,8 @@ def path_like(s, strict=True, top_level=frozenset()):
     if not s or s in NOT_PATHS or "://" in s or any(c in s for c in "~*<>|\"'$=(){}"):
         return False
     if s.startswith(("-", ".", "/", "#")):
+        return False
+    if BRANCH_NAME and BRANCH_NAME.match(s):  # 브랜치 이름(예: docs/5-branch-rules)은 경로가 아니다
         return False
     if " " in s and (s.split()[0] in COMMANDS or not PATH_EXT.search(s)):  # 명령어 예시
         return False
@@ -355,6 +373,29 @@ def run_guard():
     big = [s for s in staged if (ROOT / s).is_file() and (ROOT / s).stat().st_size > MAX_FILE_MB * 2**20]
     report("guard", not bad and not big, f"스테이징 {len(staged)}개 파일에 금지·대용량(>{MAX_FILE_MB}MB) 없음"
            if not bad and not big else f"금지 {bad} 대용량 {big}")
+    check_branch_rules(staged)
+
+
+def check_branch_rules(staged):
+    # 훅은 sh가 읽으므로 CRLF가 섞이면 동작하지 않는다(.gitattributes로 LF 고정).
+    hook_ok = BRANCH_NAME is not None and b"\r" not in PRE_PUSH.read_bytes()
+    report("guard", hook_ok, f"pre-push 훅·이름 정규식 있음, LF 줄바꿈({HOOKS_DIR}/pre-push)" if hook_ok
+           else f"{HOOKS_DIR}/pre-push가 없거나 BRANCH_RE 줄이 없거나 CRLF가 섞임")
+
+    hp = git("config", "--get", "core.hooksPath").strip()
+    report("guard", hp == HOOKS_DIR, f"훅 설치됨(core.hooksPath={hp})" if hp == HOOKS_DIR
+           else f"훅 미설치(core.hooksPath='{hp}') → git config core.hooksPath {HOOKS_DIR}")
+
+    br = git("rev-parse", "--abbrev-ref", "HEAD").strip()
+    if br in LONG_LIVED:
+        report("guard", not staged, f"{br} 브랜치, 스테이징 없음" if not staged
+               else f"{br}에 직접 커밋하지 않는다(스테이징 {len(staged)}개) → dev에서 작업 브랜치를 만들어 옮긴다")
+    elif br == "HEAD":
+        warn("guard", "브랜치가 아닌 상태(detached HEAD) — 브랜치 이름 검사 건너뜀")
+    elif BRANCH_NAME:
+        ok = bool(BRANCH_NAME.match(br))
+        report("guard", ok, f"브랜치 이름 규칙 맞음({br})" if ok
+               else f"브랜치 이름 규칙 위반: {br} → <종류>/<이슈번호>-<영문-slug> (docs/브랜치_규칙.md §2)")
 
 
 # ---------------------------------------------------------------- main

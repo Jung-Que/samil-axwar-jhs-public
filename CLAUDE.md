@@ -55,13 +55,17 @@ Aurora Holdings(가상 화장품 그룹) 데이터로 **기업의 AI 기반 운�
 
 모든 작업은 **이슈 → 드래프트 PR → 작업 → 자체 리뷰 → PR 종료** 순서다. 이슈·PR은 GitHub 원격 `github`(비공개, https://github.com/Jung-Que/samil-axwar-jhs), 배포는 axhub 원격 `origin`.
 
-1. **이슈:** `gh issue create` — 배경·범위·완료 기준·돌릴 검사 그룹을 적는다.
-2. **드래프트 PR:** `gh issue develop <번호> --checkout --base main --name <번호>-<영문-slug>` → 빈 커밋 `chore: #<번호> 작업 시작` → push → `gh pr create --draft`(본문 첫 줄 `Closes #<번호>`).
-3. **작업:** 의미 단위로 커밋한다. 메시지는 `<종류>: <내용>`(feat·fix·docs·data·chore·test).
-4. **자체 리뷰:** `git diff main...HEAD`를 다시 읽고 `docs/테스트_하네스.md` 분기표가 고른 그룹만 `python tools/selftest.py <그룹>`으로 돌린다. 결과·발견·수정을 PR 리뷰 댓글로 남기고 `gh pr ready`.
-5. **PR 종료:** `gh pr merge --squash --delete-branch` → `git switch main` → `git pull github main`. `git push origin main`은 배포가 필요할 때(앱 변경, 제출 전)만 한다(자동 배포될 수 있다).
+- **브랜치:** `main` = axhub 배포본, `dev` = 통합(GitHub 기본 브랜치). 작업 브랜치는 **항상 `dev`에서** `<종류>/<이슈번호>-<영문-slug>`로 만든다(예: `feat/7-engine-v1`). `main`·`dev`에는 직접 커밋·푸시하지 않는다. 전체 규칙·명령: `docs/브랜치_규칙.md`
 
-- GitHub Actions는 꺼 두었고(병합은 squash만) CI/CD를 추가하지 않는다. 새 영역·검사가 생기면 그 PR에서 하네스 문서와 `tools/selftest.py`를 함께 고친다.
+1. **이슈:** `gh issue create` — 배경·범위·완료 기준·돌릴 검사 그룹을 적는다.
+2. **드래프트 PR:** `git switch dev` → `git pull` → `gh issue develop <번호> --checkout --base dev --name <종류>/<번호>-<slug>` → 빈 커밋 `chore: #<번호> 작업 시작` → push → `gh pr create --draft --base dev`(본문 첫 줄 `Closes #<번호>`).
+3. **작업:** 의미 단위로 커밋한다. 메시지는 `<종류>: <내용>`(feat·fix·docs·data·chore·test).
+4. **자체 리뷰:** `git diff dev...HEAD`를 다시 읽고 `docs/테스트_하네스.md` 분기표가 고른 그룹만 `python tools/selftest.py <그룹>`으로 돌린다. 결과·발견·수정을 PR 리뷰 댓글로 남기고 `gh pr ready`.
+5. **PR 종료:** `gh pr merge --squash --delete-branch` → `git switch dev` → `git pull`.
+
+- **배포(릴리스):** 앱이 바뀌었거나 제출 전에만 `dev` → `main` 릴리스 PR을 merge commit으로 병합하고(`--delete-branch` 금지) `git push origin main`(자동 배포). 절차: `docs/브랜치_규칙.md` §4
+- 로컬 pre-push 훅(`tools/git-hooks/pre-push`, 설치 `git config core.hooksPath tools/git-hooks`)이 규칙 위반 푸시를 막는다. `--no-verify`는 사용자 확인 뒤에만.
+- GitHub Actions는 꺼 두었고 CI/CD를 추가하지 않는다. 새 영역·검사가 생기면 그 PR에서 하네스 문서와 `tools/selftest.py`를 함께 고친다.
 
 ## 정보 위치
 
@@ -85,6 +89,7 @@ Aurora Holdings(가상 화장품 그룹) 데이터로 **기업의 AI 기반 운�
 | 출제사 삼일PwC 조사 | `research/01_주최사_삼일PwC/삼일PwC_조사.md` |
 | 회수·현금·공급 실제 사례 | `research/04_운영사례조사/` |
 | 자체 테스트 분기(무엇을 바꾸면 무엇을 돌리나) | `docs/테스트_하네스.md` (실행기 `tools/selftest.py`) |
+| 브랜치 규칙(dev·main·이름·릴리스·훅) | `docs/브랜치_규칙.md` |
 | 할 일 | `TODO.md` |
 
 ## 이 파일 관리

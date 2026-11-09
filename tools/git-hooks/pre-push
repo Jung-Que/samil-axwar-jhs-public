@@ -1,0 +1,46 @@
+#!/bin/sh
+# pre-push 지킴이: 브랜치 규칙(docs/브랜치_규칙.md)을 푸시 직전에 확인한다.
+# 설치(clone마다 한 번): git config core.hooksPath tools/git-hooks
+# --no-verify로 건너뛰는 것은 사용자 확인을 받은 뒤에만 한다.
+
+# 작업 브랜치 이름 규칙. tools/selftest.py guard도 이 줄을 읽어 같은 규칙을 쓴다.
+BRANCH_RE='^(feat|fix|docs|data|chore|test)/[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$'
+
+url="$2"
+zero=0000000000000000000000000000000000000000
+
+fail() {
+  echo "[pre-push 차단] $1" >&2
+  echo "  규칙: docs/브랜치_규칙.md" >&2
+  exit 1
+}
+
+# 원격 이름 대신 URL로 푸시해도 같은 규칙을 적용하려고 URL로 구분한다.
+target=other
+[ "$url" = "$(git remote get-url origin 2>/dev/null)" ] && target=axhub
+[ "$url" = "$(git remote get-url github 2>/dev/null)" ] && target=github
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$target" in
+  axhub)
+    [ "$remote_ref" = refs/heads/main ] || fail "axhub(origin)에는 main만 올린다: $remote_ref"
+    [ "$local_sha" != "$zero" ] || fail "axhub의 main은 지우지 않는다"
+    gh_main=$(git rev-parse -q --verify refs/remotes/github/main) \
+      || fail "github/main 정보가 없다. git fetch github 뒤 다시 한다"
+    [ "$local_sha" = "$gh_main" ] \
+      || fail "GitHub main에 병합된 커밋만 배포한다(git switch main → git pull github main 뒤 다시). 올리려는 커밋 $local_sha, GitHub main $gh_main"
+    ;;
+  github)
+    case "$remote_ref" in
+    refs/heads/main | refs/heads/dev)
+      fail "${remote_ref#refs/heads/}에는 직접 푸시·삭제하지 않는다(PR 병합으로만 바뀐다)" ;;
+    refs/heads/*)
+      [ "$local_sha" = "$zero" ] && continue  # 병합이 끝난 작업 브랜치 삭제는 허용
+      name=${remote_ref#refs/heads/}
+      printf '%s\n' "$name" | grep -Eq "$BRANCH_RE" \
+        || fail "브랜치 이름이 규칙과 다르다: $name (형식 <종류>/<이슈번호>-<영문-slug>, 예 feat/7-engine-v1)" ;;
+    esac
+    ;;
+  esac
+done
+exit 0

@@ -1,0 +1,2 @@
+# git 훅은 sh가 읽으므로 Windows(core.autocrlf=true)에서도 LF로 둔다.
+tools/git-hooks/* text eol=lf
