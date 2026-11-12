@@ -229,6 +229,76 @@ function ProductTable({ pe, status, conds }: { pe: ProductEval; status?: string;
   );
 }
 
+// OPT-01 비교 시나리오(이슈 #29): 기본(제출 기준) 대 원본 "재검증 불필요" 적용. 판단·제출은 기본으로만 한다.
+export function CompareView({ v }: { v: View }) {
+  const c = v.state.evaluation.compare_opt01;
+  if (!c) return null;
+  const sides = [c.base, c.alt];
+  const months = c.months ?? [];
+  const diff = (a: number, b: number) => (b - a === 0 ? "-" : `${b - a > 0 ? "+" : ""}${ea(b - a)}`);
+  return (
+    <Section
+      title="OPT-01 비교 시나리오: 적격 기간 가정 대 원본 '재검증 불필요'"
+      mode={["real"]}
+      note={
+        <>
+          <span className="tag tag-가정">대안 시나리오 · 제출 기준 아님</span> 기본은 OPT-01에도 설치 뒤 적격 기간(A-08)을 더한다. 비교는 원본 {c.source}을 적용해 적격 기간 0주로 계산한다. 결정·회신·납품 개시월·OPT-02는 기본과 같다. PL-02 수량, 단위 EA/월.
+        </>
+      }
+    >
+      <div className="scroll">
+        <table className="grid">
+          <thead>
+            <tr>
+              <th>시나리오</th><th>OPT-01 결정</th><th>설치 완료</th><th>적격(재검증)</th><th>산입 시작</th><th>최초 반영 월(계약 안)</th>
+              <th>OPT-01 공급 합</th><th>PL-02 제안 합</th><th>부족 합</th><th>공급률</th><th>지연분 노출</th><th>계약 총액 기준</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sides.map((s, i) => (
+              <tr key={s.label} className={i === 0 ? "row-strong" : ""}>
+                <td>{s.label}</td>
+                <td>{s.status}{s.conditional && s.usable ? " (조건부)" : ""}</td>
+                <td>{s.install_date}</td>
+                <td>{s.qualified_date} ({s.validation_weeks}주)</td>
+                <td>{s.usable ? `${s.start_month}~` : "반영 안 함"}</td>
+                <td>{s.first_supply_month || "없음"}</td>
+                <td>{ea(s.opt_qty_total)}</td>
+                <td>{ea(s.schedule_total)}</td>
+                <td>{ea(s.short_total)}</td>
+                <td>{pct(s.coverage_pct)}</td>
+                <td>{eok(s.penalty_backlog_krw)}</td>
+                <td>{eok(s.penalty_contract_krw)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="scroll">
+        <table className="grid">
+          <thead>
+            <tr>
+              <th>PL-02 월</th>
+              {months.map((m) => <th key={m.month}>{m.month.slice(2)}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>요구</td>{months.map((m) => <td key={m.month}>{ea(m.demand)}</td>)}</tr>
+            <tr><td>OPT-01 공급 · 기본</td>{months.map((m) => <td key={m.month}>{m.base_opt01 ? ea(m.base_opt01) : "-"}</td>)}</tr>
+            <tr><td>OPT-01 공급 · 비교</td>{months.map((m) => <td key={m.month} className={m.alt_opt01 !== m.base_opt01 ? "warn" : ""}>{m.alt_opt01 ? ea(m.alt_opt01) : "-"}</td>)}</tr>
+            <tr><td>전체 공급 · 기본</td>{months.map((m) => <td key={m.month}>{ea(m.base_supply)}</td>)}</tr>
+            <tr><td>전체 공급 · 비교</td>{months.map((m) => <td key={m.month}>{ea(m.alt_supply)}</td>)}</tr>
+            <tr className="row-strong"><td>제안 · 기본</td>{months.map((m) => <td key={m.month}>{ea(m.base_schedule)}</td>)}</tr>
+            <tr className="row-strong"><td>제안 · 비교</td>{months.map((m) => <td key={m.month}>{ea(m.alt_schedule)}</td>)}</tr>
+            <tr><td>제안 차이(비교 − 기본)</td>{months.map((m) => <td key={m.month} className={m.alt_schedule !== m.base_schedule ? "warn" : "muted"}>{diff(m.base_schedule, m.alt_schedule)}</td>)}</tr>
+            <tr className="row-bad"><td>부족 · 기본 / 비교</td>{months.map((m) => <td key={m.month}>{m.base_short || m.alt_short ? `${ea(m.base_short)} / ${ea(m.alt_short)}` : "-"}</td>)}</tr>
+          </tbody>
+        </table>
+      </div>
+    </Section>
+  );
+}
+
 // 라인 여유(R1)와 증설·전환안 적격 능력일(R3)
 export function CapacityView({ v }: { v: View }) {
   const ev = v.state.evaluation;
@@ -275,7 +345,8 @@ export function CapacityView({ v }: { v: View }) {
               <tr key={o.option_id} className={o.usable ? "" : "muted"}>
                 <td>{o.option_id} {o.type}</td><td title={o.target_line_text}>{o.line_id} <span className="tag">합성 매핑</span></td>
                 <td>{eok(o.capex_krw, 0)}</td><td>{ea(o.added_annual_qty)}</td><td>{o.status}</td>
-                <td>{o.decision_date}{o.decision_date_assumed ? " (가정)" : ""}</td><td>{o.install_date}</td><td>{o.qualified_date}</td><td>{o.start_month}~</td>
+                <td>{o.decision_date}{o.decision_date_assumed ? " (가정)" : ""}</td><td>{o.install_date}</td><td>{o.qualified_date}</td>
+                <td>{o.start_month}~{o.option_id === "OPT-01" && ev.compare_opt01 && <div className="muted small">비교(재검증 0주): {ev.compare_opt01.alt.start_month}~</div>}</td>
                 <td>{(o.pending_requests ?? []).join(", ") || "-"}</td><td>{o.phase}</td><td>{o.payback_months.toFixed(1)}개월</td>
               </tr>
             ))}

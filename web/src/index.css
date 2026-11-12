@@ -89,6 +89,13 @@ h3 {
   color: var(--bad);
 }
 
+/* 비교 시나리오에서 기본과 달라진 칸(이슈 #29) */
+td.warn {
+  color: var(--warn);
+  background: var(--warn-soft);
+  font-weight: 600;
+}
+
 code {
   font-size: 0.78rem;
   background: var(--gray-soft);

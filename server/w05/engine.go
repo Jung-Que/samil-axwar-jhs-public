@@ -55,6 +55,9 @@ type Scenario struct {
 	MasilReleased      int64                     `json:"masil_released"`
 	NewOrders          map[string]int64          `json:"new_orders"`
 	Options            map[string]OptionDecision `json:"options"`
+	// Opt01NoValidation은 비교 시나리오 표시다(이슈 #29). 원본 OPT-01 노트 "원료 재계약·처방 재검증 불필요"를 적용해
+	// OPT-01 적격 기간을 0주로 둔다. 기본(제출 기준)은 false이며, 엔진이 비교용으로만 켜서 한 번 더 계산한다.
+	Opt01NoValidation bool `json:"opt01_no_validation,omitempty"`
 }
 
 // DefaultItems는 rfp_c201 표의 바이어 제시안이다(구조화가 끝나기 전 기본값이 아니라, 시드·검증용).
@@ -193,10 +196,22 @@ type Evaluation struct {
 	InitialGap      int64                  `json:"initial_gap"` // 바이어 첫 달 요구 − 공급
 	Commitments     Commitments            `json:"commitments"`
 	Flags           []Flag                 `json:"flags"`
+	CompareOPT01    *OptCompare            `json:"compare_opt01,omitempty"` // 비교 시나리오(원본 '재검증 불필요'), 표시용
 }
 
 // Evaluate는 원본과 시나리오로 평가를 만든다. 같은 입력이면 항상 같은 결과다.
+// 기본 시나리오 평가에는 OPT-01 비교 시나리오(compare.go) 결과를 붙인다. 판단·제출은 기본 시나리오로만 한다.
 func Evaluate(b *Base, sc Scenario) *Evaluation {
+	ev := evaluate(b, sc)
+	if !sc.Opt01NoValidation {
+		alt := sc
+		alt.Opt01NoValidation = true
+		ev.CompareOPT01 = compareOPT01(ev, evaluate(b, alt))
+	}
+	return ev
+}
+
+func evaluate(b *Base, sc Scenario) *Evaluation {
 	if sc.ContractMonths <= 0 {
 		sc.ContractMonths = 12
 	}
@@ -299,7 +314,11 @@ func Evaluate(b *Base, sc Scenario) *Evaluation {
 		}
 	}
 	for _, cx := range b.Capex {
-		oe := OptionEval{CapexRow: cx, ValidationWeeks: vw, Monthly: cx.AddedAnnual / 12}
+		ovw := vw
+		if cx.OptionID == "OPT-01" && sc.Opt01NoValidation {
+			ovw = 0 // 비교 시나리오: 원본 노트 "처방 재검증 불필요"
+		}
+		oe := OptionEval{CapexRow: cx, ValidationWeeks: ovw, Monthly: cx.AddedAnnual / 12}
 		d := sc.Options[cx.OptionID]
 		oe.Status = d.Status
 		if oe.Status == "" {
@@ -310,7 +329,7 @@ func Evaluate(b *Base, sc Scenario) *Evaluation {
 			oe.DecisionDate, oe.DateAssumed = sc.BoardDate, true // A-09
 		}
 		inst := mustDate(oe.DecisionDate).AddDate(0, 0, 7*cx.LeadWeeks)
-		qual := inst.AddDate(0, 0, 7*vw)
+		qual := inst.AddDate(0, 0, 7*ovw)
 		oe.InstallDate, oe.QualifiedDate = fmtDate(inst), fmtDate(qual)
 		oe.StartMonth = time.Date(qual.Year(), qual.Month()+1, 1, 0, 0, 0, 0, time.UTC).Format("2006-01")
 		if cx.OptionID == "OPT-02" {

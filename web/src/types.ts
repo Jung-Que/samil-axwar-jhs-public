@@ -123,7 +123,39 @@ export type Evaluation = {
   initial_gap: number;
   commitments: Commitments;
   flags: Flag[] | null;
+  compare_opt01?: OptCompare;
 };
+// OPT-01 비교 시나리오(server/w05/compare.go, 표시용)
+export type CompareSide = {
+  label: string;
+  validation_weeks: number;
+  status: string;
+  install_date: string;
+  qualified_date: string;
+  start_month: string;
+  first_supply_month: string;
+  usable: boolean;
+  conditional: boolean;
+  opt_qty_total: number;
+  schedule_total: number;
+  short_total: number;
+  coverage_pct: number;
+  penalty_backlog_krw: number;
+  penalty_contract_krw: number;
+};
+export type CompareMonth = {
+  month: string;
+  demand: number;
+  base_opt01: number;
+  alt_opt01: number;
+  base_supply: number;
+  alt_supply: number;
+  base_schedule: number;
+  alt_schedule: number;
+  base_short: number;
+  alt_short: number;
+};
+export type OptCompare = { option_id: string; source: string; base: CompareSide; alt: CompareSide; months: CompareMonth[] | null };
 export type Bid = {
   bid_id: string;
   state: string;
