@@ -361,6 +361,10 @@ func (s *State) Apply(b *Base, e Event) error {
 		r.State, r.Answer, r.Mock = "반영", p.Answer, true
 		note("%s 회신 반영(%s)", r.ID, r.ToRole)
 		s.closeTasks("재요청: " + r.ID)
+		if t := followUpTask(r.ID, p.Answer); t != "" { // 계산에 아직 쓰지 않는 회신은 후속 작업으로 잇는다(CR-10·CR-11)
+			s.addTask(r.ToRole, t, addBusinessDays(e.SimDate, 5), e.Seq)
+			note("후속 작업: %s", t)
+		}
 
 	case EvBuyer:
 		if s.Bid == nil {
@@ -506,11 +510,65 @@ func (s *State) openInitialRequests(b *Base, seq int) {
 	add("CR-05", "바이어", "납기 지연 페널티의 기준액(지연분·계약 총액)과 상한", addBusinessDays(dl, -5), "R8", "A-13")
 	add("CR-06", "바이어", "F2 해외공장 생산지(OPT-02) 수용 여부", addBusinessDays(dl, -5), "R3", "OPT-02")
 	add("CR-07", "구매·품질", "M-B 재계약 가능 여부와 처방 재검증 기간(주)", addBusinessDays(recv, 10), "R3", "OPT-02", "A-08")
+	// 원본 정보가 없어 계산으로 풀 수 없는 개선은 확인 요청으로 남긴다(이슈 #35). 회신은 기록·후속 작업만 하고,
+	// 계산 반영(타 라인 공급, 추정 납기 대체)은 설계 단계다.
+	var others []string
+	var otherSpare int64
+	for _, l := range otherLinesForBasic(ev) {
+		others = append(others, l.LineID+" "+Commas(l.SpareAnnual))
+		otherSpare += l.SpareAnnual
+	}
+	add("CR-10", "생산관리", fmt.Sprintf("PL-01을 다른 라인에서 만들 수 있는가: 라인별 전환·셋업 기간(주)과 연간 가능 수량(능력 스냅샷 여유 %s, 합 %s EA). 원본은 PL-01을 F1 전용으로 두지 않는다",
+		strings.Join(others, " · "), Commas(otherSpare)), addBusinessDays(recv, 5), "A-16", "R6")
+	cm := ev.Commitments
+	add("CR-11", "영업", fmt.Sprintf("진행 주문 %s건(PL-01 %s건 · PL-02 %s건)의 고객 합의 납기·수량 대응표. 지금은 리드타임 통계로 추정한다(A-14)",
+		Commas(int64(cm.InProgressCount)), Commas(int64(cm.CountByProduct[ProductBasic])), Commas(int64(cm.CountByProduct[ProductDerma]))), addBusinessDays(recv, 5), "A-14", "R8")
 	// R13: 이탈 경보(AT_RISK) 고객이 있으면 그 능력을 C-201에 돌려도 되는지 영업 임원에게 묻는다(자동 반환 금지)
 	if sg := atRisk(ev.Churn); sg != nil {
 		add("CR-09", "영업 임원", fmt.Sprintf("%s 수주 감소가 계약·예측 수정으로 확인되는가? 확인되면 C-201에 돌릴 연간 수량(최근 12개월 수주 PL-01 %s · PL-02 %s EA 이내). 근거: %s",
 			sg.CustomerID, Commas(sg.T12BookedQty[ProductBasic]), Commas(sg.T12BookedQty[ProductDerma]), churnText(*sg)), addBusinessDays(recv, 5), "R13", "R12")
 	}
+}
+
+// otherLinesForBasic은 PL-01을 옮겨 만들 후보 라인이다: PL-01 자기 라인과 더마 전용 라인(L-02)을 뺀 기존 라인.
+func otherLinesForBasic(ev *Evaluation) []LineEval {
+	var out []LineEval
+	for _, l := range ev.Lines {
+		if l.ProductID != ProductBasic && l.ProductID != ProductDerma && !l.Dedicated {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// followUpTask는 계산에 아직 쓰지 않는 회신(CR-10·CR-11)의 후속 작업 제목이다. 회신 검증은 applyAnswer가 먼저 했다.
+func followUpTask(id string, a map[string]any) string {
+	switch id {
+	case "CR-10":
+		lines := anyList(a["lines"])
+		if len(lines) == 0 {
+			return "PL-01 타 라인 배정 불가 회신: PL-01 수량은 L-01 여유 기준 유지, 증산·외주 대안 검토(CR-02)"
+		}
+		return fmt.Sprintf("PL-01 타 라인 배정안 검토: %s, 전환·셋업 %d주, 연 %s EA(엔진 공급 반영은 설계 단계)",
+			strings.Join(lines, "·"), int(num(a["changeover_weeks"])), Commas(int64(num(a["annual_qty"]))))
+	case "CR-11":
+		if v, _ := a["received"].(bool); v {
+			return fmt.Sprintf("확정 납기 대응표(%s건)로 추정 납기(A-14) 대체 검토(엔진 반영은 설계 단계)", Commas(int64(num(a["orders"]))))
+		}
+		return "확정 납기 대응표 없음: 추정 납기(A-14) 유지, 주요 고객별 납기 재확인 요청"
+	}
+	return ""
+}
+
+func anyList(v any) []string {
+	xs, _ := v.([]any)
+	var out []string
+	for _, x := range xs {
+		if s, ok := x.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // RequestResponder는 회신 권한이 정해진 확인 요청이다. CR-09(기존 고객 약속 조정)는 영업 임원만 회신한다
@@ -552,6 +610,35 @@ func (s *State) applyAnswer(b *Base, id string, a map[string]any) error {
 			return fmt.Errorf("CR-08 회신: released_qty는 0~%s(업무일 %s까지 PL-02 Masil 보호량)", Commas(limit), CutoffOf(s.Scenario.SimDate))
 		}
 		s.Scenario.MasilReleased = q
+	case "CR-10": // 기록만(엔진 반영은 설계 단계). 라인 코드·주수·수량만 검증한다
+		ev := Evaluate(b, s.Scenario)
+		spare := map[string]int64{}
+		for _, l := range otherLinesForBasic(ev) {
+			spare[l.LineID] = l.SpareAnnual
+		}
+		var limit int64
+		for _, id := range anyList(a["lines"]) {
+			q, ok := spare[id]
+			if !ok {
+				return fmt.Errorf("CR-10 회신: %s는 PL-01 후보 라인이 아니다(L-01·더마 전용 L-02 제외 기존 라인만)", id)
+			}
+			limit += q
+		}
+		if w := num(a["changeover_weeks"]); w < 0 || w > 104 {
+			return fmt.Errorf("CR-10 회신: changeover_weeks는 0~104")
+		}
+		if q := int64(num(a["annual_qty"])); q < 0 || q > limit {
+			return fmt.Errorf("CR-10 회신: annual_qty는 0~%s(고른 라인의 능력 스냅샷 여유 합)", Commas(limit))
+		}
+	case "CR-11": // 기록만(엔진 반영은 설계 단계)
+		if _, ok := a["received"].(bool); !ok {
+			return fmt.Errorf("CR-11 회신: received(true/false) 필요")
+		}
+		n := int64(num(a["orders"]))
+		total := int64(b.At(s.Scenario.SimDate).Commit.InProgressCount)
+		if n < 0 || n > total {
+			return fmt.Errorf("CR-11 회신: orders는 0~%s(진행 주문 수)", Commas(total))
+		}
 	case "CR-09":
 		revised, ok := a["revised"].(bool)
 		if !ok {

@@ -240,8 +240,11 @@ export function RequestsView({ v, run }: { v: View; run: Run }) {
   );
 }
 
+// CR-10: PL-01을 옮겨 만들 후보 라인(PL-01 자기 라인 L-01과 더마 전용 L-02 제외, 서버 otherLinesForBasic과 같다)
+const OTHER_LINES = ["L-03", "L-11", "L-12", "L-13"];
+
 function ReplyForm({ r, run, done }: { r: ConfirmRequest; run: Run; done: () => void }) {
-  const [a, setA] = useState<Fields>({ capacity_period: "annual", extra_annual: 0, means: "", masil_in_util: false, mb_ready: true, validation_weeks: 8, released_qty: 0, revised: false, release_pl01: 0, release_pl02: 0 });
+  const [a, setA] = useState<Fields>({ capacity_period: "annual", extra_annual: 0, means: "", masil_in_util: false, mb_ready: true, validation_weeks: 8, released_qty: 0, revised: false, release_pl01: 0, release_pl02: 0, lines: [] as string[], changeover_weeks: 4, annual_qty: 0, received: false, orders: 0 });
   const answer = (): Fields => {
     switch (r.request_id) {
       case "CR-01": return { capacity_period: a.capacity_period };
@@ -250,6 +253,8 @@ function ReplyForm({ r, run, done }: { r: ConfirmRequest; run: Run; done: () => 
       case "CR-07": return { mb_ready: a.mb_ready, validation_weeks: Number(a.validation_weeks) };
       case "CR-08": return { released_qty: Number(a.released_qty) };
       case "CR-09": return { revised: a.revised, release_pl01: a.revised ? Number(a.release_pl01) : 0, release_pl02: a.revised ? Number(a.release_pl02) : 0 };
+      case "CR-10": return { lines: a.lines, changeover_weeks: Number(a.changeover_weeks), annual_qty: Number(a.annual_qty) };
+      case "CR-11": return { received: a.received, orders: Number(a.orders) };
     }
     return {};
   };
@@ -289,8 +294,34 @@ function ReplyForm({ r, run, done }: { r: ConfirmRequest; run: Run; done: () => 
             <label className="field"><span>PL-02 반환(연 EA)</span><input type="number" min={0} disabled={!a.revised} value={Number(a.release_pl02)} onChange={(e) => setA({ ...a, release_pl02: e.target.value })} /></label>
           </>
         )}
+        {r.request_id === "CR-10" && (
+          <>
+            <span className="field">
+              <span>옮겨 만들 라인</span>
+              <span className="row wrap">
+                {OTHER_LINES.map((id) => {
+                  const sel = (a.lines as string[]).includes(id);
+                  return (
+                    <label key={id} className="small">
+                      <input type="checkbox" checked={sel} onChange={() => setA({ ...a, lines: sel ? (a.lines as string[]).filter((x) => x !== id) : [...(a.lines as string[]), id] })} /> {id}
+                    </label>
+                  );
+                })}
+              </span>
+            </span>
+            <label className="field"><span>전환·셋업(주)</span><input type="number" min={0} value={Number(a.changeover_weeks)} onChange={(e) => setA({ ...a, changeover_weeks: e.target.value })} /></label>
+            <label className="field"><span>연간 가능 수량(EA)</span><input type="number" min={0} value={Number(a.annual_qty)} onChange={(e) => setA({ ...a, annual_qty: e.target.value })} /></label>
+          </>
+        )}
+        {r.request_id === "CR-11" && (
+          <>
+            <label className="field"><span>확정 납기 대응표</span><select value={String(a.received)} onChange={(e) => setA({ ...a, received: e.target.value === "true" })}><option value="false">없음</option><option value="true">받음</option></select></label>
+            <label className="field"><span>대응표 주문 수(건)</span><input type="number" min={0} value={Number(a.orders)} onChange={(e) => setA({ ...a, orders: e.target.value })} /></label>
+          </>
+        )}
       </div>
       {r.request_id === "CR-09" && <p className="muted small">회신 권한: 영업 임원(기존 고객 약속 조정). 다른 역할이 넣으면 거절된다.</p>}
+      {(r.request_id === "CR-10" || r.request_id === "CR-11") && <p className="muted small">회신은 기록하고 후속 작업을 만든다. 엔진 계산 반영(타 라인 공급, 추정 납기 대체)은 설계 단계다.</p>}
       <button onClick={send}>회신 기록(E3)</button>
     </div>
   );

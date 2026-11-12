@@ -76,12 +76,14 @@ func TestScenarioNormal(t *testing.T) {
 	wantS(t, "OPT-02", s.Scenario.Options["OPT-02"].Status, OptApproved)
 	wantS(t, "OPT-01", s.Scenario.Options["OPT-01"].Status, OptDeferred)
 	wantS(t, "결정 신선도", s.Decisions[0].Freshness, "최신")
-	// CR-01~07 + CR-09(R13: C-101 이탈 경보 → 영업 임원 확인, 이슈 #33)
-	if len(s.Requests) != 8 {
-		t.Errorf("확인 요청 %d건, 기대 8건(CR-01~07, CR-09)", len(s.Requests))
+	// CR-01~07 + CR-09(R13: C-101 이탈 경보 → 영업 임원 확인, 이슈 #33) + CR-10·CR-11(원본에 없는 정보, 이슈 #35)
+	if len(s.Requests) != 10 {
+		t.Errorf("확인 요청 %d건, 기대 10건(CR-01~07, CR-09~11)", len(s.Requests))
 	}
-	if r := s.request("CR-09"); r == nil || r.ToRole != "영업 임원" || r.State != "요청" {
-		t.Errorf("CR-09(영업 임원) 열림 기대: %+v", r)
+	for id, role := range map[string]string{"CR-09": "영업 임원", "CR-10": "생산관리", "CR-11": "영업"} {
+		if r := s.request(id); r == nil || r.ToRole != role || r.State != "요청" {
+			t.Errorf("%s(%s) 열림 기대: %+v", id, role, r)
+		}
 	}
 	for _, p := range []string{"생산계획 잠정 반영", "300억 배분 조건 반영", "바이어 회신 추적"} {
 		if !openTask(s, p) {
