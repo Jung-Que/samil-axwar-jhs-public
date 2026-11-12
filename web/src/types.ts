@@ -158,6 +158,7 @@ export type ConfirmRequest = {
   answer?: Record<string, unknown>;
   opened_seq: number;
   mock_reply: boolean;
+  max_qty?: number; // CR-08: 그 시점 PL-02 Masil 보호량(회신 상한)
 };
 export type Task = { task_id: string; owner_role: string; title: string; due_date?: string; state: string; cause_seq: number };
 export type Decision = {

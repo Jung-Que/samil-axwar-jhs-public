@@ -279,7 +279,7 @@ function ReplyForm({ r, run, done }: { r: ConfirmRequest; run: Run; done: () => 
           </>
         )}
         {r.request_id === "CR-08" && (
-          <label className="field"><span>늦출 수 있는 수량(EA)</span><input type="number" value={Number(a.released_qty)} onChange={(e) => setA({ ...a, released_qty: e.target.value })} /></label>
+          <label className="field"><span>늦출 수 있는 수량(EA, 최대 {(r.max_qty ?? 0).toLocaleString("ko-KR")} = 업무일 Masil 보호량)</span><input type="number" min={0} max={r.max_qty ?? 0} value={Number(a.released_qty)} onChange={(e) => setA({ ...a, released_qty: e.target.value })} /></label>
         )}
       </div>
       <button onClick={send}>회신 기록(E3)</button>

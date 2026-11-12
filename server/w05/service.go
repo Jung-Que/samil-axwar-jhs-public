@@ -279,8 +279,18 @@ func assumptions(b *Base, sc Scenario) []Assumption {
 		{"A-19", "Masil 발주 우선 보호(우선순위는 원본에 없음. 근거: Masil 더마 Corevia 100% 의존)", fmt.Sprintf("PL-01 %s · PL-02 %s EA를 C-201보다 먼저 보호", Commas(masilQty[ProductBasic]), Commas(masilQty[ProductDerma])), "가정", "C-201 기본 가용(R1), CR-03·CR-08, COND_MASIL_PROTECTED"},
 		{"A-20", "기존 고객 납기·판가 변경 승인 = 영업 임원", "원본은 'C-101 재협상/판가 = 영업 임원'만 명시. 모든 기존 고객으로 일반화, 변경 흐름은 설계 단계", "가정", "변경 요청 승인 라우팅(R2·R14)"},
 		{"A-21", "라인 보드 상태 문턱", "다음 달 부하 ÷ 배치 실적 월 생산: 100% 초과면 초과, 85% 이상이면 포화(표시용, 판단에 안 씀)", "가정", "생산 라인 보드 상태(여유·포화·초과)"},
-		{"A-22", "이사회 = 기준일 + 5일(모든 기준일에 적용)", fmt.Sprintf("%s(%s) · 주말 보정 없음", sc.BoardDate, weekdayKo(sc.BoardDate)), boardLabel, "결정 가능일, 승인 검토 작업 기한, OPT 결정일 기본값"},
+		{"A-22", "이사회 = 기준일 + 5일(모든 기준일에 적용)", boardValue(sc.BoardDate), boardLabel, "결정 가능일, 승인 검토 작업 기한, OPT 결정일 기본값"},
 	}
+}
+
+// boardValue는 이사회일과 주말 처리 방식을 적는다. 원본(data_dictionary)은 "As-of + 5일"(달력일)과 영업일 월~금만 정하고
+// 주말 이사회 규정은 없다(board_minutes·Business_Process_Map도 날짜 규칙 없음). 근거가 확인되기 전에는 보정하지 않는다.
+func boardValue(date string) string {
+	w := weekdayKo(date)
+	if w == "토" || w == "일" {
+		return fmt.Sprintf("%s(%s) · 주말이지만 보정 없음(근거 미확인: 원본에 주말 이사회 규정 없음)", date, w)
+	}
+	return fmt.Sprintf("%s(%s) · 주말 보정 없음(근거 미확인: 원본은 'As-of + 5일'만 정함)", date, w)
 }
 
 func weekdayKo(date string) string {

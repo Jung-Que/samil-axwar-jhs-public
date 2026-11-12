@@ -107,6 +107,23 @@ type ConfirmRequest struct {
 	Answer   map[string]any `json:"answer,omitempty"`
 	OpenedAt int            `json:"opened_seq"`
 	Mock     bool           `json:"mock_reply"`
+	MaxQty   int64          `json:"max_qty,omitempty"` // 회신 수량 상한(CR-08: 그 시점 Masil 보호량)
+}
+
+// ApproverRole은 결정 종류별 승인권자다(approval_authority_policy.md "입찰 참여·투자 승인 = CEO/이사회", R14).
+// 이 역할이 아닌 입력자(영업·시스템·에이전트 등)의 결정은 기록하지 않는다(자동 확정 금지).
+var ApproverRole = map[string]string{EvDecision: "CEO/이사회"}
+
+// masilProtected는 지금 업무일까지 들어온 Masil 발주 중 제품군 p의 보호량이다(R1과 같은 집계).
+// 세션을 시작한 직후에는 선택한 기준일의 보호량이다.
+func masilProtected(b *Base, sc Scenario, p string) int64 {
+	var q int64
+	for _, sp := range b.At(sc.SimDate).SPOs {
+		if sp.ProductID == p {
+			q += sp.Qty
+		}
+	}
+	return q
 }
 
 // Task는 사람에게 넘어가는 작업이다.
@@ -266,6 +283,9 @@ func (s *State) Apply(b *Base, e Event) error {
 		if s.Bid == nil || s.Bid.State != BidSubmitted {
 			return fmt.Errorf("결정은 상신 상태에서만 받는다(지금 %s)", s.bidState())
 		}
+		if want := ApproverRole[EvDecision]; e.Actor != want {
+			return fmt.Errorf("승인 권한 없음: 입찰 참여·투자 승인은 %s만 입력한다(입력자 %q, approval_authority_policy)", want, e.Actor)
+		}
 		var p DecisionFields
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
 			return err
@@ -297,7 +317,7 @@ func (s *State) Apply(b *Base, e Event) error {
 		for _, d := range s.Decisions {
 			d.Freshness = "낡음"
 		}
-		d := &Decision{ID: fmt.Sprintf("D-%02d", len(s.Decisions)+1), Approver: "CEO/이사회", Participation: p.Participation,
+		d := &Decision{ID: fmt.Sprintf("D-%02d", len(s.Decisions)+1), Approver: e.Actor, Participation: p.Participation,
 			Options: p.Options, Conditions: p.Conditions, PriceFloor: floor, Note: p.Note, DecidedAt: p.DecidedAt, Freshness: "최신", Seq: e.Seq}
 		s.Decisions = append(s.Decisions, d)
 		s.closeTasks("승인 검토")
@@ -332,7 +352,7 @@ func (s *State) Apply(b *Base, e Event) error {
 		if r == nil || r.State == "반영" {
 			return fmt.Errorf("열린 확인 요청이 아니다: %s", p.RequestID)
 		}
-		if err := s.applyAnswer(r.ID, p.Answer); err != nil {
+		if err := s.applyAnswer(b, r.ID, p.Answer); err != nil {
 			return err
 		}
 		r.State, r.Answer, r.Mock = "반영", p.Answer, true
@@ -449,9 +469,10 @@ func (s *State) reevaluate(b *Base, seq int, note func(string, ...any)) {
 	}
 	// R2: 바이어 첫 달 요구가 공급을 넘으면 Masil 보호분 침범 대신 Masil SCM 확인 요청
 	if s.Eval.InitialGap > 0 && s.request("CR-08") == nil {
+		prot := masilProtected(b, s.Scenario, ProductDerma)
 		s.Requests = append(s.Requests, &ConfirmRequest{ID: "CR-08", ToRole: "Masil SCM",
-			Question: fmt.Sprintf("Masil 더마 발주(88,000 EA) 중 최대 %s EA의 입고를 늦출 수 있는가(C-201 초도 %s)", Commas(s.Eval.InitialGap), s.Scenario.DeliveryStart),
-			Blocks:   []string{"R2", "PL-02 첫 달 수량"}, Due: addBusinessDays(s.Scenario.SimDate, 3), State: "요청", OpenedAt: seq})
+			Question: fmt.Sprintf("Masil 더마 발주(업무일 %s까지 %s EA) 중 최대 %s EA의 입고를 늦출 수 있는가(C-201 초도 %s)", CutoffOf(s.Scenario.SimDate), Commas(prot), Commas(min64(s.Eval.InitialGap, prot)), s.Scenario.DeliveryStart),
+			Blocks:   []string{"R2", "PL-02 첫 달 수량"}, Due: addBusinessDays(s.Scenario.SimDate, 3), State: "요청", OpenedAt: seq, MaxQty: prot})
 		note("첫 달 요구가 공급보다 %s EA 많음 → Masil 보호분 침범 차단, CR-08(Masil SCM) 생성", Commas(s.Eval.InitialGap))
 	}
 }
@@ -485,7 +506,7 @@ func (s *State) openInitialRequests(b *Base, seq int) {
 }
 
 // applyAnswer는 내부 부서 회신(E3)을 가정·시나리오에 반영한다.
-func (s *State) applyAnswer(id string, a map[string]any) error {
+func (s *State) applyAnswer(b *Base, id string, a map[string]any) error {
 	switch id {
 	case "CR-01":
 		v, _ := a["capacity_period"].(string)
@@ -512,9 +533,11 @@ func (s *State) applyAnswer(id string, a map[string]any) error {
 			s.Scenario.ValidationWeeks = w
 		}
 	case "CR-08":
+		// 상한 = 지금 업무일(세션 시작 직후면 선택한 기준일)의 PL-02 Masil 보호량. 보호분보다 많이 풀 수는 없다
+		limit := masilProtected(b, s.Scenario, ProductDerma)
 		q := int64(num(a["released_qty"]))
-		if q < 0 || q > 88_000 {
-			return fmt.Errorf("CR-08 회신: released_qty는 0~88,000")
+		if q < 0 || q > limit {
+			return fmt.Errorf("CR-08 회신: released_qty는 0~%s(업무일 %s까지 PL-02 Masil 보호량)", Commas(limit), CutoffOf(s.Scenario.SimDate))
 		}
 		s.Scenario.MasilReleased = q
 	default:
