@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import type { Backtest, Inbox, Lane, LaneAction, LineRow, View } from "./types";
-import { Section } from "./panels";
+import { ColHead, Section, batchSource } from "./panels";
 import { PRODUCT_LABEL, ea, slug } from "./format";
 
 type Run = (fn: () => Promise<View>) => Promise<void>;
@@ -195,15 +195,31 @@ function Tile({ label, value }: { label: string; value: string }) {
 export function LineBoardView({ v }: { v: View }) {
   const rows = v.line_board ?? [];
   const months = rows[0]?.load.map((m) => m.month) ?? [];
+  const b = v.data_basis;
   return (
-    <Section title="생산 라인 보드" mode={["real"]} note={`업무일 ${v.state.scenario.sim_date} 기준(기록 ~${v.cutoff}). 부하는 진행 주문의 추정 납기 달 + C-201 가예약. 상태는 다음 달 부하 ÷ 최근 12개월 월평균 생산(표시용).`}>
+    <Section
+      title="생산 라인 보드"
+      mode={["real"]}
+      note={
+        <>
+          업무일 {v.state.scenario.sim_date} 기준(기록 ~{v.cutoff}). <b>이 보드의 월 생산·부하·상태는 배치 실적과 진행 주문 기록에서 온다</b>({batchSource(v)}). 부하는 진행 주문의 추정 납기 달(A-14) + C-201 가예약이고, 대리점 주문 {ea(b.agency_orders)}건 · {ea(b.agency_qty)} EA는 빠져 있다(A-17). 상태는 다음 달 부하 ÷ 배치 실적 월 생산(문턱 85%·100%, A-21, 표시용). <b>여유(연) 열만 엔진과 같은 능력 스냅샷</b>({b.snapshot_file} {b.snapshot_date})이라 다른 열과 규모가 다르다 → 아래 '원본 간 규모 차이'.
+        </>
+      }
+    >
       <div className="scroll">
         <table className="grid">
           <thead>
             <tr>
-              <th>라인</th><th>할 수 있는 작업</th><th>이번 달 배치</th><th>최근 배치</th><th>보류(90일)</th><th>월 생산(T12)</th><th>진행 주문</th>
-              {months.map((m) => <th key={m}>{m} 부하</th>)}
-              <th>여유(연)</th><th>Masil 보호</th><th>상태</th>
+              <th>라인</th><th>할 수 있는 작업</th>
+              <ColHead main="이번 달 배치" sub="배치 실적 · 완료/관행 횟수" />
+              <ColHead main="최근 배치" sub="배치 실적 · 날짜 EA" />
+              <ColHead main="보류(90일)" sub="배치 실적 · 건" />
+              <ColHead main="월 생산" sub={`배치 실적 · EA/월 · ${b.t12_from}~${b.t12_to} 평균`} />
+              <ColHead main="진행 주문" sub={`수주 기록 ~${b.cutoff} · 건 EA`} />
+              {months.map((m) => <ColHead key={m} main={`${m} 부하`} sub="추정 납기 + 가예약 · EA/월 (÷ 월 생산)" />)}
+              <ColHead main="여유" sub={`능력 스냅샷 ${b.snapshot_date} · EA/년`} />
+              <ColHead main="Masil 보호" sub={`발주 ~${b.cutoff} · EA`} />
+              <ColHead main="상태" sub="부하 ÷ 월 생산(A-21)" />
             </tr>
           </thead>
           <tbody>
@@ -218,7 +234,7 @@ export function LineBoardView({ v }: { v: View }) {
                 <td>{r.kind === "new" ? "-" : `${ea(r.open_orders)}건 ${ea(r.open_qty)}`}</td>
                 {r.load.map((m) => (
                   <td key={m.month}>
-                    <LoadBar orders={m.orders} c201={m.c201} base={r.kind === "new" ? r.monthly_cap : r.t12_monthly} />
+                    <LoadBar orders={m.orders} c201={m.c201} base={r.kind === "new" ? r.monthly_cap : r.t12_monthly} baseLabel={r.kind === "new" ? "OPT-02 월 능력(capex 추가 능력 ÷ 12)" : "배치 실적 월 생산"} />
                   </td>
                 ))}
                 <td>{r.kind === "new" ? "-" : ea(r.spare_annual)}{r.future_snapshot && r.kind !== "new" && <span className="src">미래 자료</span>}</td>
@@ -233,12 +249,12 @@ export function LineBoardView({ v }: { v: View }) {
   );
 }
 
-function LoadBar({ orders, c201, base }: { orders: number; c201: number; base: number }) {
+function LoadBar({ orders, c201, base, baseLabel }: { orders: number; c201: number; base: number; baseLabel: string }) {
   const total = orders + c201;
   const pct = base > 0 ? Math.round((total / base) * 100) : 0;
   const w = (x: number) => `${Math.min(100, base > 0 ? (x / base) * 100 : 0)}%`;
   return (
-    <div className="loadcell" title={`주문 ${ea(orders)} + C-201 ${ea(c201)} / 기준 ${ea(base)}`}>
+    <div className="loadcell" title={`주문 ${ea(orders)} + C-201 ${ea(c201)} / ${baseLabel} ${ea(base)} (EA/월)`}>
       <div className="loadbar">
         <span className="lb-orders" style={{ width: w(orders) }} />
         <span className="lb-c201" style={{ width: w(c201) }} />

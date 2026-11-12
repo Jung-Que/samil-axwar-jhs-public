@@ -237,6 +237,8 @@ type AsOfData struct {
 	MatCost        map[string]MaterialCost `json:"material_cost"`
 	CogsPerEA      map[string]float64      `json:"cogs_per_ea"`
 	T12Prod        map[string]int64        `json:"t12_prod"`
+	T12From        string                  `json:"t12_from"` // 최근 12개월(닫힌 달) 첫 달
+	T12To          string                  `json:"t12_to"`   // 최근 12개월(닫힌 달) 마지막 달
 	LeadTimes      map[string][]int        `json:"-"`
 	SPOs           []SPO                   `json:"masil_spos"`
 	Commit         Commitments             `json:"commitments"`
@@ -420,6 +422,7 @@ func (b *Base) compute(c string) *AsOfData {
 
 	// 최근 12개월(닫힌 달) 생산량
 	t12 := monthsBack(lastClosed, 12)
+	a.T12From, a.T12To = t12[len(t12)-1], t12[0]
 	for _, bt := range b.Batches {
 		if bt.Date <= c && inMonths(bt.Date[:7], t12) {
 			a.T12Prod[bt.ProductID] += bt.Qty
@@ -538,6 +541,22 @@ func (b *Base) OpenOrders(c string) []Order {
 		out = append(out, o)
 	}
 	return out
+}
+
+// AgencyOpen은 진행 주문에서 뺀 대리점 주문(customer_id = NONE)의 건수·수량이다(가정 A-17, 표시용).
+// OpenOrders와 같은 조건(2024년 이후 접수, 그날까지 미출하)에서 고객만 NONE인 주문이다.
+func (b *Base) AgencyOpen(c string) (n int, qty int64) {
+	for _, o := range b.Orders {
+		if o.OrderDate > c {
+			break
+		}
+		if o.CustomerID != "NONE" || o.OrderDate < openFrom || (o.ShipDate != "" && o.ShipDate <= c) {
+			continue
+		}
+		n++
+		qty += o.Qty
+	}
+	return n, qty
 }
 
 // EstDue는 A-14 추정 납기다: 주문일 + median_low{리드타임 | 리드타임 > 경과일}. 남은 분포가 없으면 "".

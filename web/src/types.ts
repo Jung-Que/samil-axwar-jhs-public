@@ -193,7 +193,34 @@ export type State = {
 };
 export type Step = { type: string; actor_role: string; label: string; payload: unknown };
 export type ScenarioInfo = { id: string; title: string; description: string; steps: Step[] };
-export type Assumption = { id: string; text: string; value: string; label: string };
+export type Assumption = { id: string; text: string; value: string; label: string; affects: string };
+// 수치 출처·단위·기간과 원본 간 규모 차이(server/w05/basis.go, 표시용)
+export type CapacityGap = {
+  line_id: string;
+  plant_id: string;
+  product_id: string;
+  t12_monthly: number;
+  capacity_qty: number;
+  utilization_pct: number;
+  annual_monthly_cap: number;
+  ratio_annual_pct: number;
+  ratio_monthly_pct: number;
+};
+export type DataBasis = {
+  snapshot_file: string;
+  snapshot_date: string;
+  capacity_unit: string;
+  unit_confirmed: boolean;
+  future_snapshot: boolean;
+  batch_file: string;
+  t12_from: string;
+  t12_to: string;
+  order_file: string;
+  cutoff: string;
+  agency_orders: number;
+  agency_qty: number;
+  gaps: CapacityGap[] | null;
+};
 export type View = {
   state: State;
   input_mode: string;
@@ -208,6 +235,7 @@ export type View = {
   lanes: Lane[];
   line_board: LineRow[];
   assumptions: Assumption[];
+  data_basis: DataBasis;
   scenarios: ScenarioInfo[];
   condition_codes: Record<string, string>;
 };

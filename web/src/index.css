@@ -630,6 +630,21 @@ button.active {
   color: var(--bad);
 }
 
+.nowrap {
+  white-space: nowrap;
+}
+
+/* 열 제목 아래 출처·단위·기간(이슈 #27) */
+.th-sub {
+  display: block;
+  font-size: 0.66rem;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: normal;
+  line-height: 1.25;
+  margin-top: 2px;
+}
+
 .src {
   font-size: 0.68rem;
   color: var(--muted);
