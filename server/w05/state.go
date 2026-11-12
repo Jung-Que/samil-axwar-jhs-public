@@ -234,9 +234,27 @@ func (s *State) Apply(b *Base, e Event) error {
 		if _, ok := parseDate(p.SimDate); !ok || p.SimDate < s.Scenario.SimDate {
 			return fmt.Errorf("시계는 앞으로만 간다: %q (지금 %s)", p.SimDate, s.Scenario.SimDate)
 		}
+		prev := s.Scenario.SimDate
 		s.Scenario.SimDate = p.SimDate
 		e.SimDate = p.SimDate
 		note("업무 날짜 → %s", p.SimDate)
+		// 원본 기록으로 굴러가는 시계(이슈 #41): 그 사이 기록을 남기고 기준일 뒤 신규 수주를 여유에서 뺀다
+		for _, n := range b.clockNotes(prev, p.SimDate) {
+			note("%s", n)
+		}
+		hadHist := len(s.Scenario.HistOrders) > 0
+		s.Scenario.HistOrders = b.histOrders(s.Scenario.AsOf, p.SimDate, s.Scenario.HistBasis)
+		if h := s.Scenario.HistOrders; len(h) > 0 {
+			note("기준일 뒤 신규 수주 반영(%s): PL-01 %s · PL-02 %s EA를 C-201 여유에서 뺌", histBasisLabel(s.Scenario.HistBasis), Commas(h[ProductBasic]), Commas(h[ProductDerma]))
+		} else if hadHist {
+			note("기준일보다 진행 주문이 줄어 기준일 뒤 신규 수주 차감 0(기준일 여유보다 늘려 주지는 않음)")
+		}
+		// 시계로 이탈 경보가 켜지면(입찰 접수 뒤) 영업 임원 확인 요청을 만든다(R13)
+		if sg := atRisk(b.At(p.SimDate).Churn); sg != nil && s.Bid != nil && s.request("CR-09") == nil {
+			s.Requests = append(s.Requests, &ConfirmRequest{ID: "CR-09", ToRole: "영업 임원", Question: cr09Question(*sg),
+				Blocks: []string{"R13", "R12"}, Due: addBusinessDays(p.SimDate, 5), State: "요청", OpenedAt: e.Seq})
+			note("이탈 경보 %s → CR-09(영업 임원) 생성", sg.CustomerID)
+		}
 		for _, r := range s.Requests {
 			if r.State == "요청" && r.Due < p.SimDate {
 				r.State = "기한 초과"
@@ -462,6 +480,7 @@ func (s *State) Apply(b *Base, e Event) error {
 		for _, n := range notes {
 			note("%s", n)
 		}
+		s.Scenario.HistOrders = b.histOrders(s.Scenario.AsOf, s.Scenario.SimDate, s.Scenario.HistBasis) // 반영 기준이 바뀌었을 수 있다
 
 	default:
 		return fmt.Errorf("모르는 사건 종류: %s", e.Type)
@@ -558,8 +577,7 @@ func (s *State) openInitialRequests(b *Base, seq int) {
 		Commas(int64(cm.InProgressCount)), Commas(int64(cm.CountByProduct[ProductBasic])), Commas(int64(cm.CountByProduct[ProductDerma]))), addBusinessDays(recv, 5), "A-14", "R8")
 	// R13: 이탈 경보(AT_RISK) 고객이 있으면 그 능력을 C-201에 돌려도 되는지 영업 임원에게 묻는다(자동 반환 금지)
 	if sg := atRisk(ev.Churn); sg != nil {
-		add("CR-09", "영업 임원", fmt.Sprintf("%s 수주 감소가 계약·예측 수정으로 확인되는가? 확인되면 C-201에 돌릴 연간 수량(최근 12개월 수주 PL-01 %s · PL-02 %s EA 이내). 근거: %s",
-			sg.CustomerID, Commas(sg.T12BookedQty[ProductBasic]), Commas(sg.T12BookedQty[ProductDerma]), churnText(*sg)), addBusinessDays(recv, 5), "R13", "R12")
+		add("CR-09", "영업 임원", cr09Question(*sg), addBusinessDays(recv, 5), "R13", "R12")
 	}
 }
 

@@ -417,6 +417,7 @@ func assumptions(b *Base, sc Scenario) []Assumption {
 		{"A-22", "이사회 = 기준일 + 5일(모든 기준일에 적용)", boardValue(sc.BoardDate), boardLabel, "결정 가능일, 승인 검토 작업 기한, OPT 결정일 기본값"},
 		{"A-23", "이탈 경보 임계값(R12)", fmt.Sprintf("매출 비중 %.0f%% 이상 고객, 금액 기준. AT_RISK: 3개월 수주/출하 < %.2f 그리고 3개월 수주 YoY < %.0f%%. WATCH: 단월 수주/출하 < %.2f 2개월 연속. 출처가 정한 값 없음(설계값)", ChurnShareMin, ChurnRollingMax, ChurnYoYMax, ChurnWatchSingle), "가정", "판단 카드 이탈 경보, 영업 레인, CR-09 생성"},
 		{"A-24", "이탈 의심 고객 능력 반환(R13)", churnReleaseValue(sc), lbl(sc.ChurnAnswered), "C-201 공급(출처 CUST-REL), PL-01 상한·PL-02 공급"},
+		{"A-25", "기준일 뒤 원본 신규 수주 반영(시계, S4)", histValue(sc), map[bool]string{true: "모의 가정", false: "가정"}[sc.HistBasis == HistGross], "C-201 기본 가용(R1), 라인 여유 표 '기준일 뒤 신규 수주'"},
 	}
 	if sc.FXShift != 0 { // 모의 가정 환율 충격(이슈 #39)
 		rows[1].Value = fmt.Sprintf("%s %.2f %+.0f원(모의) = %.2f", at.FXDate, at.FX, sc.FXShift, at.FX+sc.FXShift)
@@ -426,6 +427,15 @@ func assumptions(b *Base, sc Scenario) []Assumption {
 		rows = append(rows, Assumption{"SIM", "모의 가정(시뮬레이션 세션, E9)", strings.Join(sc.SimNotes, " · "), "모의 가정", "이 세션의 평가 전체(기준 세션에는 없음, 원본 제약은 그대로)"})
 	}
 	return rows
+}
+
+func histValue(sc Scenario) string {
+	h := sc.HistOrders
+	amount := "아직 없음(시계가 세션 기준일에 있거나 원본 기록이 끝남)"
+	if len(h) > 0 {
+		amount = fmt.Sprintf("PL-01 %s · PL-02 %s EA를 여유에서 뺌(업무일 %s까지)", Commas(h[ProductBasic]), Commas(h[ProductDerma]), CutoffOf(sc.SimDate))
+	}
+	return histBasisLabel(sc.HistBasis) + ". " + amount
 }
 
 func churnReleaseValue(sc Scenario) string {

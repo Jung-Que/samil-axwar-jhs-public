@@ -68,6 +68,9 @@ type Scenario struct {
 	FXShift       float64        `json:"fx_shift,omitempty"`
 	OptValidation map[string]int `json:"opt_validation,omitempty"`
 	SimNotes      []string       `json:"sim_notes,omitempty"`
+	// 원본 기록 시계(이슈 #41): 세션 기준일 뒤 업무일까지 신규 수주 중 C-201 여유에서 빼는 양(제품군별 EA)과 기준(net 기본 | gross 모의).
+	HistOrders map[string]int64 `json:"hist_orders,omitempty"`
+	HistBasis  string           `json:"hist_basis,omitempty"`
 }
 
 // DefaultItems는 rfp_c201 표의 바이어 제시안이다(구조화가 끝나기 전 기본값이 아니라, 시드·검증용).
@@ -97,6 +100,7 @@ type LineEval struct {
 	MasilProtected int64 `json:"masil_protected"`
 	MasilDeducted  int64 `json:"masil_deducted"`
 	NewOrders      int64 `json:"new_orders"`
+	HistOrders     int64 `json:"hist_orders"` // 기준일 뒤 원본 신규 수주(순증분 기본, 이슈 #41)
 	BaseAvail      int64 `json:"base_avail_annual"`
 	BaseMonthly    int64 `json:"base_monthly"`
 	MasilDeficit   int64 `json:"masil_deficit"`
@@ -265,7 +269,8 @@ func evaluate(b *Base, sc Scenario) *Evaluation {
 				le.MasilDeducted = le.MasilProtected
 			}
 			le.NewOrders = sc.NewOrders[l.ProductID]
-			rest := le.SpareAnnual - le.MasilDeducted - le.NewOrders
+			le.HistOrders = sc.HistOrders[l.ProductID]
+			rest := le.SpareAnnual - le.MasilDeducted - le.NewOrders - le.HistOrders
 			if rest < 0 {
 				le.MasilDeficit = -rest
 				rest = 0
@@ -537,6 +542,10 @@ func flags(ev *Evaluation, sc Scenario) []Flag {
 	}
 	if d := ev.Products[ProductDerma]; d.ShortTotal > 0 {
 		add("PL02_SHORT", "위험", "R7", "PL-02 계약 기간 부족 %s EA(공급률 %.1f%%). 전량 약속 시 지연분 기준 노출 %.2f억", Commas(d.ShortTotal), d.CoveragePct, d.PenaltyBacklog/1e8)
+	}
+	if h := sc.HistOrders; len(h) > 0 {
+		add("HIST_ORDERS", "미확인", "R1", "세션 기준일(%s) 뒤 업무일(%s)까지 원본 신규 수주를 C-201 여유에서 뺐다: PL-01 %s · PL-02 %s EA(%s)",
+			sc.AsOf, CutoffOf(sc.SimDate), Commas(h[ProductBasic]), Commas(h[ProductDerma]), histBasisLabel(sc.HistBasis))
 	}
 	for _, sg := range ev.Churn {
 		switch sg.Status {

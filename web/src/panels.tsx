@@ -314,6 +314,7 @@ export function CapacityView({ v }: { v: View }) {
               <ColHead main="기본 여유" sub="계산 · EA/년" />
               <ColHead main="Masil 보호" sub={`발주 ~${v.data_basis.cutoff} · EA`} />
               <ColHead main="신규 수주" sub="E5 · EA/년" />
+              <ColHead main="기준일 뒤 신규 수주" sub={`원본 시계 · ${v.state.scenario.hist_basis === "gross" ? "총량(모의)" : "순증분"} · EA`} />
               <ColHead main="C-201 가용" sub="계산 · EA/년" />
               <ColHead main="월" sub="÷ 12 · EA/월" />
             </tr>
@@ -326,7 +327,7 @@ export function CapacityView({ v }: { v: View }) {
                   <td>{l.line_id}</td><td>{l.plant_id}</td><td>{l.product_id}{l.dedicated ? " (F1 전용)" : ""}</td>
                   <td>{ea(l.capacity_qty)}</td><td>{pct(l.utilization_pct, 0)}</td><td>{ea(l.spare_annual)}</td>
                   <td>{c201 ? ea(l.masil_protected) : ""}{l.masil_deficit > 0 && <span className="bad"> (부족 {ea(l.masil_deficit)})</span>}</td>
-                  <td>{c201 ? ea(l.new_orders) : ""}</td><td>{c201 ? ea(l.base_avail_annual) : "C-201 대상 아님"}</td><td>{c201 ? ea(l.base_monthly) : ""}</td>
+                  <td>{c201 ? ea(l.new_orders) : ""}</td><td className={l.hist_orders ? "warn" : ""}>{c201 ? ea(l.hist_orders) : ""}</td><td>{c201 ? ea(l.base_avail_annual) : "C-201 대상 아님"}</td><td>{c201 ? ea(l.base_monthly) : ""}</td>
                 </tr>
               );
             })}

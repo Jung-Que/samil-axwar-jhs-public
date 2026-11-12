@@ -26,6 +26,7 @@ type SimAssumption struct {
 	MasilInUtil     *bool             `json:"masil_in_util,omitempty"`    // A-07을 끄면 true
 	ValidationWeeks map[string]int    `json:"validation_weeks,omitempty"` // OPT-01·OPT-02 → 적격 주수(0~104)
 	Options         map[string]string `json:"options,omitempty"`          // OPT-01·OPT-02 → 제안·승인·보류·거절
+	NewOrderBasis   *string           `json:"new_order_basis,omitempty"`  // 기준일 뒤 신규 수주 반영 기준: net(기본) | gross(이슈 #41)
 }
 
 func validOpt(id string) bool { return id == "OPT-01" || id == "OPT-02" }
@@ -100,6 +101,13 @@ func (p SimAssumption) apply(sc *Scenario) ([]string, error) {
 		sc.Options[id] = OptionDecision{Status: st, DecisionDate: maxDate(sc.BoardDate, sc.SimDate)}
 		add("%s %s(실제 이사회 결정 아님)", id, st)
 	}
+	if p.NewOrderBasis != nil {
+		if *p.NewOrderBasis != HistNet && *p.NewOrderBasis != HistGross {
+			return nil, fmt.Errorf("신규 수주 반영 기준은 net·gross: %q", *p.NewOrderBasis)
+		}
+		sc.HistBasis = *p.NewOrderBasis
+		add("기준일 뒤 신규 수주 반영: %s", histBasisLabel(sc.HistBasis))
+	}
 	return notes, nil
 }
 
@@ -117,6 +125,7 @@ func cloneScenario(sc Scenario) Scenario {
 	c.ChurnRelease = copyMap(sc.ChurnRelease)
 	c.OptValidation = copyMap(sc.OptValidation)
 	c.Options = copyMap(sc.Options)
+	c.HistOrders = copyMap(sc.HistOrders)
 	c.SimNotes = append([]string(nil), sc.SimNotes...)
 	return c
 }

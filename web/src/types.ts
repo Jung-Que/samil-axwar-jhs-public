@@ -47,6 +47,7 @@ export type LineEval = {
   masil_protected: number;
   masil_deducted: number;
   new_orders: number;
+  hist_orders: number;
   base_avail_annual: number;
   base_monthly: number;
   masil_deficit: number;
@@ -107,6 +108,8 @@ export type Scenario = {
   fx_shift?: number;
   opt_validation?: Record<string, number>;
   sim_notes?: string[];
+  hist_orders?: Record<string, number>;
+  hist_basis?: string;
 };
 export type Evaluation = {
   scenario: Scenario;

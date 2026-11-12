@@ -146,6 +146,12 @@ func atRisk(sigs []ChurnSignal) *ChurnSignal {
 	return nil
 }
 
+// cr09Question은 R13 영업 임원 확인 요청(CR-09) 질문이다.
+func cr09Question(sg ChurnSignal) string {
+	return fmt.Sprintf("%s 수주 감소가 계약·예측 수정으로 확인되는가? 확인되면 C-201에 돌릴 연간 수량(최근 12개월 수주 PL-01 %s · PL-02 %s EA 이내). 근거: %s",
+		sg.CustomerID, Commas(sg.T12BookedQty[ProductBasic]), Commas(sg.T12BookedQty[ProductDerma]), churnText(sg))
+}
+
 func churnText(sg ChurnSignal) string {
 	yoy := "YoY 계산 불가(기록 15개월 미만)"
 	if sg.HasYoY {

@@ -135,6 +135,7 @@ export function SimulationView({ v, run, busy }: { v: View; run: Run; busy: bool
     if (f.op01) op["OPT-01"] = f.op01;
     if (f.op02) op["OPT-02"] = f.op02;
     if (Object.keys(op).length) p.options = op;
+    if (f.new_order_basis) p.new_order_basis = f.new_order_basis;
     run(() => api.event("E9_SIM_ASSUMPTION", "시뮬레이터", p)).then(() => setF({}));
   };
 
@@ -194,6 +195,9 @@ export function SimulationView({ v, run, busy }: { v: View; run: Run; busy: bool
               </label>
               <label className="field"><span>OPT-01 적격 주수</span><input type="number" value={f.vw01 ?? ""} onChange={(e) => set("vw01", e.target.value)} /></label>
               <label className="field"><span>OPT-02 적격 주수</span><input type="number" value={f.vw02 ?? ""} onChange={(e) => set("vw02", e.target.value)} /></label>
+              <label className="field"><span>기준일 뒤 신규 수주 (지금 {sc.hist_basis === "gross" ? "총량" : "순증분"})</span>
+                <select value={f.new_order_basis ?? ""} onChange={(e) => set("new_order_basis", e.target.value)}><option value="">그대로</option><option value="net">순증분(기본)</option><option value="gross">총량(가동률 이중 차감 주의)</option></select>
+              </label>
               {(["op01", "op02"] as const).map((k) => (
                 <label key={k} className="field"><span>{k === "op01" ? "OPT-01" : "OPT-02"} 결정(모의)</span>
                   <select value={f[k] ?? ""} onChange={(e) => set(k, e.target.value)}><option value="">그대로</option>{["제안", "승인", "보류", "거절"].map((s) => <option key={s} value={s}>{s}</option>)}</select>
