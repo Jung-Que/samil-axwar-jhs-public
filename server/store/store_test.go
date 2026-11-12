@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func TestOpenWithoutURLIsMemory(t *testing.T) {
@@ -28,31 +30,69 @@ func TestOpenWithoutURLIsMemory(t *testing.T) {
 }
 
 // 사건 로그: 순서대로 읽히고, 같은 순번은 거부되고, 초기화하면 비어야 한다(메모리·Postgres 공통).
+// 세션: 분기 세션은 처음 사건을 복사해 독립으로 쌓이고, main은 지울 수 없다(이슈 #37).
 func checkEvents(t *testing.T, st Store) {
 	t.Helper()
 	ctx := context.Background()
-	if err := st.ResetEvents(ctx); err != nil {
+	if err := st.ResetEvents(ctx, MainSession); err != nil {
 		t.Fatal(err)
 	}
 	for i, typ := range []string{"E1_RFP", "E8_SUBMIT_APPROVAL"} {
-		if err := st.AppendEvent(ctx, i+1, typ, []byte(`{"k":"값"}`)); err != nil {
+		if err := st.AppendEvent(ctx, MainSession, i+1, typ, []byte(`{"k":"값"}`)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := st.AppendEvent(ctx, 2, "E2_DECISION", []byte(`{}`)); !errors.Is(err, ErrSeqTaken) {
+	if err := st.AppendEvent(ctx, MainSession, 2, "E2_DECISION", []byte(`{}`)); !errors.Is(err, ErrSeqTaken) {
 		t.Fatalf("중복 순번이 거부되지 않음: %v", err)
 	}
-	evs, err := st.ListEvents(ctx)
+	evs, err := st.ListEvents(ctx, MainSession)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(evs) != 2 || evs[0].Seq != 1 || evs[1].Type != "E8_SUBMIT_APPROVAL" || !strings.Contains(string(evs[0].Body), "값") {
 		t.Fatalf("사건 로그 왕복 실패: %+v", evs)
 	}
-	if err := st.ResetEvents(ctx); err != nil {
+
+	// 분기: main의 사건 1번까지 복사한 시뮬레이션 세션
+	sid := "sim-test-" + time.Now().Format("150405.000000")
+	if err := st.CreateSession(ctx, Session{ID: sid, Name: "분기 시험", Kind: KindSim, ParentID: MainSession, ForkSeq: 1}, evs[:1]); err != nil {
 		t.Fatal(err)
 	}
-	if evs, _ := st.ListEvents(ctx); len(evs) != 0 {
+	if err := st.CreateSession(ctx, Session{ID: sid, Name: "중복", Kind: KindSim}, nil); !errors.Is(err, ErrSessionExists) {
+		t.Fatalf("같은 ID 세션이 거부되지 않음: %v", err)
+	}
+	if err := st.AppendEvent(ctx, sid, 2, "E2_DECISION", []byte(`{"분기":true}`)); err != nil {
+		t.Fatalf("분기 세션에 같은 순번(2) 사건이 들어가야 함: %v", err)
+	}
+	fe, _ := st.ListEvents(ctx, sid)
+	me, _ := st.ListEvents(ctx, MainSession)
+	if len(fe) != 2 || fe[1].Type != "E2_DECISION" || len(me) != 2 || me[1].Type != "E8_SUBMIT_APPROVAL" {
+		t.Fatalf("분기 세션이 독립이 아님: 분기 %+v / main %+v", fe, me)
+	}
+	ss, _ := st.ListSessions(ctx)
+	found := false
+	for _, s := range ss {
+		if s.ID == sid && s.Kind == KindSim && s.ParentID == MainSession && s.ForkSeq == 1 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("세션 목록에 분기 세션 정보 없음: %+v", ss)
+	}
+	if err := st.DeleteSession(ctx, MainSession); !errors.Is(err, ErrMainSession) {
+		t.Fatalf("main 삭제가 거부되지 않음: %v", err)
+	}
+	if err := st.DeleteSession(ctx, sid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ListEvents(ctx, sid); !errors.Is(err, ErrNoSession) {
+		t.Fatalf("지운 세션의 사건을 읽음: %v", err)
+	}
+
+	if err := st.ResetEvents(ctx, MainSession); err != nil {
+		t.Fatal(err)
+	}
+	if evs, _ := st.ListEvents(ctx, MainSession); len(evs) != 0 {
 		t.Fatalf("초기화 후 %d건 남음", len(evs))
 	}
 }
@@ -186,6 +226,52 @@ func TestPostgresOpenMigratesIdempotently(t *testing.T) {
 		t.Fatalf("app_meta 왕복 실패: %q %v", got, err)
 	}
 	checkEvents(t, st)
+}
+
+// 마이그레이션 3(세션)은 스키마 2에 쌓여 있던 사건을 기준 세션(main)으로 보존해야 한다(이슈 #37).
+func TestPostgresMigration3KeepsEvents(t *testing.T) {
+	url := pgURL(t)
+	ctx := context.Background()
+	ccfg, err := pgx.ParseConfig(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ccfg.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+	conn, err := pgx.ConnectConfig(ctx, ccfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(context.Background())
+	// 스키마 2 상태를 만든다: 이전 마이그레이션 1·2만 적용하고 사건 두 건을 넣는다
+	setup := []string{
+		"DROP TABLE IF EXISTS w05_events, w05_sessions, app_meta, schema_migrations CASCADE",
+		migrations[0], migrations[1],
+		"CREATE TABLE schema_migrations (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())",
+		"INSERT INTO schema_migrations (version) VALUES (1), (2)",
+		`INSERT INTO w05_events (seq, type, body) VALUES (1, 'E1_RFP', '{"k":"값"}'), (2, 'E8_SUBMIT_APPROVAL', '{}')`,
+	}
+	for _, s := range setup {
+		if _, err := conn.Exec(ctx, s); err != nil {
+			t.Fatalf("스키마 2 준비 실패(%.40s): %v", s, err)
+		}
+	}
+	st, err := Open(ctx, Config{DatabaseURL: url, Wait: 30 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if v, _ := st.SchemaVersion(ctx); v != CurrentSchema {
+		t.Fatalf("schema %d, want %d", v, CurrentSchema)
+	}
+	evs, err := st.ListEvents(ctx, MainSession)
+	if err != nil || len(evs) != 2 || evs[0].Type != "E1_RFP" || !strings.Contains(string(evs[0].Body), "값") {
+		t.Fatalf("마이그레이션 뒤 기준 세션 사건: %+v (%v)", evs, err)
+	}
+	ss, _ := st.ListSessions(ctx)
+	if len(ss) != 1 || ss[0].ID != MainSession || ss[0].Kind != KindMain {
+		t.Fatalf("마이그레이션 뒤 세션: %+v", ss)
+	}
+	checkEvents(t, st) // 세션별 쓰기·분기도 그대로 돈다
 }
 
 func TestPostgresRejectsNewerSchema(t *testing.T) {

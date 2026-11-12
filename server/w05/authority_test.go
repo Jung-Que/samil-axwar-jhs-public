@@ -39,7 +39,7 @@ func TestDecisionAuthority(t *testing.T) {
 			t.Errorf("입력자 %q 거절 뒤 상태 %s, 결정 %d건", actor, v.State.Bid.State, len(v.State.Decisions))
 		}
 	}
-	stored, _ := svc.st.ListEvents(ctx)
+	stored, _ := svc.st.ListEvents(ctx, store.MainSession)
 	if len(stored) != 2 {
 		t.Errorf("저장소 사건 %d개, 기대 2", len(stored))
 	}

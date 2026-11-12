@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, api } from "./api";
+import { ApiError, api, setSession } from "./api";
 import type { LaneAction, View } from "./types";
+import { SessionBar, SessionCompareView } from "./sessionViews";
 import { AssumptionsView, CapacityView, ChurnView, CompareView, DecisionsView, JudgmentCard, LedgerView, LogView, ScheduleView, SourceGapView, TasksView } from "./panels";
 import { EventPanel, RequestsView } from "./EventPanel";
 import { AsOfBar, BacktestView, InboxView, LanesView, LineBoardView } from "./asofViews";
@@ -14,6 +15,7 @@ const TABS = [
   { id: "ledger", label: "약속 원장" },
   { id: "requests", label: "확인 요청·결정" },
   { id: "log", label: "사건 로그" },
+  { id: "sessions", label: "세션 비교" },
   { id: "backtest", label: "정답 비교" },
   { id: "assume", label: "가정" },
 ] as const;
@@ -43,14 +45,32 @@ export default function App() {
   };
 
   useEffect(() => {
-    api.state().then(setV).catch((e: Error) => setErr(`API 연결 실패: ${e.message}`));
+    // 기억해 둔 세션이 지워졌으면(404) 기준 세션으로 연다.
+    api
+      .state()
+      .catch((e: unknown) => {
+        if (e instanceof ApiError && e.status === 404) {
+          setSession("main");
+          return api.state();
+        }
+        throw e;
+      })
+      .then(setV)
+      .catch((e: Error) => setErr(`API 연결 실패: ${e.message}`));
   }, []);
+
+  // 서버가 돌려준 세션을 지금 세션으로 쓴다(새 세션·분기·시연·세션 선택 뒤).
+  useEffect(() => {
+    if (v?.session?.id) setSession(v.session.id);
+  }, [v?.session?.id]);
 
   const run = useCallback(async (fn: () => Promise<View>) => {
     setBusy(true);
     setErr(null);
     try {
-      setV(await fn());
+      const nv = await fn();
+      if (nv?.session?.id) setSession(nv.session.id); // 다음 호출부터 이 세션을 쓴다
+      setV(nv);
     } catch (e) {
       if (e instanceof ApiError && e.view) setV(e.view);
       setErr(e instanceof Error ? e.message : String(e));
@@ -88,13 +108,14 @@ export default function App() {
           <span className="chip">원본 {v.raw_files_verified}개 해시 확인</span>
         </div>
         <div className="scenarios">
-          <span className="muted small">시연(세션 기준일 {v.as_of})</span>
+          <span className="muted small">시연(새 시뮬레이션 세션 · 기준일 {v.as_of})</span>
           {v.scenarios.map((s) => (
-            <button key={s.id} title={s.description} disabled={busy} onClick={() => run(() => api.scenario(s.id))}>{s.title}</button>
+            <button key={s.id} title={`${s.description} — 새 시뮬레이션 세션에서 돌린다(지금 세션은 그대로)`} disabled={busy} onClick={() => run(() => api.scenario(s.id, v.as_of))}>{s.title}</button>
           ))}
-          <button className="ghost" disabled={busy} onClick={() => run(() => api.reset(v.as_of))}>초기화</button>
+          <button className="ghost" disabled={busy} title="지금 세션의 사건을 지우고 기준일부터 다시 시작한다" onClick={() => { if (window.confirm(`세션 "${v.session.name}"의 사건을 모두 지운다`)) run(() => api.reset(v.as_of)); }}>이 세션 초기화</button>
         </div>
       </header>
+      <SessionBar v={v} run={run} busy={busy} onCompare={() => setTab("sessions")} />
       <AsOfBar v={v} run={run} busy={busy} />
       {err && <div className="error" role="alert">{err}</div>}
       <div className="layout">
@@ -115,7 +136,8 @@ export default function App() {
           {tab === "capacity" && (<><CapacityView v={v} /><CompareView v={v} /><SourceGapView v={v} /></>)}
           {tab === "ledger" && (<><LedgerView v={v} /><ChurnView v={v} /></>)}
           {tab === "requests" && (<><RequestsView v={v} run={run} /><DecisionsView v={v} /></>)}
-          {tab === "log" && <LogView v={v} />}
+          {tab === "log" && <LogView v={v} onFork={(seq) => run(() => api.fork(seq))} busy={busy} />}
+          {tab === "sessions" && <SessionCompareView v={v} />}
           {tab === "backtest" && <BacktestView v={v} />}
           {tab === "assume" && <AssumptionsView v={v} />}
         </main>

@@ -11,11 +11,18 @@ import (
 	"axwar/server/store"
 )
 
-// Service는 사건 로그(저장소)와 현재 상태를 묶는다. 상태는 로그를 처음부터 다시 적용해 만든다.
+// Service는 세션별 사건 로그(저장소)와 현재 상태를 묶는다. 상태는 로그를 처음부터 다시 적용해 만든다.
+// 세션(이슈 #37): main = 기준 세션(서비스 단계의 운영 세션), sim = 시뮬레이션 세션(분기·시연·모의 가정).
+// 이름에 In이 없는 메서드(Submit·Snapshot·Reset·RunScenario 등)는 기준 세션(main)을 다룬다.
 type Service struct {
-	mu     sync.Mutex
-	base   *Base
-	st     store.Store
+	mu   sync.Mutex
+	base *Base
+	st   store.Store
+	sess map[string]*session
+}
+
+type session struct {
+	meta   store.Session
 	events []Event
 	state  *State
 }
@@ -23,42 +30,75 @@ type Service struct {
 // ErrInvalid는 사건이 규칙에 맞지 않아 기록하지 않았다는 뜻이다(HTTP 409).
 var ErrInvalid = errors.New("사건을 적용할 수 없다")
 
-// NewService는 저장소의 사건을 읽어 상태를 만든다.
+// ErrNotFound는 없는 세션을 가리켰다는 뜻이다(HTTP 404).
+var ErrNotFound = errors.New("세션이 없다")
+
+// NewService는 저장소의 기준 세션 사건을 읽어 상태를 만든다. 다른 세션은 처음 쓸 때 읽는다.
 func NewService(ctx context.Context, base *Base, st store.Store) (*Service, error) {
-	s := &Service{base: base, st: st, state: NewState(base)}
-	if err := s.sync(ctx); err != nil {
+	s := &Service{base: base, st: st, sess: map[string]*session{}}
+	if _, err := s.load(ctx, store.MainSession); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-// sync는 저장소 로그가 메모리와 다르면(다른 인스턴스가 쓴 경우 등) 다시 적용한다.
-func (s *Service) sync(ctx context.Context) error {
-	stored, err := s.st.ListEvents(ctx)
-	if err != nil {
-		return err
+// load는 세션을 저장소와 맞춘다. 저장소 로그가 메모리와 다르면(다른 인스턴스가 쓴 경우 등) 다시 적용한다. 잠금을 잡고 부른다.
+func (s *Service) load(ctx context.Context, id string) (*session, error) {
+	if id == "" {
+		id = store.MainSession
 	}
-	if len(stored) == len(s.events) && (len(stored) == 0 || stored[len(stored)-1].Seq == s.events[len(s.events)-1].Seq) {
-		return nil
+	cs := s.sess[id]
+	if cs == nil {
+		metas, err := s.st.ListSessions(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range metas {
+			if m.ID == id {
+				cs = &session{meta: m}
+				break
+			}
+		}
+		if cs == nil {
+			return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
+		}
+	}
+	stored, err := s.st.ListEvents(ctx, id)
+	if errors.Is(err, store.ErrNoSession) {
+		delete(s.sess, id)
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if cs.state != nil && len(stored) == len(cs.events) && (len(stored) == 0 || stored[len(stored)-1].Seq == cs.events[len(cs.events)-1].Seq) {
+		return cs, nil
 	}
 	evs := make([]Event, 0, len(stored))
 	for _, se := range stored {
 		var e Event
 		if err := json.Unmarshal(se.Body, &e); err != nil {
-			return fmt.Errorf("사건 %d 해석 실패: %w", se.Seq, err)
+			return nil, fmt.Errorf("세션 %s 사건 %d 해석 실패: %w", id, se.Seq, err)
 		}
 		evs = append(evs, e)
 	}
-	st, err := replay(s.base, evs)
+	st, err := replay(s.base, evs, cs.meta.Kind)
 	if err != nil {
-		return fmt.Errorf("저장된 사건 재적용 실패: %w", err)
+		return nil, fmt.Errorf("세션 %s 저장된 사건 재적용 실패: %w", id, err)
 	}
-	s.events, s.state = evs, st
-	return nil
+	cs.events, cs.state = evs, st
+	s.sess[id] = cs
+	return cs, nil
 }
 
-func replay(b *Base, evs []Event) (*State, error) {
+func newState(b *Base, kind string) *State {
 	st := NewState(b)
+	st.SessionKind = kind
+	return st
+}
+
+func replay(b *Base, evs []Event, kind string) (*State, error) {
+	st := newState(b, kind)
 	for _, e := range evs {
 		if err := st.Apply(b, e); err != nil {
 			return nil, fmt.Errorf("사건 %d(%s): %w", e.Seq, e.Type, err)
@@ -85,6 +125,24 @@ type View struct {
 	Basis       DataBasis         `json:"data_basis"` // 수치 출처·단위·기간, 원본 간 규모 차이(표시용)
 	Scenarios   []ScenarioInfo    `json:"scenarios"`
 	Conditions  map[string]string `json:"condition_codes"`
+	Session     SessionInfo       `json:"session"`  // 지금 보는 세션
+	Sessions    []SessionInfo     `json:"sessions"` // 전체 세션 목록(세션 선택기)
+}
+
+// SessionInfo는 화면에 보이는 세션 정보다.
+type SessionInfo struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"` // main | sim
+	ParentID  string `json:"parent_id,omitempty"`
+	ForkSeq   int    `json:"fork_seq,omitempty"`
+	CreatedAt string `json:"created_at"`
+	Events    int    `json:"events"`
+}
+
+func sessionInfo(m store.Session, events int) SessionInfo {
+	return SessionInfo{ID: m.ID, Name: m.Name, Kind: m.Kind, ParentID: m.ParentID, ForkSeq: m.ForkSeq,
+		CreatedAt: m.CreatedAt.UTC().Format(time.RFC3339), Events: events}
 }
 
 // Assumption은 가정 목록 한 줄이다(명세 §7). Value는 지금 쓰는 값, Affects는 그 가정을 쓰는 판단·화면이다.
@@ -96,110 +154,186 @@ type Assumption struct {
 	Affects string `json:"affects"`
 }
 
-func (s *Service) view() View {
-	sc := s.state.Scenario
-	return View{State: s.state, Input: "고정 필드(자유 문장·LLM 현재 제외)", Store: s.st.Kind(), Files: s.base.Files,
+func (s *Service) view(ctx context.Context, cs *session) View {
+	st := cs.state
+	sc := st.Scenario
+	v := View{State: st, Input: "고정 필드(자유 문장·LLM 현재 제외)", Store: s.st.Kind(), Files: s.base.Files,
 		AsOf: sc.AsOf, BoardDate: sc.BoardDate, Cutoff: CutoffOf(sc.SimDate), AsOfMin: AsOfMin, AsOfMax: AsOfMax, DataEnd: DataEnd,
-		Lanes: s.state.Lanes(s.base), Lines: s.state.LineBoard(s.base),
-		Assumptions: assumptions(s.base, sc), Basis: s.state.Basis(s.base), Scenarios: Scenarios(sc.AsOf), Conditions: ConditionCodes}
+		Lanes: st.Lanes(s.base), Lines: st.LineBoard(s.base),
+		Assumptions: assumptions(s.base, sc), Basis: st.Basis(s.base), Scenarios: Scenarios(sc.AsOf), Conditions: ConditionCodes,
+		Session: sessionInfo(cs.meta, len(cs.events))}
+	if metas, err := s.st.ListSessions(ctx); err == nil {
+		for _, m := range metas {
+			n := -1
+			if c := s.sess[m.ID]; c != nil {
+				n = len(c.events)
+			}
+			v.Sessions = append(v.Sessions, sessionInfo(m, n))
+		}
+	}
+	return v
 }
 
-// Snapshot은 현재 상태를 돌려준다.
+// Snapshot은 기준 세션의 현재 상태를 돌려준다.
 func (s *Service) Snapshot(ctx context.Context) (View, error) {
+	return s.SnapshotIn(ctx, store.MainSession)
+}
+
+// SnapshotIn은 세션의 현재 상태를 돌려준다.
+func (s *Service) SnapshotIn(ctx context.Context, sid string) (View, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.sync(ctx); err != nil {
+	cs, err := s.load(ctx, sid)
+	if err != nil {
 		return View{}, err
 	}
-	return s.view(), nil
+	return s.view(ctx, cs), nil
 }
 
-// Submit은 사건 하나를 검증·적용하고 저장한다. 규칙에 맞지 않으면 아무것도 저장하지 않는다.
+// Submit은 기준 세션에 사건 하나를 넣는다.
 func (s *Service) Submit(ctx context.Context, typ, actor string, payload json.RawMessage) (View, error) {
+	return s.SubmitIn(ctx, store.MainSession, typ, actor, payload)
+}
+
+// SubmitIn은 세션에 사건 하나를 검증·적용하고 저장한다. 규칙에 맞지 않으면 아무것도 저장하지 않는다.
+func (s *Service) SubmitIn(ctx context.Context, sid, typ, actor string, payload json.RawMessage) (View, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.sync(ctx); err != nil {
+	return s.submit(ctx, sid, typ, actor, payload)
+}
+
+func (s *Service) submit(ctx context.Context, sid, typ, actor string, payload json.RawMessage) (View, error) {
+	cs, err := s.load(ctx, sid)
+	if err != nil {
 		return View{}, err
 	}
 	if len(payload) == 0 {
 		payload = json.RawMessage(`{}`)
 	}
-	e := Event{Seq: len(s.events) + 1, Type: typ, Actor: actor, SimDate: s.state.Scenario.SimDate, Payload: payload,
+	e := Event{Seq: len(cs.events) + 1, Type: typ, Actor: actor, SimDate: cs.state.Scenario.SimDate, Payload: payload,
 		At: time.Now().UTC().Format(time.RFC3339)}
-	evs := append(append([]Event(nil), s.events...), e)
-	ns, err := replay(s.base, evs)
+	evs := append(append([]Event(nil), cs.events...), e)
+	ns, err := replay(s.base, evs, cs.meta.Kind)
 	if err != nil {
-		return s.view(), fmt.Errorf("%w: %v", ErrInvalid, unwrapLast(err))
+		return s.view(ctx, cs), fmt.Errorf("%w: %v", ErrInvalid, unwrapLast(err))
 	}
 	body, err := json.Marshal(e)
 	if err != nil {
-		return s.view(), err
+		return s.view(ctx, cs), err
 	}
-	if err := s.st.AppendEvent(ctx, e.Seq, e.Type, body); err != nil {
+	if err := s.st.AppendEvent(ctx, cs.meta.ID, e.Seq, e.Type, body); err != nil {
 		if errors.Is(err, store.ErrSeqTaken) {
-			_ = s.sync(ctx)
-			return s.view(), fmt.Errorf("%w: 다른 사용자가 먼저 사건을 넣었다 — 새로고침 후 다시", ErrInvalid)
+			if c2, err2 := s.load(ctx, cs.meta.ID); err2 == nil {
+				cs = c2
+			}
+			return s.view(ctx, cs), fmt.Errorf("%w: 다른 사용자가 먼저 사건을 넣었다 — 새로고침 후 다시", ErrInvalid)
 		}
-		return s.view(), err
+		return s.view(ctx, cs), err
 	}
-	s.events, s.state = evs, ns
-	return s.view(), nil
+	cs.events, cs.state = evs, ns
+	return s.view(ctx, cs), nil
 }
 
-// Reset은 사건 로그를 비우고, asOf가 있으면 그 기준일로 테스트 세션을 시작한다(E00_SESSION).
-func (s *Service) Reset(ctx context.Context, asOf string) (View, error) {
-	if asOf != "" {
-		if _, ok := parseDate(asOf); !ok || asOf < AsOfMin || asOf > AsOfMax {
-			return View{}, fmt.Errorf("%w: 기준일은 %s~%s 사이(YYYY-MM-DD): %q", ErrInvalid, AsOfMin, AsOfMax, asOf)
-		}
+func validAsOf(asOf string) error {
+	if asOf == "" {
+		return nil
 	}
-	s.mu.Lock()
-	if err := s.st.ResetEvents(ctx); err != nil {
-		s.mu.Unlock()
+	if _, ok := parseDate(asOf); !ok || asOf < AsOfMin || asOf > AsOfMax {
+		return fmt.Errorf("%w: 기준일은 %s~%s 사이(YYYY-MM-DD): %q", ErrInvalid, AsOfMin, AsOfMax, asOf)
+	}
+	return nil
+}
+
+// Reset은 기준 세션을 비운다.
+func (s *Service) Reset(ctx context.Context, asOf string) (View, error) {
+	return s.ResetIn(ctx, store.MainSession, asOf)
+}
+
+// ResetIn은 세션의 사건 로그를 비우고, asOf가 있으면 그 기준일로 시작한다(E00_SESSION).
+func (s *Service) ResetIn(ctx context.Context, sid, asOf string) (View, error) {
+	if err := validAsOf(asOf); err != nil {
 		return View{}, err
 	}
-	s.events, s.state = nil, NewState(s.base)
-	s.mu.Unlock()
-	if asOf == "" || asOf == DefaultAsOf {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		return s.view(), nil
-	}
-	return s.Submit(ctx, EvSession, "시스템", json.RawMessage(fmt.Sprintf(`{"as_of":%q}`, asOf)))
-}
-
-// Inbox는 접수함이다(최근 days일, 최대 limit건).
-func (s *Service) Inbox(ctx context.Context, days, limit int) (Inbox, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.sync(ctx); err != nil {
+	return s.reset(ctx, sid, asOf)
+}
+
+func (s *Service) reset(ctx context.Context, sid, asOf string) (View, error) {
+	cs, err := s.load(ctx, sid)
+	if err != nil {
+		return View{}, err
+	}
+	if err := s.st.ResetEvents(ctx, cs.meta.ID); err != nil {
+		return View{}, err
+	}
+	cs.events, cs.state = nil, newState(s.base, cs.meta.Kind)
+	if asOf == "" || asOf == DefaultAsOf {
+		return s.view(ctx, cs), nil
+	}
+	return s.submit(ctx, cs.meta.ID, EvSession, "시스템", json.RawMessage(fmt.Sprintf(`{"as_of":%q}`, asOf)))
+}
+
+// Inbox는 기준 세션의 접수함이다.
+func (s *Service) Inbox(ctx context.Context, days, limit int) (Inbox, error) {
+	return s.InboxIn(ctx, store.MainSession, days, limit)
+}
+
+// InboxIn은 세션의 접수함이다(최근 days일, 최대 limit건).
+func (s *Service) InboxIn(ctx context.Context, sid string, days, limit int) (Inbox, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cs, err := s.load(ctx, sid)
+	if err != nil {
 		return Inbox{}, err
 	}
-	return s.state.Inbox(s.base, days, limit), nil
+	return cs.state.Inbox(s.base, days, limit), nil
 }
 
-// Backtest는 정답 비교다.
+// Backtest는 기준 세션의 정답 비교다.
 func (s *Service) Backtest(ctx context.Context) (Backtest, error) {
+	return s.BacktestIn(ctx, store.MainSession)
+}
+
+// BacktestIn은 세션의 정답 비교다.
+func (s *Service) BacktestIn(ctx context.Context, sid string) (Backtest, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.sync(ctx); err != nil {
+	cs, err := s.load(ctx, sid)
+	if err != nil {
 		return Backtest{}, err
 	}
-	return s.state.Backtest(s.base), nil
+	return cs.state.Backtest(s.base), nil
 }
 
-// RunScenario는 기준일 asOf(비면 지금 세션 기준일)로 초기화한 뒤 시나리오의 사건을 고정 입력값으로 차례로 넣는다.
+// RunScenario는 기준 세션에서 시나리오를 돌린다.
 func (s *Service) RunScenario(ctx context.Context, id, asOf string) (View, error) {
+	return s.RunScenarioIn(ctx, store.MainSession, id, asOf)
+}
+
+// RunScenarioIn은 세션을 기준일 asOf(비면 그 세션 기준일)로 초기화한 뒤 시나리오의 사건을 고정 입력값으로 차례로 넣는다.
+func (s *Service) RunScenarioIn(ctx context.Context, sid, id, asOf string) (View, error) {
+	if err := validAsOf(asOf); err != nil {
+		return View{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.runScenario(ctx, sid, id, asOf)
+}
+
+func (s *Service) runScenario(ctx context.Context, sid, id, asOf string) (View, error) {
+	cs, err := s.load(ctx, sid)
+	if err != nil {
+		return View{}, err
+	}
 	if asOf == "" {
-		s.mu.Lock()
-		asOf = s.state.Scenario.AsOf
-		s.mu.Unlock()
+		asOf = cs.state.Scenario.AsOf
 	}
 	sc, err := ScenarioByID(id, asOf)
 	if err != nil {
 		return View{}, err
 	}
-	if _, err := s.Reset(ctx, asOf); err != nil {
+	if _, err := s.reset(ctx, sid, asOf); err != nil {
 		return View{}, err
 	}
 	var v View
@@ -208,7 +342,7 @@ func (s *Service) RunScenario(ctx context.Context, id, asOf string) (View, error
 		if err != nil {
 			return v, fmt.Errorf("시나리오 %s 단계 %d: %w", id, i+1, err)
 		}
-		v, err = s.Submit(ctx, step.Type, step.Actor, payload)
+		v, err = s.submit(ctx, sid, step.Type, step.Actor, payload)
 		if err != nil {
 			return v, fmt.Errorf("시나리오 %s 단계 %d(%s): %w", id, i+1, step.Type, err)
 		}

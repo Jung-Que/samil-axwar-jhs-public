@@ -32,10 +32,10 @@ export function AsOfBar({ v, run, busy }: { v: View; run: Run; busy: boolean }) 
           <span>기준일</span>
           <input type="date" min={v.as_of_min} max={v.as_of_max} value={pick} onChange={(e) => setPick(e.target.value)} />
         </label>
-        <button disabled={busy || !pick} onClick={() => run(() => api.reset(pick))}>이 날짜로 세션 시작</button>
+        <button disabled={busy || !pick} title="그 날짜로 시작하는 새 시뮬레이션 세션을 만든다(지금 세션은 그대로)" onClick={() => run(() => api.newSession("", pick))}>이 날짜로 새 세션</button>
         <span className="presets">
           {PRESETS.map((d) => (
-            <button key={d} className={d === v.as_of ? "ghost small active" : "ghost small"} disabled={busy} onClick={() => run(() => api.reset(d))}>
+            <button key={d} className={d === pick ? "ghost small active" : "ghost small"} disabled={busy} onClick={() => setPick(d)}>
               {d}
             </button>
           ))}

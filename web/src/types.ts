@@ -254,6 +254,7 @@ export type State = {
   eval_version: number;
   evaluation: Evaluation;
   last_blocks: string[] | null;
+  session_kind: "main" | "sim";
 };
 export type Step = { type: string; actor_role: string; label: string; payload: unknown };
 export type ScenarioInfo = { id: string; title: string; description: string; steps: Step[] };
@@ -302,6 +303,51 @@ export type View = {
   data_basis: DataBasis;
   scenarios: ScenarioInfo[];
   condition_codes: Record<string, string>;
+  session: SessionInfo;
+  sessions: SessionInfo[] | null;
+};
+
+// 시뮬레이션 세션(server/w05/sessions.go, 이슈 #37)
+export type SessionInfo = {
+  id: string;
+  name: string;
+  kind: "main" | "sim";
+  parent_id?: string;
+  fork_seq?: number;
+  created_at: string;
+  events: number; // -1 = 아직 읽지 않음
+};
+export type SessionKPI = {
+  session: SessionInfo;
+  as_of: string;
+  sim_date: string;
+  bid_state: string;
+  bid_version: number;
+  price_cut: number;
+  delivery_start: string;
+  pl01_status: string;
+  pl02_status: string;
+  pl01_schedule: number;
+  pl02_schedule: number;
+  pl02_coverage_pct: number;
+  penalty_backlog_krw: number;
+  penalty_contract_krw: number;
+  contrib_schedule_krw: number;
+  revenue_schedule_krw: number;
+  options: string[] | null;
+  open_requests: number;
+  open_tasks: number;
+  reservations: number;
+};
+export type MonthDiff = { month: string; a_has: boolean; b_has: boolean; a_supply: number; b_supply: number; a_schedule: number; b_schedule: number; a_short: number; b_short: number };
+export type ItemDiff = { key: string; text: string; a: string; b: string };
+export type SessionCompare = {
+  a: SessionKPI;
+  b: SessionKPI;
+  products: Record<string, MonthDiff[] | null>;
+  flags: ItemDiff[] | null;
+  requests: ItemDiff[] | null;
+  tasks: ItemDiff[] | null;
 };
 
 // 기준일 재현 보기(server/w05/boards.go)

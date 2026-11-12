@@ -26,6 +26,20 @@ var migrations = []string{
 		body       jsonb NOT NULL,
 		created_at timestamptz NOT NULL DEFAULT now()
 	)`,
+	// 3: 시뮬레이션 세션(이슈 #37). 사건 로그를 세션마다 나눈다. 기존 사건은 기준 세션(main)으로 옮긴다.
+	// 서비스 단계에서는 main이 운영 세션이 되고, 시뮬레이션은 운영 세션에서 분기한다.
+	`CREATE TABLE w05_sessions (
+		id         text PRIMARY KEY,
+		name       text NOT NULL,
+		kind       text NOT NULL CHECK (kind IN ('main', 'sim')),
+		parent_id  text,
+		fork_seq   integer,
+		created_at timestamptz NOT NULL DEFAULT now()
+	);
+	INSERT INTO w05_sessions (id, name, kind) VALUES ('main', '기준 세션', 'main');
+	ALTER TABLE w05_events ADD COLUMN session_id text NOT NULL DEFAULT 'main' REFERENCES w05_sessions(id) ON DELETE CASCADE;
+	ALTER TABLE w05_events DROP CONSTRAINT w05_events_pkey;
+	ALTER TABLE w05_events ADD PRIMARY KEY (session_id, seq)`,
 }
 
 // CurrentSchema는 이 코드가 기대하는 스키마 버전이다.
@@ -149,11 +163,25 @@ func (p *postgres) SchemaVersion(ctx context.Context) (int, error) {
 	return v, err
 }
 
-// AppendEvent는 사건 한 줄을 넣는다. 같은 순번이 이미 있으면 ErrSeqTaken.
-func (p *postgres) AppendEvent(ctx context.Context, seq int, typ string, body []byte) error {
+func (p *postgres) sessionExists(ctx context.Context, id string) error {
+	var n int
+	if err := p.pool.QueryRow(ctx, "SELECT count(*) FROM w05_sessions WHERE id = $1", id).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNoSession
+	}
+	return nil
+}
+
+// AppendEvent는 세션에 사건 한 줄을 넣는다. 같은 순번이 이미 있으면 ErrSeqTaken.
+func (p *postgres) AppendEvent(ctx context.Context, session string, seq int, typ string, body []byte) error {
+	if err := p.sessionExists(ctx, session); err != nil {
+		return err
+	}
 	tag, err := p.pool.Exec(ctx,
-		"INSERT INTO w05_events (seq, type, body) VALUES ($1, $2, $3::jsonb) ON CONFLICT (seq) DO NOTHING",
-		seq, typ, string(body))
+		"INSERT INTO w05_events (session_id, seq, type, body) VALUES ($1, $2, $3, $4::jsonb) ON CONFLICT (session_id, seq) DO NOTHING",
+		session, seq, typ, string(body))
 	if err != nil {
 		return err
 	}
@@ -163,8 +191,11 @@ func (p *postgres) AppendEvent(ctx context.Context, seq int, typ string, body []
 	return nil
 }
 
-func (p *postgres) ListEvents(ctx context.Context) ([]Event, error) {
-	rows, err := p.pool.Query(ctx, "SELECT seq, type, body::text, created_at FROM w05_events ORDER BY seq")
+func (p *postgres) ListEvents(ctx context.Context, session string) ([]Event, error) {
+	if err := p.sessionExists(ctx, session); err != nil {
+		return nil, err
+	}
+	rows, err := p.pool.Query(ctx, "SELECT seq, type, body::text, created_at FROM w05_events WHERE session_id = $1 ORDER BY seq", session)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +213,68 @@ func (p *postgres) ListEvents(ctx context.Context) ([]Event, error) {
 	return out, rows.Err()
 }
 
-func (p *postgres) ResetEvents(ctx context.Context) error {
-	_, err := p.pool.Exec(ctx, "DELETE FROM w05_events")
+func (p *postgres) ResetEvents(ctx context.Context, session string) error {
+	if err := p.sessionExists(ctx, session); err != nil {
+		return err
+	}
+	_, err := p.pool.Exec(ctx, "DELETE FROM w05_events WHERE session_id = $1", session)
 	return err
+}
+
+func (p *postgres) ListSessions(ctx context.Context) ([]Session, error) {
+	rows, err := p.pool.Query(ctx, "SELECT id, name, kind, COALESCE(parent_id, ''), COALESCE(fork_seq, 0), created_at FROM w05_sessions ORDER BY created_at, id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Session
+	for rows.Next() {
+		var s Session
+		if err := rows.Scan(&s.ID, &s.Name, &s.Kind, &s.ParentID, &s.ForkSeq, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// CreateSession은 세션과 처음 사건들을 한 트랜잭션에서 넣는다(분기 도중 끊겨도 반쪽 세션이 남지 않게).
+func (p *postgres) CreateSession(ctx context.Context, s Session, events []Event) error {
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.Background())
+	var parent any
+	if s.ParentID != "" {
+		parent = s.ParentID
+	}
+	tag, err := tx.Exec(ctx, "INSERT INTO w05_sessions (id, name, kind, parent_id, fork_seq) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING",
+		s.ID, s.Name, s.Kind, parent, s.ForkSeq)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrSessionExists
+	}
+	for _, e := range events {
+		if _, err := tx.Exec(ctx, "INSERT INTO w05_events (session_id, seq, type, body) VALUES ($1, $2, $3, $4::jsonb)", s.ID, e.Seq, e.Type, string(e.Body)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (p *postgres) DeleteSession(ctx context.Context, id string) error {
+	if id == MainSession {
+		return ErrMainSession
+	}
+	tag, err := p.pool.Exec(ctx, "DELETE FROM w05_sessions WHERE id = $1 AND kind <> 'main'", id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNoSession
+	}
+	return nil
 }

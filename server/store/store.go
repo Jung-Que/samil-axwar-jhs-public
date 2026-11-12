@@ -22,14 +22,42 @@ type Event struct {
 // ErrSeqTaken은 같은 순번의 사건이 이미 있을 때 돌려준다(동시에 두 사건을 쓰려 할 때).
 var ErrSeqTaken = errors.New("사건 순번이 이미 있다")
 
-// Store는 서버가 쓰는 저장소다.
+// ErrNoSession은 없는 세션을 가리킬 때, ErrMainSession은 기준 세션을 지우려 할 때 돌려준다.
+var (
+	ErrNoSession     = errors.New("세션이 없다")
+	ErrMainSession   = errors.New("기준 세션(main)은 지울 수 없다")
+	ErrSessionExists = errors.New("같은 ID의 세션이 이미 있다")
+)
+
+// 세션 종류. main은 기준 세션(서비스 단계의 운영 세션), sim은 시뮬레이션 세션이다.
+const (
+	MainSession = "main"
+	KindMain    = "main"
+	KindSim     = "sim"
+)
+
+// Session은 이름 있는 사건 로그 하나다. 분기한 세션은 부모와 분기한 사건 번호를 기억한다.
+type Session struct {
+	ID        string
+	Name      string
+	Kind      string // main | sim
+	ParentID  string
+	ForkSeq   int
+	CreatedAt time.Time
+}
+
+// Store는 서버가 쓰는 저장소다. 사건은 세션마다 따로 쌓인다.
 type Store interface {
 	Kind() string // "memory" 또는 "postgres"
 	Ping(ctx context.Context) error
 	SchemaVersion(ctx context.Context) (int, error)
-	AppendEvent(ctx context.Context, seq int, typ string, body []byte) error
-	ListEvents(ctx context.Context) ([]Event, error)
-	ResetEvents(ctx context.Context) error
+	AppendEvent(ctx context.Context, session string, seq int, typ string, body []byte) error
+	ListEvents(ctx context.Context, session string) ([]Event, error)
+	ResetEvents(ctx context.Context, session string) error
+	ListSessions(ctx context.Context) ([]Session, error)
+	// CreateSession은 세션을 만들고 처음 사건(분기면 부모의 앞부분)을 한 번에 넣는다.
+	CreateSession(ctx context.Context, s Session, events []Event) error
+	DeleteSession(ctx context.Context, id string) error
 	Close()
 }
 

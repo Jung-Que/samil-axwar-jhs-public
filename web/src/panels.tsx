@@ -495,16 +495,17 @@ export function TasksView({ v }: { v: View }) {
   );
 }
 
-export function LogView({ v }: { v: View }) {
+export function LogView({ v, onFork, busy }: { v: View; onFork?: (seq: number) => void; busy?: boolean }) {
   const log = [...(v.state.log ?? [])].reverse();
   return (
-    <Section title={`사건 로그 (${log.length})`} mode={["real"]} note="상태는 이 로그를 처음부터 다시 적용해 만든다. 규칙에 맞지 않는 사건은 기록되지 않는다.">
+    <Section title={`사건 로그 (${log.length}) · ${v.session.name}`} mode={["real"]} note="상태는 이 로그를 처음부터 다시 적용해 만든다. 규칙에 맞지 않는 사건은 기록되지 않는다. '여기서 분기'는 그 사건까지를 복사한 시뮬레이션 세션을 만든다(지금 세션은 그대로).">
       {log.length === 0 && <p className="muted small">사건 없음. 왼쪽에서 사건을 넣거나 위의 시연 버튼을 누른다.</p>}
       <ol className="log">
         {log.map((e: LogEntry) => (
           <li key={e.event.seq}>
             <div>
               <b>#{e.event.seq} {EVENT_LABEL[e.event.type] ?? e.event.type}</b> <span className="muted small">{e.event.actor_role} · 업무일 {e.event.sim_date}</span>
+              {onFork && <button className="ghost small" disabled={busy} onClick={() => onFork(e.event.seq)}>여기서 분기</button>}
             </div>
             <ul className="changes">{(e.changes ?? []).map((c, i) => <li key={i}>{c}</li>)}</ul>
           </li>

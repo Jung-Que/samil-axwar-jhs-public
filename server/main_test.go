@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -92,7 +93,7 @@ func TestW05API(t *testing.T) {
 	if rec := do("POST", "/api/w05/scenarios/normal", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"state":"회신 대기"`) {
 		t.Fatalf("정상 시나리오: %d %.300s", rec.Code, rec.Body.String())
 	}
-	evs, _ := st.ListEvents(context.Background())
+	evs, _ := st.ListEvents(context.Background(), store.MainSession)
 	if len(evs) != 4 {
 		t.Fatalf("사건 %d건, 기대 4건", len(evs))
 	}
@@ -101,7 +102,7 @@ func TestW05API(t *testing.T) {
 	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "제출은 승인") {
 		t.Fatalf("잘못된 제출: %d %.300s", rec.Code, rec.Body.String())
 	}
-	if evs, _ := st.ListEvents(context.Background()); len(evs) != 4 {
+	if evs, _ := st.ListEvents(context.Background(), store.MainSession); len(evs) != 4 {
 		t.Fatalf("거부된 사건이 기록됨: %d건", len(evs))
 	}
 	// 고정 필드 입력: 바이어 회신(단가 -7%) → 결정 낡음 → 재검토
@@ -148,6 +149,55 @@ func TestW05AsOfAPI(t *testing.T) {
 	}
 }
 
+// 세션 API(이슈 #37): 새 세션에서 시연, 분기, 비교, 삭제. 기준 세션은 건드리지 않는다.
+func TestW05SessionAPI(t *testing.T) {
+	st := store.NewMemory()
+	h := newHandler(fakeBuild(t), st, newTestService(t, st))
+	do := func(method, path, body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)))
+		return rec
+	}
+	type sess struct {
+		ID   string `json:"id"`
+		Kind string `json:"kind"`
+	}
+	var v struct {
+		Session sess `json:"session"`
+	}
+	rec := do("POST", "/api/w05/scenarios/normal", `{"new_session":true}`)
+	if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &v) != nil || v.Session.Kind != "sim" || !strings.Contains(rec.Body.String(), "[모의]") {
+		t.Fatalf("새 세션 시연: %d %.300s", rec.Code, rec.Body.String())
+	}
+	sim := v.Session.ID
+	if evs, _ := st.ListEvents(context.Background(), store.MainSession); len(evs) != 0 {
+		t.Fatalf("새 세션 시연이 기준 세션을 바꿨다: %d건", len(evs))
+	}
+	rec = do("POST", "/api/w05/sessions/"+sim+"/fork", `{"seq":2,"name":"상신 직후 분기"}`)
+	if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &v) != nil || v.Session.ID == sim {
+		t.Fatalf("분기: %d %.300s", rec.Code, rec.Body.String())
+	}
+	fork := v.Session.ID
+	if rec := do("GET", "/api/w05/state?session="+fork, ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"state":"상신"`) {
+		t.Fatalf("분기 세션 상태(상신 기대): %d %.300s", rec.Code, rec.Body.String())
+	}
+	if rec := do("GET", "/api/w05/compare?a="+sim+"&b="+fork, ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"bid_state":"회신 대기"`) || !strings.Contains(rec.Body.String(), `"bid_state":"상신"`) {
+		t.Fatalf("비교: %d %.300s", rec.Code, rec.Body.String())
+	}
+	if rec := do("DELETE", "/api/w05/sessions/main", ""); rec.Code != http.StatusConflict {
+		t.Fatalf("main 삭제: %d", rec.Code)
+	}
+	if rec := do("DELETE", "/api/w05/sessions/"+fork, ""); rec.Code != 200 {
+		t.Fatalf("분기 삭제: %d", rec.Code)
+	}
+	if rec := do("GET", "/api/w05/state?session="+fork, ""); rec.Code != http.StatusNotFound {
+		t.Fatalf("지운 세션: %d", rec.Code)
+	}
+	if rec := do("GET", "/api/w05/sessions", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"id":"main"`) || !strings.Contains(rec.Body.String(), sim) {
+		t.Fatalf("세션 목록: %d %.300s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestNoBuild(t *testing.T) {
 	h := newHandler(t.TempDir(), store.NewMemory(), nil) // index.html 없음
 	rec := httptest.NewRecorder()
@@ -169,14 +219,21 @@ type downStore struct{}
 func (downStore) Kind() string                               { return "postgres" }
 func (downStore) Ping(context.Context) error                 { return errors.New("db down") }
 func (downStore) SchemaVersion(context.Context) (int, error) { return 0, errors.New("db down") }
-func (downStore) AppendEvent(context.Context, int, string, []byte) error {
+func (downStore) AppendEvent(context.Context, string, int, string, []byte) error {
 	return errors.New("db down")
 }
-func (downStore) ListEvents(context.Context) ([]store.Event, error) {
+func (downStore) ListEvents(context.Context, string) ([]store.Event, error) {
 	return nil, errors.New("db down")
 }
-func (downStore) ResetEvents(context.Context) error { return errors.New("db down") }
-func (downStore) Close()                            {}
+func (downStore) ResetEvents(context.Context, string) error { return errors.New("db down") }
+func (downStore) ListSessions(context.Context) ([]store.Session, error) {
+	return nil, errors.New("db down")
+}
+func (downStore) CreateSession(context.Context, store.Session, []store.Event) error {
+	return errors.New("db down")
+}
+func (downStore) DeleteSession(context.Context, string) error { return errors.New("db down") }
+func (downStore) Close()                                      {}
 
 func TestStoreDown(t *testing.T) {
 	h := newHandler(fakeBuild(t), downStore{}, nil)

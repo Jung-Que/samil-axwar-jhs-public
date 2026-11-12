@@ -182,8 +182,14 @@ type State struct {
 	Eval         *Evaluation       `json:"evaluation"`
 	PrevEval     *Evaluation       `json:"-"`
 	LastBlocks   []string          `json:"last_blocks"`
+	// SessionKind는 이 상태를 만든 세션 종류다(main = 기준 세션, sim = 시뮬레이션 세션, 이슈 #37).
+	// 시뮬레이션 세션의 제출(E7)은 허용하되 [모의]로 표시하고, 모의 가정 사건(E9)은 시뮬레이션 세션에서만 받는다.
+	SessionKind  string `json:"session_kind"`
 	submittedSig string
 }
+
+// IsSim은 시뮬레이션 세션인지 본다.
+func (s *State) IsSim() bool { return s.SessionKind == "sim" }
 
 // NewState는 사건이 하나도 없는 상태다(기초 원장과 가정만 있음).
 func NewState(b *Base) *State {
@@ -418,14 +424,21 @@ func (s *State) Apply(b *Base, e Event) error {
 		s.LastBlocks = nil
 		s.Bid.State = BidAwaiting
 		s.Reservations = nil
+		resState := "가예약"
+		if s.IsSim() {
+			resState = "가예약(모의)"
+		}
 		for _, l := range lines {
 			for _, m := range l.Schedule {
 				if m.Qty > 0 && l.QtyStatus != "미확정" {
-					s.Reservations = append(s.Reservations, Reservation{ProductID: l.ProductID, Month: m.Month, Qty: m.Qty, Basis: strings.Join(m.Basis, "+"), State: "가예약"})
+					s.Reservations = append(s.Reservations, Reservation{ProductID: l.ProductID, Month: m.Month, Qty: m.Qty, Basis: strings.Join(m.Basis, "+"), State: resState})
 				}
 			}
 		}
 		s.submittedSig = contentHash(lines, s.Scenario)
+		if s.IsSim() {
+			note("[모의] 시뮬레이션 세션 제출 — 실제 제출 아님")
+		}
 		note("제안 제출(점검표 통과) → 회신 대기, C-201 가예약 %d건(확정 약속을 밀지 않음, R2)", len(s.Reservations))
 		s.closeTasks("제안서 작성")
 		s.addTask("영업", "바이어 회신 추적(초도일·분할·페널티 기준·생산지)", addBusinessDays(e.SimDate, 5), e.Seq)

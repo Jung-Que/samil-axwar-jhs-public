@@ -657,6 +657,37 @@ button.active {
   white-space: nowrap;
 }
 
+ol.log button {
+  margin-left: 8px;
+}
+
+/* 세션 막대(이슈 #37) */
+.sessionbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: 0 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.sessionbar.is-sim {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.sessionbar select {
+  max-width: 420px;
+}
+
+button.danger {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
 /* 열 제목 아래 출처·단위·기간(이슈 #27) */
 .th-sub {
   display: block;
