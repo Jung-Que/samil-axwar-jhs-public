@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import type { ConfirmRequest, View } from "./types";
+import type { ConfirmRequest, Department, View } from "./types";
 import { Section } from "./panels";
 import { EVENT_LABEL, slug } from "./format";
+import { canEvent } from "./perm";
 
 type Run = (fn: () => Promise<View>) => Promise<void>;
 type Fields = Record<string, unknown>;
@@ -42,9 +43,12 @@ function presets(v: View, type: string): { label: string; payload: Fields }[] {
 }
 
 // 사건 입력: 고정 값(프리셋)을 골라 필드에 채우고, 필요하면 필드를 고친 뒤 기록한다.
-export function EventPanel({ v, run, focus }: { v: View; run: Run; focus?: { event: string; n: number } | null }) {
-  const avail = available(v);
-  const first = NEXT_ORDER.find((k) => avail[k]) ?? "E0_CLOCK"; // 다음에 할 사건을 먼저 고른다
+export function EventPanel({ v, run, focus, dept }: { v: View; run: Run; focus?: { event: string; n: number } | null; dept?: Department }) {
+  // 부서별 권한(이슈 #43): 상태로 가능한 사건 중 내 부서가 넣을 수 있는 것만(시뮬레이션 세션은 대행 포함)
+  const state = available(v);
+  const perm = (k: string) => canEvent(v, dept, k);
+  const avail: Record<string, boolean> = Object.fromEntries(Object.keys(state).map((k) => [k, state[k] && perm(k).ok]));
+  const first = NEXT_ORDER.find((k) => avail[k]) ?? NEXT_ORDER.find((k) => perm(k).ok) ?? "E0_CLOCK"; // 다음에 할 사건을 먼저 고른다
   const [type, setType] = useState(first);
   const [preset, setPreset] = useState(0);
   const [fields, setFields] = useState<Fields | null>(null);
@@ -55,7 +59,7 @@ export function EventPanel({ v, run, focus }: { v: View; run: Run; focus?: { eve
 
   useEffect(() => {
     if (!avail[type]) setType(first);
-  }, [v.state.bid?.state]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [v.state.bid?.state, dept?.code, v.session.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 업무 레인 보드에서 고른 사건으로 바꾼다.
   useEffect(() => {
@@ -83,19 +87,28 @@ export function EventPanel({ v, run, focus }: { v: View; run: Run; focus?: { eve
   };
 
   return (
-    <Section title="사건 입력" mode={["real", "mock"]} note="입력은 정리해 둔 고정 값(구조화 필드)만 쓴다. 바이어·이사회 회신은 모의 값이다. 규칙에 맞지 않는 사건은 거부되고 기록되지 않는다.">
+    <Section title="사건 입력" mode={["real", "mock"]} note="입력은 정리해 둔 고정 값(구조화 필드)만 쓴다. 바이어·이사회 회신은 모의 값이다. 규칙에 맞지 않는 사건은 거부되고 기록되지 않는다. 내 부서 권한 밖의 사건은 막힌다(시뮬레이션 세션은 대행).">
       <label className="field">
         <span>사건</span>
         <select value={type} onChange={(e) => setType(e.target.value)}>
           {Object.entries(EVENT_LABEL)
-            .filter(([k]) => k !== "E3_REPLY")
-            .map(([k, label]) => (
-              <option key={k} value={k} disabled={!avail[k]}>
-                {label}{avail[k] ? "" : " (지금 불가)"}
-              </option>
-            ))}
+            .filter(([k]) => k in ACTOR)
+            .map(([k, label]) => {
+              const p = perm(k);
+              const why = !p.ok ? ` (${p.reason})` : !state[k] ? " (지금 불가)" : p.proxy ? ` (${p.reason})` : "";
+              return (
+                <option key={k} value={k} disabled={!avail[k]}>
+                  {label}{why}
+                </option>
+              );
+            })}
         </select>
       </label>
+      {dept && v.session.kind === "main" && (dept.events ?? []).every((e) => e === "E3_REPLY") && (dept.replies ?? []).length > 0 && (
+        <p className="small muted">{dept.label} 부서는 확인 요청 회신({(dept.replies ?? []).join("·")})을 넣는다 — "내 업무"·"확인 요청·결정" 탭</p>
+      )}
+      {perm(type).proxy && <p className="small warn-text">[모의 대행] {perm(type).reason} — 입력 부서 {dept?.label}로 기록된다</p>}
+      {!perm(type).ok && <p className="small bad">{perm(type).reason}</p>}
 
       {kind && fields && (
         <div className="fieldbox">
@@ -217,22 +230,31 @@ function BuyerForm({ f, set }: { f: Fields; set: (f: Fields) => void }) {
 }
 
 // 확인 요청: 결정 모델이 무엇을 누구에게 물을지 정한다. 내부 부서 회신(E3)은 여기서 모의 입력한다.
-export function RequestsView({ v, run }: { v: View; run: Run }) {
+export function RequestsView({ v, run, dept }: { v: View; run: Run; dept?: Department }) {
   const rs = v.state.requests ?? [];
   const [open, setOpen] = useState<string | null>(null);
   return (
-    <Section title={`확인 요청 (열림 ${rs.filter((r) => r.state !== "반영").length})`} mode={["real", "mock"]} note="요청 생성·기한 초과·재요청은 실제 작동, 회신 내용은 모의다. 바이어 항목(CR-04~06)은 E4 바이어 회신으로 반영된다.">
+    <Section title={`확인 요청 (열림 ${rs.filter((r) => r.state !== "반영").length})`} mode={["real", "mock"]} note="요청 생성·기한 초과·재요청은 실제 작동, 회신 내용은 모의다. 바이어 항목(CR-04~06)은 E4 바이어 회신으로 반영된다. 회신은 요청 대상 부서만 넣는다(시뮬레이션 세션은 대행).">
       {rs.length === 0 && <p className="muted small">RFP 접수(E1) 뒤 생성된다.</p>}
       <table className="grid text">
         <thead><tr><th>ID</th><th>대상</th><th>질문</th><th>막는 판단</th><th>기한</th><th>상태</th><th /></tr></thead>
         <tbody>
-          {rs.map((r) => (
-            <tr key={r.request_id}>
-              <td>{r.request_id}</td><td>{r.to_role}</td><td>{r.question}</td><td className="small">{(r.blocks ?? []).join(", ")}</td><td>{r.due_date}</td>
-              <td><span className={`pill pill-${slug(r.state)}`}>{r.state}</span>{r.mock_reply && <span className="muted small"> 모의</span>}</td>
-              <td>{r.state !== "반영" && r.to_role !== "바이어" && <button className="ghost small" onClick={() => setOpen(open === r.request_id ? null : r.request_id)}>회신 입력</button>}</td>
-            </tr>
-          ))}
+          {rs.map((r) => {
+            const p = canEvent(v, dept, "E3_REPLY", r);
+            return (
+              <tr key={r.request_id} className={dept && r.to_role === dept.id ? "row-strong" : ""}>
+                <td>{r.request_id}</td><td>{r.to_role}</td><td>{r.question}</td><td className="small">{(r.blocks ?? []).join(", ")}</td><td>{r.due_date}</td>
+                <td><span className={`pill pill-${slug(r.state)}`}>{r.state}</span>{r.mock_reply && <span className="muted small"> 모의</span>}</td>
+                <td>
+                  {r.state !== "반영" && r.to_role !== "바이어" && (
+                    <button className="ghost small" disabled={!p.ok} title={p.reason ?? ""} onClick={() => setOpen(open === r.request_id ? null : r.request_id)}>
+                      {p.proxy ? "대행 회신" : "회신 입력"}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
       {open && <ReplyForm r={rs.find((x) => x.request_id === open)!} run={run} done={() => setOpen(null)} />}

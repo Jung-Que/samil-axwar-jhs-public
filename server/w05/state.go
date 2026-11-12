@@ -45,6 +45,8 @@ type Event struct {
 	SimDate string          `json:"sim_date"`
 	Payload json.RawMessage `json:"payload"`
 	At      string          `json:"created_at,omitempty"`
+	// By는 실제로 입력한 사용자 부서다(이슈 #43). 시뮬레이션 세션에서 다른 부서를 대행하면 Actor와 다르다.
+	By string `json:"by,omitempty"`
 }
 
 // RFPFields는 RFP를 정리한 고정 필드다(E1 입력).
@@ -140,6 +142,7 @@ type Task struct {
 type Decision struct {
 	ID            string            `json:"decision_id"`
 	Approver      string            `json:"approver_role"`
+	EnteredBy     string            `json:"entered_by,omitempty"` // 시뮬레이션 대행이면 실제 입력 부서(이슈 #43)
 	Participation string            `json:"participation"`
 	Options       map[string]string `json:"options"`
 	Conditions    []string          `json:"conditions"`
@@ -204,6 +207,13 @@ func (s *State) Apply(b *Base, e Event) error {
 	note := func(f string, a ...any) { ch = append(ch, fmt.Sprintf(f, a...)) }
 	if e.SimDate == "" {
 		e.SimDate = s.Scenario.SimDate
+	}
+	// 부서별 권한표(이슈 #43): 그 사건을 그 부서가 넣을 수 있는가. 재적용에도 같은 규칙을 쓴다
+	if err := eventActorAllowed(e.Type, e.Actor); err != nil {
+		return err
+	}
+	if e.By != "" && e.By != e.Actor {
+		note("[모의 대행] %s 사용자가 %s 권한으로 입력(시뮬레이션 세션)", e.By, e.Actor)
 	}
 
 	switch e.Type {
@@ -341,7 +351,7 @@ func (s *State) Apply(b *Base, e Event) error {
 		for _, d := range s.Decisions {
 			d.Freshness = "낡음"
 		}
-		d := &Decision{ID: fmt.Sprintf("D-%02d", len(s.Decisions)+1), Approver: e.Actor, Participation: p.Participation,
+		d := &Decision{ID: fmt.Sprintf("D-%02d", len(s.Decisions)+1), Approver: e.Actor, EnteredBy: e.By, Participation: p.Participation,
 			Options: p.Options, Conditions: p.Conditions, PriceFloor: floor, Note: p.Note, DecidedAt: p.DecidedAt, Freshness: "최신", Seq: e.Seq}
 		s.Decisions = append(s.Decisions, d)
 		s.closeTasks("승인 검토")
@@ -376,8 +386,9 @@ func (s *State) Apply(b *Base, e Event) error {
 		if r == nil || r.State == "반영" {
 			return fmt.Errorf("열린 확인 요청이 아니다: %s", p.RequestID)
 		}
-		if want, ok := RequestResponder[r.ID]; ok && e.Actor != want {
-			return fmt.Errorf("회신 권한 없음: %s는 %s만 회신한다(입력자 %q)", r.ID, want, e.Actor)
+		// 회신은 요청 대상 부서만(부서별 권한, 이슈 #43). 바이어 요청은 E4(영업이 바이어 회신 입력)로 반영한다
+		if r.ToRole != "바이어" && e.Actor != r.ToRole {
+			return fmt.Errorf("회신 권한 없음: %s는 %s만 회신한다(입력자 %q)", r.ID, r.ToRole, e.Actor)
 		}
 		if err := s.applyAnswer(b, r.ID, p.Answer); err != nil {
 			return err
@@ -622,9 +633,8 @@ func anyList(v any) []string {
 	return out
 }
 
-// RequestResponder는 회신 권한이 정해진 확인 요청이다. CR-09(기존 고객 약속 조정)는 영업 임원만 회신한다
+// 확인 요청 회신은 요청 대상 부서(ToRole)만 넣는다(이슈 #43). CR-09(기존 고객 약속 조정)는 영업 임원이다
 // (approval_authority_policy "C-101 재협상/판가 = 영업 임원", 가정 A-20).
-var RequestResponder = map[string]string{"CR-09": "영업 임원"}
 
 // applyAnswer는 내부 부서 회신(E3)을 가정·시나리오에 반영한다.
 func (s *State) applyAnswer(b *Base, id string, a map[string]any) error {

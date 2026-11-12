@@ -13,6 +13,9 @@ import (
 
 // W05 업무 API. 상태는 사건 로그를 다시 적용해 만들고, 사건은 규칙에 맞을 때만 기록된다.
 // 사건 로그는 세션마다 따로다(이슈 #37). 아래 엔드포인트의 ?session=은 없으면 기준 세션(main)이다.
+// 쓰기 요청은 사용자 부서 헤더 X-W05-Role(영문 코드)이 필요하다(없으면 401). 권한은 부서별이다(이슈 #43, permissions.go):
+// 기준 세션은 자기 부서 권한으로만 입력(다르면 403), 시뮬레이션 세션은 다른 부서 대행을 기록하며 허용,
+// 기준 세션 초기화·기준 세션 시연·세션 삭제는 운영 관리만. 사건 권한표 위반은 409.
 //
 //	GET    /api/w05/state                현재 상태(평가·제안·확인 요청·작업·결정·사건 로그, 세션 목록)
 //	POST   /api/w05/events               사건 입력 {type, actor_role, payload} — payload는 고정 필드(자유 문장·LLM 현재 제외)
@@ -66,7 +69,7 @@ func registerW05(mux *http.ServeMux, svc *w05.Service) {
 			AsOf string `json:"as_of"`
 		}
 		_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&in)
-		v, err := svc.NewSession(r.Context(), strings.TrimSpace(in.Name), strings.TrimSpace(in.AsOf))
+		v, err := svc.NewSessionAs(r.Context(), roleOf(r), strings.TrimSpace(in.Name), strings.TrimSpace(in.AsOf))
 		respond(w, v, err)
 	})
 
@@ -81,7 +84,7 @@ func registerW05(mux *http.ServeMux, svc *w05.Service) {
 		if !decode(w, r, &in) {
 			return
 		}
-		v, err := svc.Fork(r.Context(), r.PathValue("id"), in.Seq, strings.TrimSpace(in.Name))
+		v, err := svc.ForkAs(r.Context(), roleOf(r), r.PathValue("id"), in.Seq, strings.TrimSpace(in.Name))
 		respond(w, v, err)
 	})
 
@@ -89,7 +92,7 @@ func registerW05(mux *http.ServeMux, svc *w05.Service) {
 		if unavailable(w) {
 			return
 		}
-		if err := svc.DeleteSession(r.Context(), r.PathValue("id")); err != nil {
+		if err := svc.DeleteSessionAs(r.Context(), roleOf(r), r.PathValue("id")); err != nil {
 			writeErr(w, err)
 			return
 		}
@@ -145,7 +148,7 @@ func registerW05(mux *http.ServeMux, svc *w05.Service) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "type이 필요하다"})
 			return
 		}
-		v, err := svc.SubmitIn(r.Context(), sessionOf(r), in.Type, in.Actor, in.Payload)
+		v, err := svc.SubmitAs(r.Context(), sessionOf(r), roleOf(r), in.Type, strings.TrimSpace(in.Actor), in.Payload)
 		respond(w, v, err)
 	})
 
@@ -154,7 +157,7 @@ func registerW05(mux *http.ServeMux, svc *w05.Service) {
 			return
 		}
 		in := optBody(r)
-		v, err := svc.ResetIn(r.Context(), sessionOf(r), in.AsOf)
+		v, err := svc.ResetAs(r.Context(), sessionOf(r), roleOf(r), in.AsOf)
 		respond(w, v, err)
 	})
 
@@ -166,9 +169,9 @@ func registerW05(mux *http.ServeMux, svc *w05.Service) {
 		var v w05.View
 		var err error
 		if in.NewSession {
-			v, err = svc.StartScenario(r.Context(), r.PathValue("id"), in.AsOf)
+			v, err = svc.StartScenarioAs(r.Context(), roleOf(r), r.PathValue("id"), in.AsOf)
 		} else {
-			v, err = svc.RunScenarioIn(r.Context(), sessionOf(r), r.PathValue("id"), in.AsOf)
+			v, err = svc.RunScenarioAs(r.Context(), sessionOf(r), roleOf(r), r.PathValue("id"), in.AsOf)
 		}
 		respond(w, v, err)
 	})
@@ -203,6 +206,18 @@ func registerW05(mux *http.ServeMux, svc *w05.Service) {
 // sessionOf는 ?session= 값이다(없으면 ""= 기준 세션).
 func sessionOf(r *http.Request) string { return strings.TrimSpace(r.URL.Query().Get("session")) }
 
+// RoleHeader는 사용자 부서를 싣는 헤더다(영문 코드). 지금은 화면의 부서 선택(모의 로그인)이 넣고,
+// 서비스 단계에서는 인증된 사용자의 부서로 바꾼다. 쓰기 요청은 이 헤더가 필요하다(이슈 #43).
+const RoleHeader = "X-W05-Role"
+
+// roleOf는 헤더 코드를 부서 ID로 바꾼다(없거나 모르는 코드면 "" → 서비스가 401).
+func roleOf(r *http.Request) string {
+	if d, ok := w05.DeptByCode(r.Header.Get(RoleHeader)); ok {
+		return d.ID
+	}
+	return ""
+}
+
 type optIn struct {
 	AsOf       string `json:"as_of"`
 	NewSession bool   `json:"new_session"`
@@ -221,6 +236,10 @@ func writeErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, w05.ErrNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+	case errors.Is(err, w05.ErrNoRole):
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
+	case errors.Is(err, w05.ErrForbidden):
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})
 	case errors.Is(err, w05.ErrInvalid):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 	default:
@@ -255,6 +274,10 @@ func respond(w http.ResponseWriter, v w05.View, err error) {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error(), "view": v})
 	case errors.Is(err, w05.ErrNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": err.Error()})
+	case errors.Is(err, w05.ErrNoRole):
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": err.Error()})
+	case errors.Is(err, w05.ErrForbidden):
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": err.Error(), "view": v})
 	default:
 		log.Printf("api/w05: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -144,6 +145,125 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// ---- 부서별 권한으로 쓰는 진입점(이슈 #43). user는 사용자 부서 ID(권한표 Departments의 ID)다. ----
+
+func requireDept(user string) (Department, error) {
+	d, ok := deptByID(user)
+	if !ok {
+		return Department{}, fmt.Errorf("%w: %q", ErrNoRole, user)
+	}
+	return d, nil
+}
+
+func requireFeature(user, feat, what string) error {
+	d, err := requireDept(user)
+	if err != nil {
+		return err
+	}
+	if !slices.Contains(d.Features, feat) {
+		return fmt.Errorf("%w: %s는 %s 부서 권한이 아니다", ErrForbidden, what, d.Label)
+	}
+	return nil
+}
+
+// SubmitAs는 사용자 부서로 사건을 넣는다. actor가 비면 사용자 부서다.
+// 기준 세션은 자기 부서 권한으로만(다르면 403), 시뮬레이션 세션은 다른 부서 대행을 허용하고 입력 부서(By)를 남긴다.
+// 사건 권한표(그 사건을 그 부서가 넣을 수 있는가)는 상태 적용에서 모든 세션에 같이 본다(409).
+func (s *Service) SubmitAs(ctx context.Context, sid, user, typ, actor string, payload json.RawMessage) (View, error) {
+	d, err := requireDept(user)
+	if err != nil {
+		return View{}, err
+	}
+	if actor == "" {
+		actor = user
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cs, err := s.load(ctx, sid)
+	if err != nil {
+		return View{}, err
+	}
+	if cs.meta.Kind == store.KindMain && actor != user {
+		return s.view(ctx, cs), fmt.Errorf("%w: 기준 세션에서는 자기 부서 권한으로만 입력한다(사용자 %s, 입력 권한 %s) — 대행은 시뮬레이션 세션에서", ErrForbidden, d.Label, actor)
+	}
+	if cs.meta.Kind != store.KindMain && !slices.Contains(d.Features, FeatSimAct) {
+		return s.view(ctx, cs), fmt.Errorf("%w: 시뮬레이션 입력은 %s 부서 권한이 아니다", ErrForbidden, d.Label)
+	}
+	return s.submitBy(ctx, sid, typ, actor, user, payload)
+}
+
+func (s *Service) kindOf(ctx context.Context, sid string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cs, err := s.load(ctx, sid)
+	if err != nil {
+		return "", err
+	}
+	return cs.meta.Kind, nil
+}
+
+// ResetAs는 세션을 비운다. 기준 세션은 운영 관리만, 시뮬레이션 세션은 모든 부서.
+func (s *Service) ResetAs(ctx context.Context, sid, user, asOf string) (View, error) {
+	kind, err := s.kindOf(ctx, sid)
+	if err != nil {
+		return View{}, err
+	}
+	feat, what := FeatSimSession, "시뮬레이션 세션 초기화"
+	if kind == store.KindMain {
+		feat, what = FeatMainReset, "기준 세션 초기화"
+	}
+	if err := requireFeature(user, feat, what); err != nil {
+		return View{}, err
+	}
+	return s.ResetIn(ctx, sid, asOf)
+}
+
+// RunScenarioAs는 세션 자리에서 시연을 돌린다(기준 세션은 운영 관리만).
+func (s *Service) RunScenarioAs(ctx context.Context, sid, user, id, asOf string) (View, error) {
+	kind, err := s.kindOf(ctx, sid)
+	if err != nil {
+		return View{}, err
+	}
+	feat, what := FeatSimSession, "시뮬레이션 세션 시연"
+	if kind == store.KindMain {
+		feat, what = FeatMainReset, "기준 세션 시연(초기화 후 실행)"
+	}
+	if err := requireFeature(user, feat, what); err != nil {
+		return View{}, err
+	}
+	return s.RunScenarioIn(ctx, sid, id, asOf)
+}
+
+// StartScenarioAs·NewSessionAs·ForkAs는 시뮬레이션 세션을 만든다(모든 부서).
+func (s *Service) StartScenarioAs(ctx context.Context, user, id, asOf string) (View, error) {
+	if err := requireFeature(user, FeatSimSession, "시뮬레이션 세션 시연"); err != nil {
+		return View{}, err
+	}
+	return s.StartScenario(ctx, id, asOf)
+}
+
+func (s *Service) NewSessionAs(ctx context.Context, user, name, asOf string) (View, error) {
+	if err := requireFeature(user, FeatSimSession, "시뮬레이션 세션 만들기"); err != nil {
+		return View{}, err
+	}
+	return s.NewSession(ctx, name, asOf)
+}
+
+func (s *Service) ForkAs(ctx context.Context, user, sid string, seq int, name string) (View, error) {
+	if err := requireFeature(user, FeatSimSession, "분기"); err != nil {
+		return View{}, err
+	}
+	return s.Fork(ctx, sid, seq, name)
+}
+
+// DeleteSessionAs는 시뮬레이션 세션을 지운다(운영 관리만).
+func (s *Service) DeleteSessionAs(ctx context.Context, user, sid string) error {
+	if err := requireFeature(user, FeatSessionDrop, "세션 삭제"); err != nil {
+		return err
+	}
+	return s.DeleteSession(ctx, sid)
 }
 
 // SweepIn은 세션의 지금 시나리오로 민감도 격자를 돌린다(사건을 남기지 않으므로 기준 세션에서도 된다).

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import type { Backtest, Inbox, Lane, LaneAction, LineRow, View } from "./types";
+import type { Backtest, Department, Inbox, Lane, LaneAction, LineRow, View } from "./types";
 import { ColHead, Section, batchSource } from "./panels";
 import { PRODUCT_LABEL, ea, slug } from "./format";
+import { canFeature } from "./perm";
 
 type Run = (fn: () => Promise<View>) => Promise<void>;
 
@@ -20,10 +21,13 @@ function addMonths(d: string, n: number): string {
 }
 
 // 기준일 막대: 날짜를 고르면 그날까지의 기록만으로 새 테스트 세션을 시작한다. 시계는 앞으로만 간다(E0).
-export function AsOfBar({ v, run, busy }: { v: View; run: Run; busy: boolean }) {
+export function AsOfBar({ v, run, busy, dept }: { v: View; run: Run; busy: boolean; dept?: Department }) {
   const [pick, setPick] = useState(v.as_of);
   useEffect(() => setPick(v.as_of), [v.as_of]);
   const sim = v.state.scenario.sim_date;
+  // 시계: 기준 세션은 운영 관리만, 시뮬레이션 세션은 모든 부서(시스템 대행)
+  const canClock = v.session.kind === "main" ? canFeature(dept, "main.clock") : canFeature(dept, "sim.act");
+  const clockWhy = canClock ? "" : v.session.kind === "main" ? "기준 세션 시계는 운영 관리 부서만" : "부서를 먼저 고른다";
   const clock = (to: string) => run(() => api.event("E0_CLOCK", "시스템", { sim_date: to }));
   return (
     <div className="asof">
@@ -32,7 +36,7 @@ export function AsOfBar({ v, run, busy }: { v: View; run: Run; busy: boolean }) 
           <span>기준일</span>
           <input type="date" min={v.as_of_min} max={v.as_of_max} value={pick} onChange={(e) => setPick(e.target.value)} />
         </label>
-        <button disabled={busy || !pick} title="그 날짜로 시작하는 새 시뮬레이션 세션을 만든다(지금 세션은 그대로)" onClick={() => run(() => api.newSession("", pick))}>이 날짜로 새 세션</button>
+        <button disabled={busy || !pick || !dept} title={dept ? "그 날짜로 시작하는 새 시뮬레이션 세션을 만든다(지금 세션은 그대로)" : "부서를 먼저 고른다"} onClick={() => run(() => api.newSession("", pick))}>이 날짜로 새 세션</button>
         <span className="presets">
           {PRESETS.map((d) => (
             <button key={d} className={d === pick ? "ghost small active" : "ghost small"} disabled={busy} onClick={() => setPick(d)}>
@@ -48,9 +52,9 @@ export function AsOfBar({ v, run, busy }: { v: View; run: Run; busy: boolean }) 
         <span className="chip">이사회 {v.board_date}</span>
         {v.state.evaluation.future_snapshot && <span className="chip warn" title="능력 스냅샷은 자료 마지막 날(2026-06-30) 것 하나뿐이다(T2)">미래 자료: 능력 스냅샷 {v.data_end}</span>}
         <span className="muted small">시계</span>
-        <button className="ghost small" disabled={busy} onClick={() => clock(addDays(sim, 1))}>+1일</button>
-        <button className="ghost small" disabled={busy} onClick={() => clock(addDays(sim, 7))}>+1주</button>
-        <button className="ghost small" disabled={busy} onClick={() => clock(addMonths(sim, 1))}>+1달</button>
+        <button className="ghost small" disabled={busy || !canClock} title={clockWhy} onClick={() => clock(addDays(sim, 1))}>+1일</button>
+        <button className="ghost small" disabled={busy || !canClock} title={clockWhy} onClick={() => clock(addDays(sim, 7))}>+1주</button>
+        <button className="ghost small" disabled={busy || !canClock} title={clockWhy} onClick={() => clock(addMonths(sim, 1))}>+1달</button>
       </div>
     </div>
   );

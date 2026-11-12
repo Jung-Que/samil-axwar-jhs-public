@@ -11,10 +11,39 @@ export class ApiError extends Error {
   }
 }
 
+// 사용자 부서(이슈 #43). 지금은 화면에서 고르는 모의 로그인이고, 서버로는 영문 코드를 X-W05-Role 헤더로 보낸다.
+// 서비스 단계에서는 인증된 사용자의 부서로 바뀐다. 쓰기 요청은 부서가 없으면 서버가 401을 돌려준다.
+const ROLE_KEY = "w05.role";
+let role = (() => {
+  const fromUrl = new URLSearchParams(window.location.search).get("role"); // 개발·시연용 링크(서비스 단계에서는 인증)
+  if (fromUrl) return fromUrl;
+  try {
+    return localStorage.getItem(ROLE_KEY) || "";
+  } catch {
+    return "";
+  }
+})();
+
+export function currentRole(): string {
+  return role;
+}
+
+export function setRole(code: string) {
+  role = code;
+  try {
+    localStorage.setItem(ROLE_KEY, code);
+  } catch {
+    /* 저장 불가여도 이번 화면에서는 쓴다 */
+  }
+}
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (role) headers["X-W05-Role"] = role;
   const r = await fetch(path, {
     method,
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await r.json().catch(() => ({}));
@@ -39,7 +68,12 @@ export function currentSession(): string {
   return session;
 }
 
-export function setSession(id: string) {
+// 지금 세션 종류. 기준 세션은 자기 부서 권한으로만 넣으므로 actor를 비워 서버가 사용자 부서를 쓰게 하고,
+// 시뮬레이션 세션은 그 사건의 본래 부서(대행)를 보낸다.
+let sessionKind: "main" | "sim" = "main";
+
+export function setSession(id: string, kind?: "main" | "sim") {
+  if (kind) sessionKind = kind;
   session = id || "main";
   try {
     localStorage.setItem(KEY, session);
@@ -52,8 +86,9 @@ const withSession = (path: string, id = session) => `${path}${path.includes("?")
 
 export const api = {
   state: () => call<View>("GET", withSession("/api/w05/state")),
-  // 사건은 고정 필드로만 넣는다(자유 문장·LLM 현재 제외).
-  event: (type: string, actor_role: string, payload: unknown) => call<View>("POST", withSession("/api/w05/events"), { type, actor_role, payload }),
+  // 사건은 고정 필드로만 넣는다(자유 문장·LLM 현재 제외). owner는 그 사건의 본래 부서(시뮬레이션 대행에 쓴다).
+  event: (type: string, owner: string, payload: unknown) =>
+    call<View>("POST", withSession("/api/w05/events"), { type, actor_role: sessionKind === "sim" ? owner : "", payload }),
   // 지금 세션을 비운다. as_of가 있으면 그 기준일로 다시 시작한다.
   reset: (as_of?: string) => call<View>("POST", withSession("/api/w05/reset"), as_of ? { as_of } : {}),
   // 시연: newSession이면 새 시뮬레이션 세션에서 돌린다(기존 세션 보존).

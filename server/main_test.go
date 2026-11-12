@@ -85,11 +85,8 @@ func TestRoutes(t *testing.T) {
 func TestW05API(t *testing.T) {
 	st := store.NewMemory()
 	h := newHandler(fakeBuild(t), st, newTestService(t, st))
-	do := func(method, path, body string) *httptest.ResponseRecorder {
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)))
-		return rec
-	}
+	role := "admin" // 부서 헤더(이슈 #43). 단계마다 바꾼다
+	do := func(method, path, body string) *httptest.ResponseRecorder { return doAs(h, role, method, path, body) }
 	if rec := do("POST", "/api/w05/scenarios/normal", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"state":"회신 대기"`) {
 		t.Fatalf("정상 시나리오: %d %.300s", rec.Code, rec.Body.String())
 	}
@@ -97,7 +94,8 @@ func TestW05API(t *testing.T) {
 	if len(evs) != 4 {
 		t.Fatalf("사건 %d건, 기대 4건", len(evs))
 	}
-	// 회신 대기 상태에서 다시 제출하면 규칙 위반
+	// 회신 대기 상태에서 다시 제출하면 규칙 위반(영업 부서로 입력)
+	role = "sales"
 	rec := do("POST", "/api/w05/events", `{"type":"E7_SUBMIT_PROPOSAL","actor_role":"영업","payload":{}}`)
 	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "제출은 승인") {
 		t.Fatalf("잘못된 제출: %d %.300s", rec.Code, rec.Body.String())
@@ -114,6 +112,22 @@ func TestW05API(t *testing.T) {
 	if rec := do("POST", "/api/w05/ai/structure", `{"kind":"buyer_reply","text":"회신"}`); rec.Code != 404 {
 		t.Fatalf("AI 구조화 경로가 남아 있음: %d", rec.Code)
 	}
+	// 부서별 권한(이슈 #43): 영업은 기준 세션을 초기화할 수 없고, 다른 부서 권한으로 입력할 수 없다
+	if rec := do("POST", "/api/w05/reset", ""); rec.Code != http.StatusForbidden {
+		t.Fatalf("영업의 기준 세션 초기화: %d", rec.Code)
+	}
+	if rec := do("POST", "/api/w05/events", `{"type":"E2_DECISION","actor_role":"CEO/이사회","payload":{}}`); rec.Code != http.StatusForbidden {
+		t.Fatalf("영업이 CEO/이사회 권한으로 입력: %d %.200s", rec.Code, rec.Body.String())
+	}
+	// 부서 헤더 없는 쓰기는 401
+	role = ""
+	if rec := do("POST", "/api/w05/events", `{"type":"E5_NEW_ORDER","payload":{}}`); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("부서 없는 쓰기: %d", rec.Code)
+	}
+	if rec := do("GET", "/api/w05/state", ""); rec.Code != 200 {
+		t.Fatalf("부서 없는 조회: %d", rec.Code)
+	}
+	role = "admin"
 	if rec := do("POST", "/api/w05/scenarios/nope", ""); rec.Code != 500 {
 		t.Fatalf("없는 시나리오: %d", rec.Code)
 	}
@@ -122,15 +136,23 @@ func TestW05API(t *testing.T) {
 	}
 }
 
+// doAs는 사용자 부서 헤더(영문 코드)를 붙여 요청한다(role이 비면 헤더 없음).
+func doAs(h http.Handler, role, method, path, body string) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	if role != "" {
+		req.Header.Set(RoleHeader, role)
+	}
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
 // 기준일 재현 API: 기준일 세션 시작 → 접수함·정답 비교·레인/라인 보드.
 func TestW05AsOfAPI(t *testing.T) {
 	st := store.NewMemory()
 	h := newHandler(fakeBuild(t), st, newTestService(t, st))
-	do := func(method, path, body string) *httptest.ResponseRecorder {
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)))
-		return rec
-	}
+	role := "admin" // 부서 헤더(이슈 #43). 단계마다 바꾼다
+	do := func(method, path, body string) *httptest.ResponseRecorder { return doAs(h, role, method, path, body) }
 	rec := do("POST", "/api/w05/reset", `{"as_of":"2025-12-31"}`)
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"as_of":"2025-12-31"`) || !strings.Contains(rec.Body.String(), `"line_board"`) {
 		t.Fatalf("기준일 세션: %d %.300s", rec.Code, rec.Body.String())
@@ -153,11 +175,8 @@ func TestW05AsOfAPI(t *testing.T) {
 func TestW05SessionAPI(t *testing.T) {
 	st := store.NewMemory()
 	h := newHandler(fakeBuild(t), st, newTestService(t, st))
-	do := func(method, path, body string) *httptest.ResponseRecorder {
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)))
-		return rec
-	}
+	role := "admin" // 부서 헤더(이슈 #43). 단계마다 바꾼다
+	do := func(method, path, body string) *httptest.ResponseRecorder { return doAs(h, role, method, path, body) }
 	type sess struct {
 		ID   string `json:"id"`
 		Kind string `json:"kind"`
@@ -187,6 +206,15 @@ func TestW05SessionAPI(t *testing.T) {
 	if rec := do("DELETE", "/api/w05/sessions/main", ""); rec.Code != http.StatusConflict {
 		t.Fatalf("main 삭제: %d", rec.Code)
 	}
+	// 세션 삭제는 운영 관리만, 시뮬레이션 세션 대행 입력은 기록된다(이슈 #43)
+	role = "finance"
+	if rec := do("DELETE", "/api/w05/sessions/"+fork, ""); rec.Code != http.StatusForbidden {
+		t.Fatalf("재무·전략의 세션 삭제: %d", rec.Code)
+	}
+	if rec := do("POST", "/api/w05/events?session="+fork, `{"type":"E2_DECISION","actor_role":"CEO/이사회","payload":{"participation":"조건부","options":{"OPT-02":"승인"}}}`); rec.Code != 200 || !strings.Contains(rec.Body.String(), "[모의 대행] 재무·전략 사용자가 CEO/이사회 권한으로 입력") || !strings.Contains(rec.Body.String(), `"entered_by":"재무·전략"`) {
+		t.Fatalf("시뮬레이션 대행 입력: %d %.300s", rec.Code, rec.Body.String())
+	}
+	role = "admin"
 	if rec := do("DELETE", "/api/w05/sessions/"+fork, ""); rec.Code != 200 {
 		t.Fatalf("분기 삭제: %d", rec.Code)
 	}

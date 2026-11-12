@@ -458,7 +458,7 @@ export function DecisionsView({ v }: { v: View }) {
       {ds.map((d) => (
         <div key={d.decision_id} className="decision">
           <div>
-            <b>{d.decision_id}</b> {d.approver_role} · {d.decided_at} · 참여 <b>{d.participation}</b>{" "}
+            <b>{d.decision_id}</b> {d.approver_role}{d.entered_by && d.entered_by !== d.approver_role ? ` (대행 입력 ${d.entered_by}, 모의)` : ""} · {d.decided_at} · 참여 <b>{d.participation}</b>{" "}
             <span className={`pill pill-${slug(d.freshness)}`}>{d.freshness}</span>
           </div>
           <div className="small">
@@ -505,7 +505,10 @@ export function LogView({ v, onFork, busy }: { v: View; onFork?: (seq: number) =
         {log.map((e: LogEntry) => (
           <li key={e.event.seq}>
             <div>
-              <b>#{e.event.seq} {EVENT_LABEL[e.event.type] ?? e.event.type}</b> <span className="muted small">{e.event.actor_role} · 업무일 {e.event.sim_date}</span>
+              <b>#{e.event.seq} {EVENT_LABEL[e.event.type] ?? e.event.type}</b>{" "}
+              <span className="muted small">
+                권한 {e.event.actor_role}{e.event.by && e.event.by !== e.event.actor_role ? ` · 대행 입력 ${e.event.by}` : e.event.by ? "" : " · 내부 실행"} · 업무일 {e.event.sim_date}
+              </span>
               {onFork && <button className="ghost small" disabled={busy} onClick={() => onFork(e.event.seq)}>여기서 분기</button>}
             </div>
             <ul className="changes">{(e.changes ?? []).map((c, i) => <li key={i}>{c}</li>)}</ul>

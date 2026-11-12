@@ -126,8 +126,9 @@ type View struct {
 	Basis       DataBasis         `json:"data_basis"` // 수치 출처·단위·기간, 원본 간 규모 차이(표시용)
 	Scenarios   []ScenarioInfo    `json:"scenarios"`
 	Conditions  map[string]string `json:"condition_codes"`
-	Session     SessionInfo       `json:"session"`  // 지금 보는 세션
-	Sessions    []SessionInfo     `json:"sessions"` // 전체 세션 목록(세션 선택기)
+	Session     SessionInfo       `json:"session"`     // 지금 보는 세션
+	Sessions    []SessionInfo     `json:"sessions"`    // 전체 세션 목록(세션 선택기)
+	Departments []Department      `json:"departments"` // 부서별 권한표(이슈 #43)
 }
 
 // SessionInfo는 화면에 보이는 세션 정보다.
@@ -162,7 +163,7 @@ func (s *Service) view(ctx context.Context, cs *session) View {
 		AsOf: sc.AsOf, BoardDate: sc.BoardDate, Cutoff: CutoffOf(sc.SimDate), AsOfMin: AsOfMin, AsOfMax: AsOfMax, DataEnd: DataEnd,
 		Lanes: st.Lanes(s.base), Lines: st.LineBoard(s.base),
 		Assumptions: assumptions(s.base, sc), Basis: st.Basis(s.base), Scenarios: Scenarios(sc.AsOf), Conditions: ConditionCodes,
-		Session: sessionInfo(cs.meta, len(cs.events))}
+		Session: sessionInfo(cs.meta, len(cs.events)), Departments: Departments}
 	if metas, err := s.st.ListSessions(ctx); err == nil {
 		for _, m := range metas {
 			n := -1
@@ -204,6 +205,11 @@ func (s *Service) SubmitIn(ctx context.Context, sid, typ, actor string, payload 
 }
 
 func (s *Service) submit(ctx context.Context, sid, typ, actor string, payload json.RawMessage) (View, error) {
+	return s.submitBy(ctx, sid, typ, actor, "", payload)
+}
+
+// submitBy는 사건을 넣는다. by는 실제 입력한 사용자 부서다(없으면 내부 실행: 시연·초기화).
+func (s *Service) submitBy(ctx context.Context, sid, typ, actor, by string, payload json.RawMessage) (View, error) {
 	cs, err := s.load(ctx, sid)
 	if err != nil {
 		return View{}, err
@@ -212,7 +218,7 @@ func (s *Service) submit(ctx context.Context, sid, typ, actor string, payload js
 		payload = json.RawMessage(`{}`)
 	}
 	e := Event{Seq: len(cs.events) + 1, Type: typ, Actor: actor, SimDate: cs.state.Scenario.SimDate, Payload: payload,
-		At: time.Now().UTC().Format(time.RFC3339)}
+		At: time.Now().UTC().Format(time.RFC3339), By: by}
 	evs := append(append([]Event(nil), cs.events...), e)
 	ns, err := replay(s.base, evs, cs.meta.Kind)
 	if err != nil {

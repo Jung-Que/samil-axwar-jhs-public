@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import type { ItemDiff, MonthDiff, SessionCompare, SessionInfo, SessionKPI, SweepResult, View } from "./types";
+import type { Department, ItemDiff, MonthDiff, SessionCompare, SessionInfo, SessionKPI, SweepResult, View } from "./types";
 import { Section } from "./panels";
 import { PRODUCT_LABEL, ea, eok, pct } from "./format";
+import { canFeature } from "./perm";
 
 type Run = (fn: () => Promise<View>) => Promise<void>;
 
@@ -10,11 +11,13 @@ const kindLabel = (s: SessionInfo) => (s.kind === "main" ? "기준" : "시뮬레
 const sessionLabel = (s: SessionInfo) => `${s.name} · ${kindLabel(s)}${s.events >= 0 ? ` · 사건 ${s.events}` : ""}`;
 
 // 세션 막대(이슈 #37): 세션 고르기·새 시뮬레이션·지금 상태에서 분기·삭제. 기준 세션(main)은 나중의 운영 세션이다.
-export function SessionBar({ v, run, busy, onCompare }: { v: View; run: Run; busy: boolean; onCompare: () => void }) {
+export function SessionBar({ v, run, busy, dept, onCompare }: { v: View; run: Run; busy: boolean; dept?: Department; onCompare: () => void }) {
   const cur = v.session;
   const list = v.sessions ?? [cur];
   const events = v.state.log?.length ?? 0;
   const parent = list.find((s) => s.id === cur.parent_id);
+  const canMake = canFeature(dept, "sim.session");
+  const canDrop = canFeature(dept, "session.delete");
   return (
     <div className={`sessionbar ${cur.kind === "sim" ? "is-sim" : ""}`}>
       <label className="field inline">
@@ -27,11 +30,11 @@ export function SessionBar({ v, run, busy, onCompare }: { v: View; run: Run; bus
       </label>
       <span className={`chip ${cur.kind === "sim" ? "warn" : "strong"}`}>{cur.kind === "sim" ? "시뮬레이션 세션 · 제출은 [모의]" : "기준 세션(이후 운영 세션)"}</span>
       {cur.parent_id && <span className="muted small">분기: {parent?.name ?? cur.parent_id} 사건 {cur.fork_seq}까지</span>}
-      <button className="ghost small" disabled={busy} onClick={() => run(() => api.newSession("", v.as_of))} title="지금 세션 기준일로 빈 시뮬레이션 세션을 만든다">새 시뮬레이션</button>
-      <button className="ghost small" disabled={busy} onClick={() => run(() => api.fork(events))} title="지금 상태(사건 전체)를 복사한 시뮬레이션 세션을 만든다">지금 상태에서 분기</button>
+      <button className="ghost small" disabled={busy || !canMake} onClick={() => run(() => api.newSession("", v.as_of))} title={canMake ? "지금 세션 기준일로 빈 시뮬레이션 세션을 만든다" : "부서를 먼저 고른다"}>새 시뮬레이션</button>
+      <button className="ghost small" disabled={busy || !canMake} onClick={() => run(() => api.fork(events))} title={canMake ? "지금 상태(사건 전체)를 복사한 시뮬레이션 세션을 만든다" : "부서를 먼저 고른다"}>지금 상태에서 분기</button>
       <button className="ghost small" disabled={busy || list.length < 2} onClick={onCompare}>세션 비교</button>
       {cur.kind === "sim" && (
-        <button className="ghost small danger" disabled={busy} onClick={() => { if (window.confirm(`세션 "${cur.name}"을 지운다`)) run(() => api.deleteSession(cur.id)); }}>
+        <button className="ghost small danger" disabled={busy || !canDrop} title={canDrop ? "" : "세션 삭제는 운영 관리 부서만"} onClick={() => { if (window.confirm(`세션 "${cur.name}"을 지운다`)) run(() => api.deleteSession(cur.id)); }}>
           세션 삭제
         </button>
       )}
@@ -114,7 +117,7 @@ function fmtMetric(unit: string, v: number | undefined): string {
   return ea(Math.round(v));
 }
 
-export function SimulationView({ v, run, busy }: { v: View; run: Run; busy: boolean }) {
+export function SimulationView({ v, run, busy, dept }: { v: View; run: Run; busy: boolean; dept?: Department }) {
   const sim = v.session.kind === "sim";
   const sc = v.state.scenario;
   const [f, setF] = useState<Record<string, string>>({});
@@ -136,7 +139,8 @@ export function SimulationView({ v, run, busy }: { v: View; run: Run; busy: bool
     if (f.op02) op["OPT-02"] = f.op02;
     if (Object.keys(op).length) p.options = op;
     if (f.new_order_basis) p.new_order_basis = f.new_order_basis;
-    run(() => api.event("E9_SIM_ASSUMPTION", "시뮬레이터", p)).then(() => setF({}));
+    // 모의 가정은 사용자 부서 이름으로 남긴다(이슈 #43)
+    run(() => api.event("E9_SIM_ASSUMPTION", dept?.id ?? "", p)).then(() => setF({}));
   };
 
   const [xp, setXp] = useState("price_cut_pct");
@@ -178,7 +182,7 @@ export function SimulationView({ v, run, busy }: { v: View; run: Run; busy: bool
         {!sim ? (
           <p className="blocked">
             지금은 기준 세션이다. 모의 가정은 넣지 않는다.{" "}
-            <button className="ghost small" disabled={busy} onClick={() => run(() => api.fork(v.state.log?.length ?? 0, `${v.session.name} 모의 가정`))}>지금 상태에서 분기해 시작</button>
+            <button className="ghost small" disabled={busy || !dept} onClick={() => run(() => api.fork(v.state.log?.length ?? 0, `${v.session.name} 모의 가정`))}>지금 상태에서 분기해 시작</button>
           </p>
         ) : (
           <>
@@ -204,7 +208,7 @@ export function SimulationView({ v, run, busy }: { v: View; run: Run; busy: bool
                 </label>
               ))}
             </div>
-            <button disabled={busy || Object.values(f).every((x) => !x)} onClick={submit}>모의 가정 넣기(E9)</button>
+            <button disabled={busy || !dept || Object.values(f).every((x) => !x)} title={dept ? "" : "부서를 먼저 고른다"} onClick={submit}>모의 가정 넣기(E9)</button>
           </>
         )}
         <h3>이 세션에 적용된 모의 가정 ({sc.sim_notes?.length ?? 0})</h3>

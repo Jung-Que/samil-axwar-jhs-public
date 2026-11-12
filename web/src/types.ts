@@ -233,6 +233,7 @@ export type Task = { task_id: string; owner_role: string; title: string; due_dat
 export type Decision = {
   decision_id: string;
   approver_role: string;
+  entered_by?: string;
   participation: string;
   options: Record<string, string> | null;
   conditions: string[] | null;
@@ -244,7 +245,7 @@ export type Decision = {
   freshness: "최신" | "낡음";
   seq: number;
 };
-export type EventRec = { seq: number; type: string; actor_role: string; sim_date: string; payload: unknown; created_at?: string };
+export type EventRec = { seq: number; type: string; actor_role: string; sim_date: string; payload: unknown; created_at?: string; by?: string };
 export type LogEntry = { event: EventRec; changes: string[] | null };
 export type Reservation = { product_id: string; month: string; qty: number; basis: string; state: string };
 export type State = {
@@ -311,6 +312,19 @@ export type View = {
   condition_codes: Record<string, string>;
   session: SessionInfo;
   sessions: SessionInfo[] | null;
+  departments: Department[] | null;
+};
+
+// 부서별 권한표(server/w05/permissions.go, 이슈 #43)
+export type Department = {
+  code: string; // X-W05-Role 헤더 값
+  id: string; // 사건 actor_role 이름
+  dept: string; // 부서
+  label: string;
+  duty: string;
+  events: string[] | null;
+  replies: string[] | null;
+  features: string[];
 };
 
 // 민감도 격자(server/w05/simulation.go, 이슈 #39)

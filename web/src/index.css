@@ -666,6 +666,38 @@ ol.log button {
   margin-left: 8px;
 }
 
+/* 부서 막대(이슈 #43) */
+.rolebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: 0 0 10px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent-soft);
+}
+
+.rolebar.no-role {
+  border-color: var(--bad);
+  background: var(--bad-soft);
+}
+
+.rolebar .right {
+  margin-left: auto;
+}
+
+.warn-text {
+  color: var(--warn);
+}
+
+.lane-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 /* 세션 막대(이슈 #37) */
 .sessionbar {
   display: flex;
