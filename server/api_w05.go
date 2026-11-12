@@ -206,8 +206,8 @@ func registerW05(mux *http.ServeMux, svc *w05.Service) {
 // sessionOf는 ?session= 값이다(없으면 ""= 기준 세션).
 func sessionOf(r *http.Request) string { return strings.TrimSpace(r.URL.Query().Get("session")) }
 
-// RoleHeader는 사용자 부서를 싣는 헤더다(영문 코드). 지금은 화면의 부서 선택(모의 로그인)이 넣고,
-// 서비스 단계에서는 인증된 사용자의 부서로 바꾼다. 쓰기 요청은 이 헤더가 필요하다(이슈 #43).
+// RoleHeader는 사용자 부서를 싣는 헤더다(영문 코드). 화면의 부서 선택이 넣는다. 시연용 롤 체크라 인증은 없다
+// (사용자 결정 11/13). 쓰기 요청은 이 헤더가 필요하다(이슈 #43).
 const RoleHeader = "X-W05-Role"
 
 // roleOf는 헤더 코드를 부서 ID로 바꾼다(없거나 모르는 코드면 "" → 서비스가 401).

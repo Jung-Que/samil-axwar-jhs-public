@@ -13,7 +13,7 @@ const FEATURE_LABEL: Record<string, string> = {
   "session.delete": "시뮬레이션 세션 삭제",
 };
 
-// 부서 막대(이슈 #43): 사용자 부서를 고른다(모의 로그인). 권한은 부서별이고 서버가 최종 판단한다.
+// 부서 막대(이슈 #43): 사용자 부서를 고른다(시연용 롤 체크, 인증 없음). 권한은 부서별이고 서버가 최종 판단한다.
 export function RoleBar({ v, dept, roleCode, onChoose }: { v: View; dept?: Department; roleCode: string; onChoose: (code: string) => void }) {
   const list = v.departments ?? [];
   const groups = [...new Set(list.map((d) => d.dept))];
@@ -38,7 +38,7 @@ export function RoleBar({ v, dept, roleCode, onChoose }: { v: View; dept?: Depar
       ) : (
         <span className="small warn-text">부서를 고르면 그 부서 권한으로 입력할 수 있다(조회는 그대로).</span>
       )}
-      <span className="muted small right">모의 로그인(부서 선택) · 인증은 서비스 단계</span>
+      <span className="muted small right">시연용 부서 선택 · 롤 체크(로그인·인증 없음)</span>
     </div>
   );
 }

@@ -11,11 +11,11 @@ export class ApiError extends Error {
   }
 }
 
-// 사용자 부서(이슈 #43). 지금은 화면에서 고르는 모의 로그인이고, 서버로는 영문 코드를 X-W05-Role 헤더로 보낸다.
-// 서비스 단계에서는 인증된 사용자의 부서로 바뀐다. 쓰기 요청은 부서가 없으면 서버가 401을 돌려준다.
+// 사용자 부서(이슈 #43). 화면에서 고르는 부서 선택이고, 서버로는 영문 코드를 X-W05-Role 헤더로 보낸다.
+// 시연용 롤 체크라 로그인·인증은 없다(사용자 결정 11/13). 쓰기 요청은 부서가 없으면 서버가 401을 돌려준다.
 const ROLE_KEY = "w05.role";
 let role = (() => {
-  const fromUrl = new URLSearchParams(window.location.search).get("role"); // 개발·시연용 링크(서비스 단계에서는 인증)
+  const fromUrl = new URLSearchParams(window.location.search).get("role"); // 시연용 링크: ?role=production 등
   if (fromUrl) return fromUrl;
   try {
     return localStorage.getItem(ROLE_KEY) || "";
