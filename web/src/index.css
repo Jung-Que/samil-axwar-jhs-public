@@ -858,15 +858,15 @@ button.danger {
   border-color: var(--accent);
 }
 
-/* 내 업무(이슈 #47) */
-.mywork {
+/* 2열 배치: 본문 + 옆 열(내 업무·판단·시뮬레이션, 이슈 #47·#49). 좁으면 쌓인다 */
+.split {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
   align-items: flex-start;
 }
 
-.mywork-main {
+.split-main {
   flex: 999 1 560px;
   min-width: 0;
   display: flex;
@@ -874,7 +874,7 @@ button.danger {
   gap: 14px;
 }
 
-.mywork-side {
+.split-side {
   flex: 1 1 280px;
   min-width: 0;
   display: flex;
@@ -976,4 +976,237 @@ button.danger {
 
 .kpis.one-col {
   grid-template-columns: 1fr;
+}
+
+/* 판단·제안: PL-02 월별 공급 막대(이슈 #49) */
+.supchart {
+  display: flex;
+  gap: 6px;
+  min-width: 600px;
+  padding-top: 4px;
+}
+
+.supcol {
+  flex: 1 1 0;
+  min-width: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  text-align: center;
+}
+
+.supshort {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--bad);
+  min-height: 1.2em;
+}
+
+.supbar {
+  position: relative;
+  display: flex;
+  flex-direction: column-reverse;
+  border-bottom: 1px solid var(--line);
+}
+
+.supcol.is-changed .supbar {
+  outline: 2px solid var(--warn);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.supseg {
+  width: 100%;
+}
+
+.supdemand {
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  border-top: 2px dashed var(--fg);
+  z-index: 1;
+}
+
+.supmonth {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.supsched {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.seg-base {
+  background: var(--muted);
+}
+
+.seg-opt02 {
+  background: var(--warn);
+}
+
+.seg-opt01 {
+  background: var(--accent);
+}
+
+.seg-other {
+  background: var(--ok);
+}
+
+.seg-base.cond {
+  background: var(--gray-soft);
+  outline: 1px dashed var(--muted);
+  outline-offset: -1px;
+}
+
+.seg-opt02.cond {
+  background: var(--warn-soft);
+  outline: 1px dashed var(--warn);
+  outline-offset: -1px;
+}
+
+.seg-opt01.cond {
+  background: var(--accent-soft);
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+}
+
+.seg-other.cond {
+  background: var(--ok-soft);
+  outline: 1px dashed var(--ok);
+  outline-offset: -1px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 10px 0 6px;
+  font-size: 0.8rem;
+}
+
+.legend .row {
+  gap: 6px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 14px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.swatch-line {
+  display: inline-block;
+  width: 16px;
+  border-top: 2px dashed var(--fg);
+}
+
+/* 플래그의 물을 곳 */
+.asks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.ask {
+  font-size: 0.74rem;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  background: var(--card);
+  border-radius: 999px;
+  padding: 0 8px;
+}
+
+.ask.is-late {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+/* 월별 표 펼쳐 보기 */
+.more-tables > summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+  padding: 6px 0;
+}
+
+.more-tables[open] > summary {
+  margin-bottom: 10px;
+}
+
+/* 시뮬레이션: 세션 목록과 격자 칸 채우기(이슈 #49) */
+.sess-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sess-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.sess-item.is-main {
+  border-color: var(--accent);
+}
+
+.sess-item.is-current {
+  border-width: 2px;
+  opacity: 1;
+  cursor: default;
+}
+
+.sess-item.is-current.is-sim {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.sess-item.is-current.is-main {
+  background: var(--accent-soft);
+}
+
+.sess-name {
+  font-weight: 600;
+  font-size: 0.86rem;
+}
+
+.cellbtn {
+  width: 100%;
+  background: transparent;
+  color: inherit;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.cellbtn:hover {
+  text-decoration: underline;
+}
+
+td.picked {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  font-weight: 700;
+}
+
+.kpis.kpis-5 {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }

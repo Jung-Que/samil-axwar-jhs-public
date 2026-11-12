@@ -212,8 +212,8 @@ type MyWorkProps = {
 export function MyWorkView({ v, dept, onAction, onChoose, onFocus, goTab }: MyWorkProps) {
   if (!dept) {
     return (
-      <div className="mywork">
-        <div className="mywork-main">
+      <div className="split">
+        <div className="split-main">
           <Section title="내 업무" mode={["real"]} note="부서를 고르면 그 부서가 지금 할 일과 권한이 보인다. 시연은 입찰 흐름의 차례대로 부서를 바꿔 가며 넣는다.">
             <p className="small">위 맥락 막대의 <b>내 부서</b>에서 부서를 고르거나, 아래 입찰 흐름에서 지금 차례 부서로 바로 바꾼다.</p>
           </Section>
@@ -237,8 +237,8 @@ export function MyWorkView({ v, dept, onAction, onChoose, onFocus, goTab }: MyWo
   const mine = [...(v.state.log ?? [])].reverse().filter((e) => e.event.actor_role === dept.id || e.event.by === dept.id).slice(0, 8);
   const sim = v.session.kind === "sim";
   return (
-    <div className="mywork">
-      <div className="mywork-main">
+    <div className="split">
+      <div className="split-main">
         <NowCard v={v} dept={dept} actions={actions} onAction={onAction} />
         <BidFlow v={v} dept={dept} onChoose={onChoose} />
         <div className="cols">
@@ -307,7 +307,7 @@ export function MyWorkView({ v, dept, onAction, onChoose, onFocus, goTab }: MyWo
           </Section>
         </div>
       </div>
-      <div className="mywork-side">
+      <div className="split-side">
         <JudgeSummary v={v} goTab={goTab} />
         <OthersOwe v={v} dept={dept} />
         <PermissionSection v={v} current={dept.code} />

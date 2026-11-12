@@ -88,52 +88,6 @@ export function SourceGapView({ v }: { v: View }) {
   );
 }
 
-const LEVEL_ORDER = { 차단: 0, 위험: 1, 미확인: 2 } as const;
-
-// 판단 카드: 엔진 수치 + 근거(규칙) + 미확인. 결정은 사람이 한다.
-export function JudgmentCard({ v }: { v: View }) {
-  const s = v.state;
-  const ev = s.evaluation;
-  const p1 = ev.products["PL-01"];
-  const p2 = ev.products["PL-02"];
-  const flags = [...(ev.flags ?? [])].sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]);
-  const l1 = s.lines?.find((l) => l.product_id === "PL-01");
-  const l2 = s.lines?.find((l) => l.product_id === "PL-02");
-  const last = s.log?.[s.log.length - 1];
-  return (
-    <Section title="판단 카드" mode={["real"]} note={`숫자는 결정 모델(엔진)이 원본에서 다시 계산하고, 승인은 권한자가 한다. 입력은 고정 필드만 쓴다(LLM 현재 제외). 여유·공급 출처: ${snapSource(v)}. 생산 라인 보드의 배치 실적과는 규모가 다르다('여유·증설안' 탭의 원본 간 규모 차이).`}>
-      <div className="kpis">
-        <Kpi label="PL-02 더마 제안 가능" value={`${ea(p2?.schedule_total)} EA`} sub={`요구 ${ea((p2?.monthly_demand ?? 0) * ev.scenario.contract_months)} 중 ${pct(p2?.coverage_pct)} · ${l2?.qty_status ?? "접수 전"} · 계약 ${ev.scenario.contract_months}개월 합계, 능력 스냅샷 기준`} tone={p2 && p2.coverage_pct < 100 ? "warn" : "ok"} />
-        <Kpi label="PL-01 기초" value={l1?.qty_status === "미확정" || !l1 ? "수량 미확정" : `${ea(p1?.schedule_total)} EA`} sub={`확인 전 상한 월 ${ea(p1?.months?.[0]?.supply)} EA(능력 스냅샷 여유 ÷ 12) · 요구 월 ${ea(p1?.monthly_demand)}`} tone="bad" />
-        <Kpi label="전량 약속 시 지체상금(지연분)" value={eok((p1?.penalty_backlog_krw ?? 0) + (p2?.penalty_backlog_krw ?? 0))} sub={`계약 총액 기준이면 ${eok(ev.penalty_contract_krw)} (월 ${eok(ev.penalty_contract_monthly_krw)})`} tone="bad" />
-        <Kpi label="연 공헌이익(요구 전량, 원료비 기준)" value={eok((p1?.contrib_request_krw ?? 0) + (p2?.contrib_request_krw ?? 0), 1)} sub={`램프 제안 기준 ${eok((p1?.contrib_schedule_krw ?? 0) + (p2?.contrib_schedule_krw ?? 0), 1)} · 단가 인하 ${pct(ev.scenario.price_cut * 100)}`} tone="ok" />
-      </div>
-      <h3>미확인·위험·차단 ({flags.length})</h3>
-      <ul className="flags">
-        {flags.map((f) => (
-          <li key={f.code} className={`flag flag-${f.level}`}>
-            <span className="flag-level">{f.level}</span>
-            <span className="rule">{f.rule}</span> {f.message}
-          </li>
-        ))}
-      </ul>
-      {last && (
-        <>
-          <h3>
-            직전 사건의 변화
-          </h3>
-          <p className="small">
-            <b>{EVENT_LABEL[last.event.type] ?? last.event.type}</b> — {(last.changes ?? []).join(" · ")}
-          </p>
-        </>
-      )}
-      {s.last_blocks && s.last_blocks.length > 0 && (
-        <p className="blocked">제출 차단: {s.last_blocks.join(" / ")}</p>
-      )}
-    </Section>
-  );
-}
-
 export function Kpi({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: "ok" | "warn" | "bad" }) {
   return (
     <div className={`kpi kpi-${tone}`}>

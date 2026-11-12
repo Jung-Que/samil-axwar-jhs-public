@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, api, currentRole, setRole, setSession } from "./api";
 import type { Department, LaneAction, View } from "./types";
 import { SessionCompareView, SimulationView } from "./sessionViews";
-import { AssumptionsView, CapacityView, ChurnView, CompareView, DecisionsView, JudgmentCard, LedgerView, LogView, ScheduleView, SourceGapView, TasksView } from "./panels";
+import { AssumptionsView, CapacityView, ChurnView, CompareView, DecisionsView, LedgerView, LogView, SourceGapView, TasksView } from "./panels";
+import { JudgeView } from "./judgeViews";
 import { EventPanel, RequestsView } from "./EventPanel";
 import { BacktestView, InboxView, LanesView, LineBoardView } from "./asofViews";
 import { MyWorkView } from "./roleViews";
@@ -75,6 +76,11 @@ export default function App() {
     setTab("my");
   };
   const isMain = v.session.kind === "main";
+  // 판단·제안의 "시뮬레이션에서 먼저 보기": 기준 세션이면 지금 상태를 분기한 시뮬레이션 세션을 만들고 시뮬레이션 탭으로 간다.
+  const trySim = () => {
+    if (!isMain) return setTab("sim");
+    run(() => api.fork(v.state.log?.length ?? 0, `${v.session.name} 시뮬레이션`)).then(() => setTab("sim"));
+  };
   const canReset = isMain ? canFeature(dept, "main.reset") : canFeature(dept, "sim.session");
 
   // 업무 레인 보드의 "할 수 있는 일": 상태(서버)와 부서 권한(권한표)을 함께 본다
@@ -123,12 +129,12 @@ export default function App() {
           {tab === "lanes" && <LanesView v={v} onAction={onAction} />}
           {tab === "inbox" && <InboxView v={v} />}
           {tab === "lines" && (<><LineBoardView v={v} /><SourceGapView v={v} /></>)}
-          {tab === "judge" && (<><JudgmentCard v={v} /><ScheduleView v={v} /><CompareView v={v} /></>)}
+          {tab === "judge" && <JudgeView v={v} dept={dept} onAction={onAction} onTrySim={trySim} />}
           {tab === "capacity" && (<><CapacityView v={v} /><CompareView v={v} /><SourceGapView v={v} /></>)}
           {tab === "ledger" && (<><LedgerView v={v} /><ChurnView v={v} /></>)}
           {tab === "requests" && (<><RequestsView v={v} run={run} dept={dept} /><DecisionsView v={v} /></>)}
           {tab === "log" && <LogView v={v} onFork={dept ? (seq) => run(() => api.fork(seq)) : undefined} busy={busy} />}
-          {tab === "sim" && <SimulationView v={v} run={run} busy={busy} dept={dept} />}
+          {tab === "sim" && <SimulationView v={v} run={run} busy={busy} dept={dept} goTab={setTab} />}
           {tab === "sessions" && <SessionCompareView v={v} />}
           {tab === "backtest" && <BacktestView v={v} />}
           {tab === "assume" && <AssumptionsView v={v} />}
