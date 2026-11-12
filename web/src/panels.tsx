@@ -403,6 +403,52 @@ export function LedgerView({ v }: { v: View }) {
   );
 }
 
+// 기존 고객 이탈 신호(R12)와 반환 금지(R13): 수주(order_date)와 출하(ship_date)를 나눠 본다(W05 단초).
+export function ChurnView({ v }: { v: View }) {
+  const sigs = v.state.evaluation.churn ?? [];
+  const sc = v.state.scenario;
+  const ratio = (x: number) => (x ? x.toFixed(3) : "-");
+  return (
+    <Section
+      title="기존 고객 이탈 신호 (R12) · 능력 반환 금지 (R13)"
+      mode={["real"]}
+      note={
+        <>
+          매출 비중 10% 이상 고객의 월 수주(order_date)와 출하(ship_date)를 금액으로 나눠 본다({v.data_basis.order_file}, 닫힌 달 ~{sigs[0]?.month ?? "-"}).
+          재무 메모(sales_memo_cv)는 출하 기준으로 "정상"이라 보고하고, 영업 회의록은 신규 발주 감소를 "단정 금지"로 적었다 <span className="tag">부서 주장</span>.
+          임계값은 설계값이다(A-23). AT_RISK 고객의 진행 주문은 '검토'로 표시하고 보호를 유지하며, 영업 임원 확인(CR-09) 전에는 C-201에 능력을 돌려주지 않는다(A-24: {sc.churn_answered ? (sc.churn_revised ? "수정 확인, 반환 반영" : "수정 아님, 반환 0") : "회신 전, 반환 0"}).
+        </>
+      }
+    >
+      {sigs.map((s) => (
+        <div key={s.customer_id} className="product">
+          <div className="product-head">
+            <b>{s.customer_id}</b>
+            <span className="muted small">매출 비중 {s.revenue_share_pct}% · 진행 주문 {ea(s.open_orders)}건(PL-01 {ea(s.open_qty?.["PL-01"])} · PL-02 {ea(s.open_qty?.["PL-02"])} EA){s.status === "AT_RISK" ? " → 검토(R13), 보호 유지" : ""}</span>
+            <span className={`pill churn-${s.status}`}>{s.status}{s.since ? ` (${s.since}~)` : ""}</span>
+          </div>
+          <div className="scroll">
+            <table className="grid">
+              <thead>
+                <tr><th>월</th>{(s.history ?? []).map((h) => <th key={h.month}>{h.month.slice(2)}</th>)}</tr>
+              </thead>
+              <tbody>
+                <tr><td>수주 <span className="th-sub">order_date · 억</span></td>{(s.history ?? []).map((h) => <td key={h.month}>{eok(h.booking_krw, 1)}</td>)}</tr>
+                <tr><td>출하 <span className="th-sub">ship_date · 억</span></td>{(s.history ?? []).map((h) => <td key={h.month}>{eok(h.shipment_krw, 1)}</td>)}</tr>
+                <tr><td>단월 수주/출하 <span className="th-sub">WATCH: 0.85 미만 2개월</span></td>{(s.history ?? []).map((h) => <td key={h.month} className={h.single_ratio && h.single_ratio < 0.85 ? "bad" : ""}>{ratio(h.single_ratio)}</td>)}</tr>
+                <tr><td>3개월 수주/출하 <span className="th-sub">AT_RISK: 0.8 미만</span></td>{(s.history ?? []).map((h) => <td key={h.month} className={h.rolling_ratio && h.rolling_ratio < 0.8 ? "bad" : ""}>{ratio(h.rolling_ratio)}</td>)}</tr>
+                <tr><td>3개월 수주 YoY <span className="th-sub">AT_RISK: −15% 미만</span></td>{(s.history ?? []).map((h) => <td key={h.month} className={h.has_yoy && h.yoy_pct < -15 ? "bad" : ""}>{h.has_yoy ? pct(h.yoy_pct) : "기록 부족"}</td>)}</tr>
+                <tr className="row-strong"><td>상태</td>{(s.history ?? []).map((h) => <td key={h.month}><span className={`pill churn-${h.status}`}>{h.status}</span></td>)}</tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+      {sigs.length === 0 && <p className="muted small">대상 고객 없음</p>}
+    </Section>
+  );
+}
+
 export function DecisionsView({ v }: { v: View }) {
   const ds = v.state.decisions ?? [];
   return (

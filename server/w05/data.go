@@ -210,6 +210,15 @@ type fxRow struct {
 	rate float64
 }
 
+// Customer는 B2B 고객 마스터다(m_customer_cv).
+type Customer struct {
+	ID          string  `json:"customer_id"`
+	Name        string  `json:"customer_name"`
+	SharePct    float64 `json:"revenue_share_pct"` // 전 기간 고정값(data_dictionary)
+	CostLinked  bool    `json:"cost_linked_clause"`
+	PaymentDays int     `json:"payment_terms_days"`
+}
+
 // Base는 원본에서 읽은 W05 표다. 한 번 읽고 바꾸지 않는다. 날짜별 값은 At이 만든다.
 type Base struct {
 	Lines       []Line
@@ -217,8 +226,12 @@ type Base struct {
 	Orders      []Order
 	SPOs        []SPO
 	Batches     []Batch
+	Customers   []Customer
 	Files       int // 해시를 확인한 원본 파일 수
 	CustomerIDs []string
+	booked      map[string]map[string]int64 // 고객 → 수주 달(order_date) → 수주 금액
+	shipped     map[string]map[string]int64 // 고객 → 출하 달(ship_date) → 출하 매출(= 주문 금액, 17,987행 모두 같음)
+	bookedQty   map[string]map[string]int64 // 고객|제품군 → 수주 달 → 수주 수량
 	mainMat     map[string]string
 	cons        []consRow
 	purch       []purchRow
@@ -242,6 +255,7 @@ type AsOfData struct {
 	LeadTimes      map[string][]int        `json:"-"`
 	SPOs           []SPO                   `json:"masil_spos"`
 	Commit         Commitments             `json:"commitments"`
+	Churn          []ChurnSignal           `json:"churn"`           // R12 이탈 신호(닫힌 달만)
 	FutureSnapshot bool                    `json:"future_snapshot"` // 능력 스냅샷이 잘라 낸 날보다 뒤 자료(T2)
 }
 
@@ -319,6 +333,33 @@ func LoadBase() (*Base, error) {
 		b.CustomerIDs = append(b.CustomerIDs, c)
 	}
 	sort.Strings(b.CustomerIDs)
+	// R12 이탈 경보용 고객×월 수주·출하(금액). 판단에는 잘라 낸 날까지의 닫힌 달만 쓴다(churn.go)
+	b.booked, b.shipped, b.bookedQty = map[string]map[string]int64{}, map[string]map[string]int64{}, map[string]map[string]int64{}
+	addTo := func(m map[string]map[string]int64, k, ym string, v int64) {
+		if m[k] == nil {
+			m[k] = map[string]int64{}
+		}
+		m[k][ym] += v
+	}
+	for _, o := range b.Orders {
+		if o.CustomerID == "NONE" {
+			continue
+		}
+		addTo(b.booked, o.CustomerID, o.OrderDate[:7], o.AmountKRW)
+		addTo(b.bookedQty, o.CustomerID+"|"+o.ProductID, o.OrderDate[:7], o.Qty)
+		if o.ShipDate != "" {
+			addTo(b.shipped, o.CustomerID, o.ShipDate[:7], o.AmountKRW)
+		}
+	}
+	custRows, err := readTable("01_corevia/master/m_customer_cv.csv")
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range custRows {
+		b.Customers = append(b.Customers, Customer{ID: r["customer_id"], Name: r["customer_name"], SharePct: atof(r["revenue_share_pct"]),
+			CostLinked: r["cost_linked_clause"] == "True", PaymentDays: int(atoi(r["payment_terms_days"]))})
+	}
+	sort.Slice(b.Customers, func(i, j int) bool { return b.Customers[i].ID < b.Customers[j].ID })
 
 	skus, err := readTable("02_masil/master/m_sku_ms.csv")
 	if err != nil {
@@ -525,6 +566,7 @@ func (b *Base) compute(c string) *AsOfData {
 		}
 	}
 	a.Commit = b.commitments(a)
+	a.Churn = b.churnSignals(a)
 	return a
 }
 

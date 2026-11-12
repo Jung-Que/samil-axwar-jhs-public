@@ -89,6 +89,22 @@ h3 {
   color: var(--bad);
 }
 
+/* 이탈 신호(R12) */
+.churn-AT_RISK {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.churn-WATCH {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.churn-정상 {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
 /* 비교 시나리오에서 기본과 달라진 칸(이슈 #29) */
 td.warn {
   color: var(--warn);

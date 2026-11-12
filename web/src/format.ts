@@ -22,6 +22,7 @@ export const BASIS_LABEL: Record<string, string> = {
   "OPT-02": "OPT-02 F2 전환",
   "OPT-01": "OPT-01 L-02 증설",
   "MASIL-ADJ": "Masil 조정분",
+  "CUST-REL": "이탈 고객 반환(영업 임원 확인, R13)",
 };
 
 // 상태 이름을 CSS 클래스로 쓸 때 띄어쓰기를 없앤다("기한 초과" → "기한-초과").

@@ -352,6 +352,9 @@ func (s *State) Apply(b *Base, e Event) error {
 		if r == nil || r.State == "반영" {
 			return fmt.Errorf("열린 확인 요청이 아니다: %s", p.RequestID)
 		}
+		if want, ok := RequestResponder[r.ID]; ok && e.Actor != want {
+			return fmt.Errorf("회신 권한 없음: %s는 %s만 회신한다(입력자 %q)", r.ID, want, e.Actor)
+		}
 		if err := s.applyAnswer(b, r.ID, p.Answer); err != nil {
 			return err
 		}
@@ -503,7 +506,16 @@ func (s *State) openInitialRequests(b *Base, seq int) {
 	add("CR-05", "바이어", "납기 지연 페널티의 기준액(지연분·계약 총액)과 상한", addBusinessDays(dl, -5), "R8", "A-13")
 	add("CR-06", "바이어", "F2 해외공장 생산지(OPT-02) 수용 여부", addBusinessDays(dl, -5), "R3", "OPT-02")
 	add("CR-07", "구매·품질", "M-B 재계약 가능 여부와 처방 재검증 기간(주)", addBusinessDays(recv, 10), "R3", "OPT-02", "A-08")
+	// R13: 이탈 경보(AT_RISK) 고객이 있으면 그 능력을 C-201에 돌려도 되는지 영업 임원에게 묻는다(자동 반환 금지)
+	if sg := atRisk(ev.Churn); sg != nil {
+		add("CR-09", "영업 임원", fmt.Sprintf("%s 수주 감소가 계약·예측 수정으로 확인되는가? 확인되면 C-201에 돌릴 연간 수량(최근 12개월 수주 PL-01 %s · PL-02 %s EA 이내). 근거: %s",
+			sg.CustomerID, Commas(sg.T12BookedQty[ProductBasic]), Commas(sg.T12BookedQty[ProductDerma]), churnText(*sg)), addBusinessDays(recv, 5), "R13", "R12")
+	}
 }
+
+// RequestResponder는 회신 권한이 정해진 확인 요청이다. CR-09(기존 고객 약속 조정)는 영업 임원만 회신한다
+// (approval_authority_policy "C-101 재협상/판가 = 영업 임원", 가정 A-20).
+var RequestResponder = map[string]string{"CR-09": "영업 임원"}
 
 // applyAnswer는 내부 부서 회신(E3)을 가정·시나리오에 반영한다.
 func (s *State) applyAnswer(b *Base, id string, a map[string]any) error {
@@ -540,6 +552,30 @@ func (s *State) applyAnswer(b *Base, id string, a map[string]any) error {
 			return fmt.Errorf("CR-08 회신: released_qty는 0~%s(업무일 %s까지 PL-02 Masil 보호량)", Commas(limit), CutoffOf(s.Scenario.SimDate))
 		}
 		s.Scenario.MasilReleased = q
+	case "CR-09":
+		revised, ok := a["revised"].(bool)
+		if !ok {
+			return fmt.Errorf("CR-09 회신: revised(true/false) 필요")
+		}
+		sg := atRisk(b.At(s.Scenario.SimDate).Churn)
+		if sg == nil {
+			return fmt.Errorf("CR-09 회신: 지금 업무일에 이탈 경보 고객이 없다")
+		}
+		rel := map[string]int64{ProductBasic: int64(num(a["release_pl01"])), ProductDerma: int64(num(a["release_pl02"]))}
+		for p, q := range rel {
+			if q < 0 || q > sg.T12BookedQty[p] {
+				return fmt.Errorf("CR-09 회신: %s 반환 수량은 0~%s(최근 12개월 %s 수주)", p, Commas(sg.T12BookedQty[p]), sg.CustomerID)
+			}
+			if !revised && q > 0 {
+				return fmt.Errorf("CR-09 회신: 계약·예측 수정이 확인되지 않으면 반환 수량은 0")
+			}
+		}
+		s.Scenario.ChurnAnswered, s.Scenario.ChurnRevised = true, revised
+		if revised {
+			s.Scenario.ChurnRelease = rel
+		} else {
+			s.Scenario.ChurnRelease = nil
+		}
 	default:
 		return fmt.Errorf("%s는 바이어 회신(E4)으로 반영한다", id)
 	}

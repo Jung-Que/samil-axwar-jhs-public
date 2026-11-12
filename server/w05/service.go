@@ -277,9 +277,22 @@ func assumptions(b *Base, sc Scenario) []Assumption {
 		{"A-17", "대리점 주문(customer_id=NONE) 제외", fmt.Sprintf("%s건 · %s EA%s가 진행 주문·부하에서 빠짐(대리점 주문은 원본 전체에 출하 기록 0건)", Commas(int64(agN)), Commas(agQty), agApprox), "가정", "진행 주문 건수·수량, 라인 보드 부하·상태(PL-01·PL-04·PL-06)"},
 		{"A-18", "OPT-02에 바이어의 F2 생산지 수용 필요", f2, f2Label, "OPT-02 물량 조건부(COND_OPT02_F2), 미수용이면 OPT-02 제외"},
 		{"A-19", "Masil 발주 우선 보호(우선순위는 원본에 없음. 근거: Masil 더마 Corevia 100% 의존)", fmt.Sprintf("PL-01 %s · PL-02 %s EA를 C-201보다 먼저 보호", Commas(masilQty[ProductBasic]), Commas(masilQty[ProductDerma])), "가정", "C-201 기본 가용(R1), CR-03·CR-08, COND_MASIL_PROTECTED"},
-		{"A-20", "기존 고객 납기·판가 변경 승인 = 영업 임원", "원본은 'C-101 재협상/판가 = 영업 임원'만 명시. 모든 기존 고객으로 일반화, 변경 흐름은 설계 단계", "가정", "변경 요청 승인 라우팅(R2·R14)"},
+		{"A-20", "기존 고객 납기·판가 변경 승인 = 영업 임원", "원본은 'C-101 재협상/판가 = 영업 임원'만 명시. 모든 기존 고객으로 일반화, 변경 흐름은 설계 단계", "가정", "변경 요청 승인 라우팅(R2·R14), CR-09 회신 권한(R13)"},
 		{"A-21", "라인 보드 상태 문턱", "다음 달 부하 ÷ 배치 실적 월 생산: 100% 초과면 초과, 85% 이상이면 포화(표시용, 판단에 안 씀)", "가정", "생산 라인 보드 상태(여유·포화·초과)"},
 		{"A-22", "이사회 = 기준일 + 5일(모든 기준일에 적용)", boardValue(sc.BoardDate), boardLabel, "결정 가능일, 승인 검토 작업 기한, OPT 결정일 기본값"},
+		{"A-23", "이탈 경보 임계값(R12)", fmt.Sprintf("매출 비중 %.0f%% 이상 고객, 금액 기준. AT_RISK: 3개월 수주/출하 < %.2f 그리고 3개월 수주 YoY < %.0f%%. WATCH: 단월 수주/출하 < %.2f 2개월 연속. 출처가 정한 값 없음(설계값)", ChurnShareMin, ChurnRollingMax, ChurnYoYMax, ChurnWatchSingle), "가정", "판단 카드 이탈 경보, 영업 레인, CR-09 생성"},
+		{"A-24", "이탈 의심 고객 능력 반환(R13)", churnReleaseValue(sc), lbl(sc.ChurnAnswered), "C-201 공급(출처 CUST-REL), PL-01 상한·PL-02 공급"},
+	}
+}
+
+func churnReleaseValue(sc Scenario) string {
+	switch {
+	case !sc.ChurnAnswered:
+		return "영업 임원 확인(CR-09) 전 반환 0 — 진행 주문은 '검토'로 표시, 보호 유지"
+	case !sc.ChurnRevised:
+		return "영업 임원 회신: 계약·예측 수정 아님 → 반환 0"
+	default:
+		return fmt.Sprintf("영업 임원 회신: 수정 확인 → 연 PL-01 %s · PL-02 %s EA 반환(월 ÷ 12)", Commas(sc.ChurnRelease[ProductBasic]), Commas(sc.ChurnRelease[ProductDerma]))
 	}
 }
 

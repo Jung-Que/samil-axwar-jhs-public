@@ -37,8 +37,11 @@ type Lane struct {
 var LaneRoles = []string{"영업", "생산관리", "재무·전략", "CEO/이사회", "구매·품질", "Masil SCM"}
 
 func laneOf(owner string) string {
-	if owner == "그룹 재무" {
+	switch owner {
+	case "그룹 재무":
 		return "재무·전략"
+	case "영업 임원":
+		return "영업"
 	}
 	return owner
 }
@@ -94,6 +97,15 @@ func (s *State) Lanes(b *Base) []Lane {
 		add("영업", &sales.Incoming, "모의", "입찰 %s RFP 접수(%s) · 상태 %s · 마감 %s", s.Bid.ID, s.Bid.Received, st, s.Bid.Deadline)
 	}
 	add("영업", &sales.Doing, "원본·계산", "진행 중 주문 %d건 · 추정 납기 14일 안 %d건 %s EA", len(open), due14, Commas(q14))
+	for _, sg := range at.Churn { // R12 이탈 신호(수주와 출하를 나눠 본다)
+		if sg.Status == ChurnOK {
+			continue
+		}
+		add("영업", &sales.Incoming, "계산", "이탈 %s %s", sg.Status, churnText(sg))
+		if sg.Status == ChurnAtRisk && !s.Scenario.ChurnRevised {
+			add("영업", &sales.Blocked, "계산", "R13: %s 능력은 영업 임원 확인(CR-09) 전 C-201 반환 금지(진행 주문 %d건 '검토', 보호 유지)", sg.CustomerID, sg.OpenOrders)
+		}
+	}
 
 	prod := lanes["생산관리"]
 	lineText := ""

@@ -241,7 +241,7 @@ export function RequestsView({ v, run }: { v: View; run: Run }) {
 }
 
 function ReplyForm({ r, run, done }: { r: ConfirmRequest; run: Run; done: () => void }) {
-  const [a, setA] = useState<Fields>({ capacity_period: "annual", extra_annual: 0, means: "", masil_in_util: false, mb_ready: true, validation_weeks: 8, released_qty: 0 });
+  const [a, setA] = useState<Fields>({ capacity_period: "annual", extra_annual: 0, means: "", masil_in_util: false, mb_ready: true, validation_weeks: 8, released_qty: 0, revised: false, release_pl01: 0, release_pl02: 0 });
   const answer = (): Fields => {
     switch (r.request_id) {
       case "CR-01": return { capacity_period: a.capacity_period };
@@ -249,6 +249,7 @@ function ReplyForm({ r, run, done }: { r: ConfirmRequest; run: Run; done: () => 
       case "CR-03": return { masil_in_util: a.masil_in_util };
       case "CR-07": return { mb_ready: a.mb_ready, validation_weeks: Number(a.validation_weeks) };
       case "CR-08": return { released_qty: Number(a.released_qty) };
+      case "CR-09": return { revised: a.revised, release_pl01: a.revised ? Number(a.release_pl01) : 0, release_pl02: a.revised ? Number(a.release_pl02) : 0 };
     }
     return {};
   };
@@ -281,7 +282,15 @@ function ReplyForm({ r, run, done }: { r: ConfirmRequest; run: Run; done: () => 
         {r.request_id === "CR-08" && (
           <label className="field"><span>늦출 수 있는 수량(EA, 최대 {(r.max_qty ?? 0).toLocaleString("ko-KR")} = 업무일 Masil 보호량)</span><input type="number" min={0} max={r.max_qty ?? 0} value={Number(a.released_qty)} onChange={(e) => setA({ ...a, released_qty: e.target.value })} /></label>
         )}
+        {r.request_id === "CR-09" && (
+          <>
+            <label className="field"><span>계약·예측 수정 확인</span><select value={String(a.revised)} onChange={(e) => setA({ ...a, revised: e.target.value === "true" })}><option value="false">아니오(반환 0)</option><option value="true">예</option></select></label>
+            <label className="field"><span>PL-01 반환(연 EA)</span><input type="number" min={0} disabled={!a.revised} value={Number(a.release_pl01)} onChange={(e) => setA({ ...a, release_pl01: e.target.value })} /></label>
+            <label className="field"><span>PL-02 반환(연 EA)</span><input type="number" min={0} disabled={!a.revised} value={Number(a.release_pl02)} onChange={(e) => setA({ ...a, release_pl02: e.target.value })} /></label>
+          </>
+        )}
       </div>
+      {r.request_id === "CR-09" && <p className="muted small">회신 권한: 영업 임원(기존 고객 약속 조정). 다른 역할이 넣으면 거절된다.</p>}
       <button onClick={send}>회신 기록(E3)</button>
     </div>
   );

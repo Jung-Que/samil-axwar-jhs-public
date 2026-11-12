@@ -58,6 +58,11 @@ type Scenario struct {
 	// Opt01NoValidation은 비교 시나리오 표시다(이슈 #29). 원본 OPT-01 노트 "원료 재계약·처방 재검증 불필요"를 적용해
 	// OPT-01 적격 기간을 0주로 둔다. 기본(제출 기준)은 false이며, 엔진이 비교용으로만 켜서 한 번 더 계산한다.
 	Opt01NoValidation bool `json:"opt01_no_validation,omitempty"`
+	// R13: 이탈 의심 고객(AT_RISK)의 능력은 영업 임원 확인(CR-09) 전에는 C-201에 돌려주지 않는다.
+	// 회신이 "계약·예측 수정 확인"이면 제품군별 연간 반환 수량만 별도 공급 출처(CUST-REL)로 넣는다.
+	ChurnAnswered bool             `json:"churn_answered,omitempty"`
+	ChurnRevised  bool             `json:"churn_revised,omitempty"`
+	ChurnRelease  map[string]int64 `json:"churn_release,omitempty"`
 }
 
 // DefaultItems는 rfp_c201 표의 바이어 제시안이다(구조화가 끝나기 전 기본값이 아니라, 시드·검증용).
@@ -197,6 +202,7 @@ type Evaluation struct {
 	Commitments     Commitments            `json:"commitments"`
 	Flags           []Flag                 `json:"flags"`
 	CompareOPT01    *OptCompare            `json:"compare_opt01,omitempty"` // 비교 시나리오(원본 '재검증 불필요'), 표시용
+	Churn           []ChurnSignal          `json:"churn"`                   // R12 이탈 신호(매출 비중 10% 이상 고객)
 }
 
 // Evaluate는 원본과 시나리오로 평가를 만든다. 같은 입력이면 항상 같은 결과다.
@@ -373,6 +379,9 @@ func evaluate(b *Base, sc Scenario) *Evaluation {
 			if q := baseMonthly[p]; q > 0 {
 				row.Supplies = append(row.Supplies, Supply{Basis: "base", Qty: q})
 			}
+			if q := sc.ChurnRelease[p] / 12; sc.ChurnRevised && q > 0 { // R13: 영업 임원이 확인한 수량만
+				row.Supplies = append(row.Supplies, Supply{Basis: "CUST-REL", Qty: q})
+			}
 			if p == ProductDerma {
 				for _, oe := range ev.Options {
 					if oe.Usable && m >= oe.StartMonth {
@@ -421,6 +430,7 @@ func evaluate(b *Base, sc Scenario) *Evaluation {
 	}
 
 	ev.Commitments = at.Commit
+	ev.Churn = at.Churn
 	ev.Flags = flags(ev, sc)
 	return ev
 }
@@ -509,6 +519,18 @@ func flags(ev *Evaluation, sc Scenario) []Flag {
 	}
 	if d := ev.Products[ProductDerma]; d.ShortTotal > 0 {
 		add("PL02_SHORT", "위험", "R7", "PL-02 계약 기간 부족 %s EA(공급률 %.1f%%). 전량 약속 시 지연분 기준 노출 %.2f억", Commas(d.ShortTotal), d.CoveragePct, d.PenaltyBacklog/1e8)
+	}
+	for _, sg := range ev.Churn {
+		switch sg.Status {
+		case ChurnAtRisk:
+			add("CHURN_"+sg.CustomerID, "위험", "R12", "이탈 경보 %s(%s부터). 출하는 아직 이어져 재무(출하 기준) 보고에는 정상으로 보인다. 원인은 단정하지 않는다(영업 회의록)", churnText(sg), sg.Since)
+			if !sc.ChurnRevised {
+				add("R13_NO_RETURN", "미확인", "R13", "%s 진행 주문 %d건(PL-01 %s · PL-02 %s EA)은 '검토'로만 표시하고 보호를 유지한다. 영업 임원 확인(CR-09) 전에는 C-201에 능력을 돌려주지 않는다(반환 0)",
+					sg.CustomerID, sg.OpenOrders, Commas(sg.OpenQty[ProductBasic]), Commas(sg.OpenQty[ProductDerma]))
+			}
+		case ChurnWatch:
+			add("CHURN_"+sg.CustomerID, "미확인", "R12", "이탈 관찰(WATCH) %s(%s부터). 단월 수주/출하가 2개월 연속 0.85 미만", churnText(sg), sg.Since)
+		}
 	}
 	return f
 }

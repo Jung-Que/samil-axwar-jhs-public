@@ -101,6 +101,9 @@ export type Scenario = {
   pl01_confirmed: boolean;
   initial_qty_required: number;
   options: Record<string, { status: string; decision_date?: string }>;
+  churn_answered?: boolean;
+  churn_revised?: boolean;
+  churn_release?: Record<string, number>;
 };
 export type Evaluation = {
   scenario: Scenario;
@@ -124,6 +127,34 @@ export type Evaluation = {
   commitments: Commitments;
   flags: Flag[] | null;
   compare_opt01?: OptCompare;
+  churn: ChurnSignal[] | null;
+};
+// R12 이탈 경보(server/w05/churn.go)
+export type ChurnMonth = {
+  month: string;
+  booking_krw: number;
+  shipment_krw: number;
+  single_ratio: number;
+  rolling_ratio: number;
+  yoy_pct: number;
+  has_yoy: boolean;
+  status: "정상" | "WATCH" | "AT_RISK";
+};
+export type ChurnSignal = {
+  customer_id: string;
+  customer_name: string;
+  revenue_share_pct: number;
+  month: string;
+  status: "정상" | "WATCH" | "AT_RISK";
+  since?: string;
+  single_ratio: number;
+  rolling_ratio: number;
+  yoy_pct: number;
+  has_yoy: boolean;
+  open_orders: number;
+  open_qty: Record<string, number>;
+  t12_booked_qty: Record<string, number>;
+  history: ChurnMonth[] | null;
 };
 // OPT-01 비교 시나리오(server/w05/compare.go, 표시용)
 export type CompareSide = {

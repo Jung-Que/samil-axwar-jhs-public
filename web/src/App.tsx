@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, api } from "./api";
 import type { LaneAction, View } from "./types";
-import { AssumptionsView, CapacityView, CompareView, DecisionsView, JudgmentCard, LedgerView, LogView, ScheduleView, SourceGapView, TasksView } from "./panels";
+import { AssumptionsView, CapacityView, ChurnView, CompareView, DecisionsView, JudgmentCard, LedgerView, LogView, ScheduleView, SourceGapView, TasksView } from "./panels";
 import { EventPanel, RequestsView } from "./EventPanel";
 import { AsOfBar, BacktestView, InboxView, LanesView, LineBoardView } from "./asofViews";
 
@@ -113,7 +113,7 @@ export default function App() {
           {tab === "lines" && (<><LineBoardView v={v} /><SourceGapView v={v} /></>)}
           {tab === "judge" && (<><JudgmentCard v={v} /><ScheduleView v={v} /><CompareView v={v} /></>)}
           {tab === "capacity" && (<><CapacityView v={v} /><CompareView v={v} /><SourceGapView v={v} /></>)}
-          {tab === "ledger" && <LedgerView v={v} />}
+          {tab === "ledger" && (<><LedgerView v={v} /><ChurnView v={v} /></>)}
           {tab === "requests" && (<><RequestsView v={v} run={run} /><DecisionsView v={v} /></>)}
           {tab === "log" && <LogView v={v} />}
           {tab === "backtest" && <BacktestView v={v} />}
