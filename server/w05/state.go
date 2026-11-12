@@ -443,6 +443,26 @@ func (s *State) Apply(b *Base, e Event) error {
 		s.closeTasks("제안서 작성")
 		s.addTask("영업", "바이어 회신 추적(초도일·분할·페널티 기준·생산지)", addBusinessDays(e.SimDate, 5), e.Seq)
 
+	case EvSimAssumption: // 모의 가정(이슈 #39): 시뮬레이션 세션에서만
+		if !s.IsSim() {
+			return fmt.Errorf("기준 세션에서는 모의 가정을 넣지 않는다 — '지금 상태에서 분기'로 시뮬레이션 세션을 만든 뒤 넣는다(원본 제약은 대안 시나리오로 분리, A05 §6)")
+		}
+		var p SimAssumption
+		if err := decodeStrict(e.Payload, &p); err != nil {
+			return fmt.Errorf("모의 가정 형식 오류: %v", err)
+		}
+		notes, err := p.apply(&s.Scenario)
+		if err != nil {
+			return err
+		}
+		if len(notes) == 0 {
+			return fmt.Errorf("바꿀 모의 가정이 없다")
+		}
+		s.Scenario.SimNotes = append(s.Scenario.SimNotes, notes...)
+		for _, n := range notes {
+			note("%s", n)
+		}
+
 	default:
 		return fmt.Errorf("모르는 사건 종류: %s", e.Type)
 	}

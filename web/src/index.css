@@ -388,6 +388,7 @@ main {
 }
 
 .tag-합성,
+.tag-모의-가정,
 .tag-가정 {
   color: var(--warn);
   border-color: var(--warn);
@@ -655,6 +656,10 @@ button.active {
 
 .nowrap {
   white-space: nowrap;
+}
+
+.field.wide input {
+  min-width: 260px;
 }
 
 ol.log button {

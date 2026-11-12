@@ -1,4 +1,4 @@
-import type { Backtest, Inbox, SessionCompare, View } from "./types";
+import type { Backtest, Inbox, SessionCompare, SweepAxis, SweepResult, View } from "./types";
 
 // API 오류. 규칙 위반(409)이면 서버가 현재 상태(view)를 함께 보낸다.
 export class ApiError extends Error {
@@ -67,4 +67,6 @@ export const api = {
   fork: (seq: number, name = "") => call<View>("POST", `/api/w05/sessions/${encodeURIComponent(session)}/fork`, { seq, name }),
   deleteSession: (id: string) => call<View>("DELETE", `/api/w05/sessions/${encodeURIComponent(id)}`),
   compare: (a: string, b: string) => call<SessionCompare>("GET", `/api/w05/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`),
+  // 민감도 격자: 사건 없이 지금 세션 시나리오로 엔진 평가만 반복한다.
+  sweep: (x: SweepAxis, y?: SweepAxis) => call<SweepResult>("POST", withSession("/api/w05/sweep"), { x, ...(y ? { y } : {}) }),
 };

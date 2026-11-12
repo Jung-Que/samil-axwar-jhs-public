@@ -63,6 +63,11 @@ type Scenario struct {
 	ChurnAnswered bool             `json:"churn_answered,omitempty"`
 	ChurnRevised  bool             `json:"churn_revised,omitempty"`
 	ChurnRelease  map[string]int64 `json:"churn_release,omitempty"`
+	// 모의 가정(E9, 시뮬레이션 세션 전용, 이슈 #39). FXShift는 기준일 종가에 더하는 환율 충격(원)이며 USD 원료비도 1:1로 움직인다(A-12).
+	// OptValidation은 증설안별 적격 주수(설치 뒤)를 덮어쓴다. SimNotes는 적용한 모의 가정 기록이다.
+	FXShift       float64        `json:"fx_shift,omitempty"`
+	OptValidation map[string]int `json:"opt_validation,omitempty"`
+	SimNotes      []string       `json:"sim_notes,omitempty"`
 }
 
 // DefaultItems는 rfp_c201 표의 바이어 제시안이다(구조화가 끝나기 전 기본값이 아니라, 시드·검증용).
@@ -198,6 +203,7 @@ type Evaluation struct {
 	PenaltyMonthly  float64                `json:"penalty_contract_monthly_krw"`
 	FXDown100Rev    float64                `json:"fx_down100_revenue_krw"`
 	FXDown100Contr  float64                `json:"fx_down100_contrib_krw"`
+	FXShift         float64                `json:"fx_shift"`    // 모의 가정 환율 충격(원). FX는 충격을 더한 값
 	InitialGap      int64                  `json:"initial_gap"` // 바이어 첫 달 요구 − 공급
 	Commitments     Commitments            `json:"commitments"`
 	Flags           []Flag                 `json:"flags"`
@@ -228,8 +234,17 @@ func evaluate(b *Base, sc Scenario) *Evaluation {
 	if sc.BoardDate == "" {
 		sc.BoardDate = SessionScenario(DefaultAsOf).BoardDate
 	}
-	ev := &Evaluation{Scenario: sc, FX: at.FX, FXDate: at.FXDate, Cutoff: at.Cutoff, FutureSnapshot: at.FutureSnapshot, Products: map[string]ProductEval{},
+	fx := at.FX + sc.FXShift // 모의 가정 환율 충격(기본 0)
+	ev := &Evaluation{Scenario: sc, FX: fx, FXShift: sc.FXShift, FXDate: at.FXDate, Cutoff: at.Cutoff, FutureSnapshot: at.FutureSnapshot, Products: map[string]ProductEval{},
 		RevenueAt: map[string]float64{}, ContribAt: map[string]float64{}}
+	// 원료비/EA: USD 원료는 환율 충격만큼 1:1로 움직인다(A-12). 충격이 0이면 원본 계산 그대로다.
+	material := func(p string) float64 {
+		mc := at.MatCost[p]
+		if mc.USD && mc.EffectiveFX > 0 && sc.FXShift != 0 {
+			return mc.PerEA + mc.PerEA/mc.EffectiveFX*sc.FXShift
+		}
+		return mc.PerEA
+	}
 
 	// R1: 라인 여유와 Masil 보호
 	masil := map[string]int64{}
@@ -287,8 +302,8 @@ func evaluate(b *Base, sc Scenario) *Evaluation {
 		items[it.ProductID] = it
 		usdTotal += float64(it.AnnualQty) * it.UnitPriceUSD
 	}
-	unit := func(p string, cut float64) float64 { return items[p].UnitPriceUSD * (1 + cut) * at.FX }
-	contrib := func(p string, cut float64) float64 { return unit(p, cut) - at.MatCost[p].PerEA }
+	unit := func(p string, cut float64) float64 { return items[p].UnitPriceUSD * (1 + cut) * fx }
+	contrib := func(p string, cut float64) float64 { return unit(p, cut) - material(p) }
 	for _, c := range []struct {
 		k   string
 		cut float64
@@ -300,7 +315,7 @@ func evaluate(b *Base, sc Scenario) *Evaluation {
 		}
 		ev.RevenueAt[c.k], ev.ContribAt[c.k] = rev, con
 	}
-	ev.ContractAnnual = usdTotal * (1 + sc.PriceCut) * at.FX
+	ev.ContractAnnual = usdTotal * (1 + sc.PriceCut) * fx
 	ev.PenaltyMonthly = ev.ContractAnnual * PenaltyRate
 	var matUSD float64
 	for _, it := range sc.Items {
@@ -321,6 +336,9 @@ func evaluate(b *Base, sc Scenario) *Evaluation {
 	}
 	for _, cx := range b.Capex {
 		ovw := vw
+		if w, ok := sc.OptValidation[cx.OptionID]; ok { // 모의 가정: 증설안별 적격 주수
+			ovw = w
+		}
 		if cx.OptionID == "OPT-01" && sc.Opt01NoValidation {
 			ovw = 0 // 비교 시나리오: 원본 노트 "처방 재검증 불필요"
 		}
@@ -365,7 +383,7 @@ func evaluate(b *Base, sc Scenario) *Evaluation {
 	for _, it := range sc.Items {
 		p := it.ProductID
 		pe := ProductEval{ProductID: p, AnnualQty: it.AnnualQty, UnitPriceUSD: it.UnitPriceUSD, UnitKRW: unit(p, sc.PriceCut),
-			MaterialPerEA: at.MatCost[p].PerEA, CogsPerEA: at.CogsPerEA[p], ContribPerEA: contrib(p, sc.PriceCut), MonthlyDemand: it.AnnualQty / 12}
+			MaterialPerEA: material(p), CogsPerEA: at.CogsPerEA[p], ContribPerEA: contrib(p, sc.PriceCut), MonthlyDemand: it.AnnualQty / 12}
 		if l, ok := b.LineOf(p); ok {
 			pe.LineID = l.LineID
 		}

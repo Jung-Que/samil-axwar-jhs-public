@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -389,7 +390,7 @@ func assumptions(b *Base, sc Scenario) []Assumption {
 	if sc.AsOf != DefaultAsOf {
 		boardLabel = "가정" // 원본은 기준일 2026-07-01의 이사회(+5일)만 정한다. 다른 기준일은 같은 간격을 빌려 쓴다
 	}
-	return []Assumption{
+	rows := []Assumption{
 		{"A-01", "기준일 / 이사회 / 쓰는 기록의 마지막 날", sc.AsOf + " / " + sc.BoardDate + " / " + at.Cutoff, "원본", "결정 가능일·OPT 결정일 기본값, 기준일 뒤 기록 차단"},
 		{"A-02", "환율(기준일 이전 마지막 종가)", fmt.Sprintf("%s %.2f", at.FXDate, at.FX), "원본", "원화 단가·매출·공헌이익(R9)"},
 		{"A-03", "입찰 접수일 → 마감(RFP는 '3주'만 적음)", "접수일 = 사건 날짜, +3주", "가정", "마감, 바이어 확인 요청 기한"},
@@ -417,6 +418,14 @@ func assumptions(b *Base, sc Scenario) []Assumption {
 		{"A-23", "이탈 경보 임계값(R12)", fmt.Sprintf("매출 비중 %.0f%% 이상 고객, 금액 기준. AT_RISK: 3개월 수주/출하 < %.2f 그리고 3개월 수주 YoY < %.0f%%. WATCH: 단월 수주/출하 < %.2f 2개월 연속. 출처가 정한 값 없음(설계값)", ChurnShareMin, ChurnRollingMax, ChurnYoYMax, ChurnWatchSingle), "가정", "판단 카드 이탈 경보, 영업 레인, CR-09 생성"},
 		{"A-24", "이탈 의심 고객 능력 반환(R13)", churnReleaseValue(sc), lbl(sc.ChurnAnswered), "C-201 공급(출처 CUST-REL), PL-01 상한·PL-02 공급"},
 	}
+	if sc.FXShift != 0 { // 모의 가정 환율 충격(이슈 #39)
+		rows[1].Value = fmt.Sprintf("%s %.2f %+.0f원(모의) = %.2f", at.FXDate, at.FX, sc.FXShift, at.FX+sc.FXShift)
+		rows[1].Label = "모의 가정"
+	}
+	if len(sc.SimNotes) > 0 {
+		rows = append(rows, Assumption{"SIM", "모의 가정(시뮬레이션 세션, E9)", strings.Join(sc.SimNotes, " · "), "모의 가정", "이 세션의 평가 전체(기준 세션에는 없음, 원본 제약은 그대로)"})
+	}
+	return rows
 }
 
 func churnReleaseValue(sc Scenario) string {

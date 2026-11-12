@@ -104,6 +104,9 @@ export type Scenario = {
   churn_answered?: boolean;
   churn_revised?: boolean;
   churn_release?: Record<string, number>;
+  fx_shift?: number;
+  opt_validation?: Record<string, number>;
+  sim_notes?: string[];
 };
 export type Evaluation = {
   scenario: Scenario;
@@ -305,6 +308,21 @@ export type View = {
   condition_codes: Record<string, string>;
   session: SessionInfo;
   sessions: SessionInfo[] | null;
+};
+
+// 민감도 격자(server/w05/simulation.go, 이슈 #39)
+export type SweepAxis = { param: string; values: unknown[] };
+export type SweepMetric = { key: string; label: string; unit: string };
+export type SweepResult = {
+  x_param: string;
+  x_label: string;
+  x_values: string[];
+  y_param?: string;
+  y_label?: string;
+  y_values: string[];
+  metrics: SweepMetric[];
+  base: Record<string, number>;
+  cells: Record<string, number>[][];
 };
 
 // 시뮬레이션 세션(server/w05/sessions.go, 이슈 #37)

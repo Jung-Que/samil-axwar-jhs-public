@@ -26,6 +26,8 @@ import (
 //	POST   /api/w05/sessions/{id}/fork   분기 {seq, name}: 세션 id의 사건 1~seq를 복사한 새 시뮬레이션 세션
 //	DELETE /api/w05/sessions/{id}        시뮬레이션 세션 삭제(main은 409)
 //	GET    /api/w05/compare?a=&b=        두 세션 비교(KPI·제품×월·플래그·확인 요청·작업)
+//	POST   /api/w05/sweep                민감도 격자 {x:{param, values}, y?:{param, values}} — 사건 없이 엔진 평가만 반복
+//	                                     (모의 가정 사건 E9_SIM_ASSUMPTION은 /events로 넣고 시뮬레이션 세션에서만 받는다)
 func registerW05(mux *http.ServeMux, svc *w05.Service) {
 	unavailable := func(w http.ResponseWriter) bool {
 		if svc == nil {
@@ -93,6 +95,25 @@ func registerW05(mux *http.ServeMux, svc *w05.Service) {
 		}
 		v, err := svc.Snapshot(r.Context())
 		respond(w, v, err)
+	})
+
+	mux.HandleFunc("POST /api/w05/sweep", func(w http.ResponseWriter, r *http.Request) {
+		if unavailable(w) {
+			return
+		}
+		var in struct {
+			X w05.SweepAxis  `json:"x"`
+			Y *w05.SweepAxis `json:"y"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		res, err := svc.SweepIn(r.Context(), sessionOf(r), in.X, in.Y)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
 	})
 
 	mux.HandleFunc("GET /api/w05/compare", func(w http.ResponseWriter, r *http.Request) {

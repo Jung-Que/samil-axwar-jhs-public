@@ -10,6 +10,7 @@ export const EVENT_LABEL: Record<string, string> = {
   E0_CLOCK: "E0 시계",
   E1_RFP: "E1 RFP 접수",
   E2_DECISION: "E2 승인 결정",
+  E9_SIM_ASSUMPTION: "E9 모의 가정",
   E3_REPLY: "E3 부서 회신",
   E4_BUYER_REPLY: "E4 바이어 회신",
   E5_NEW_ORDER: "E5 신규 수주",

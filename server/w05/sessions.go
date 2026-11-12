@@ -146,6 +146,21 @@ func firstNonEmpty(a, b string) string {
 	return b
 }
 
+// SweepIn은 세션의 지금 시나리오로 민감도 격자를 돌린다(사건을 남기지 않으므로 기준 세션에서도 된다).
+func (s *Service) SweepIn(ctx context.Context, sid string, x SweepAxis, y *SweepAxis) (SweepResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cs, err := s.load(ctx, sid)
+	if err != nil {
+		return SweepResult{}, err
+	}
+	res, err := Sweep(s.base, cs.state.Scenario, x, y)
+	if err != nil {
+		return SweepResult{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	return res, nil
+}
+
 // ---- 세션 비교(S2) ----
 
 // SessionKPI는 세션 한쪽의 핵심 수치다.

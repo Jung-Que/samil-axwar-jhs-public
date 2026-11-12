@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, api, setSession } from "./api";
 import type { LaneAction, View } from "./types";
-import { SessionBar, SessionCompareView } from "./sessionViews";
+import { SessionBar, SessionCompareView, SimulationView } from "./sessionViews";
 import { AssumptionsView, CapacityView, ChurnView, CompareView, DecisionsView, JudgmentCard, LedgerView, LogView, ScheduleView, SourceGapView, TasksView } from "./panels";
 import { EventPanel, RequestsView } from "./EventPanel";
 import { AsOfBar, BacktestView, InboxView, LanesView, LineBoardView } from "./asofViews";
@@ -15,6 +15,7 @@ const TABS = [
   { id: "ledger", label: "약속 원장" },
   { id: "requests", label: "확인 요청·결정" },
   { id: "log", label: "사건 로그" },
+  { id: "sim", label: "시뮬레이션" },
   { id: "sessions", label: "세션 비교" },
   { id: "backtest", label: "정답 비교" },
   { id: "assume", label: "가정" },
@@ -137,6 +138,7 @@ export default function App() {
           {tab === "ledger" && (<><LedgerView v={v} /><ChurnView v={v} /></>)}
           {tab === "requests" && (<><RequestsView v={v} run={run} /><DecisionsView v={v} /></>)}
           {tab === "log" && <LogView v={v} onFork={(seq) => run(() => api.fork(seq))} busy={busy} />}
+          {tab === "sim" && <SimulationView v={v} run={run} busy={busy} />}
           {tab === "sessions" && <SessionCompareView v={v} />}
           {tab === "backtest" && <BacktestView v={v} />}
           {tab === "assume" && <AssumptionsView v={v} />}
