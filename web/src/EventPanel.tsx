@@ -48,7 +48,8 @@ export function EventPanel({ v, run, focus, dept }: { v: View; run: Run; focus?:
   const state = available(v);
   const perm = (k: string) => canEvent(v, dept, k);
   const avail: Record<string, boolean> = Object.fromEntries(Object.keys(state).map((k) => [k, state[k] && perm(k).ok]));
-  const first = NEXT_ORDER.find((k) => avail[k]) ?? NEXT_ORDER.find((k) => perm(k).ok) ?? "E0_CLOCK"; // 다음에 할 사건을 먼저 고른다
+  // 다음에 할 사건을 먼저 고른다. 내 부서 사건이 대행 사건보다 먼저다(이슈 #47).
+  const first = NEXT_ORDER.find((k) => avail[k] && !perm(k).proxy) ?? NEXT_ORDER.find((k) => avail[k]) ?? NEXT_ORDER.find((k) => perm(k).ok) ?? "E0_CLOCK";
   const [type, setType] = useState(first);
   const [preset, setPreset] = useState(0);
   const [fields, setFields] = useState<Fields | null>(null);
@@ -59,7 +60,9 @@ export function EventPanel({ v, run, focus, dept }: { v: View; run: Run; focus?:
 
   useEffect(() => {
     if (!avail[type]) setType(first);
-  }, [v.state.bid?.state, dept?.code, v.session.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [v.state.bid?.state]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 부서·세션을 바꾸면 그 부서의 다음 사건으로 다시 고른다.
+  useEffect(() => setType(first), [dept?.code, v.session.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 업무 레인 보드에서 고른 사건으로 바꾼다.
   useEffect(() => {

@@ -1,29 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, api, currentRole, setRole, setSession } from "./api";
 import type { Department, LaneAction, View } from "./types";
-import { SessionBar, SessionCompareView, SimulationView } from "./sessionViews";
+import { SessionCompareView, SimulationView } from "./sessionViews";
 import { AssumptionsView, CapacityView, ChurnView, CompareView, DecisionsView, JudgmentCard, LedgerView, LogView, ScheduleView, SourceGapView, TasksView } from "./panels";
 import { EventPanel, RequestsView } from "./EventPanel";
-import { AsOfBar, BacktestView, InboxView, LanesView, LineBoardView } from "./asofViews";
-import { MyWorkView, RoleBar } from "./roleViews";
+import { BacktestView, InboxView, LanesView, LineBoardView } from "./asofViews";
+import { MyWorkView } from "./roleViews";
 import { canEvent, canFeature, deptOf } from "./perm";
-
-const TABS = [
-  { id: "my", label: "내 업무" },
-  { id: "lanes", label: "업무 레인" },
-  { id: "inbox", label: "접수함" },
-  { id: "lines", label: "생산 라인" },
-  { id: "judge", label: "판단·제안" },
-  { id: "capacity", label: "여유·증설안" },
-  { id: "ledger", label: "약속 원장" },
-  { id: "requests", label: "확인 요청·결정" },
-  { id: "log", label: "사건 로그" },
-  { id: "sim", label: "시뮬레이션" },
-  { id: "sessions", label: "세션 비교" },
-  { id: "backtest", label: "정답 비교" },
-  { id: "assume", label: "가정" },
-] as const;
-type Tab = (typeof TABS)[number]["id"];
+import { ALL_TABS, ContextBar, TabNav, type Tab } from "./frame";
 
 // 바로 기록해도 되는 사건(입력 필드가 필요 없음). 나머지는 왼쪽 사건 입력으로 보낸다.
 const DIRECT: Record<string, { actor: string; payload: unknown }> = {
@@ -41,7 +25,7 @@ export default function App() {
   // 탭은 주소 해시(#inbox 등)로도 연다. 시연 중 특정 화면을 바로 보여 주기 위해서다.
   const fromHash = () => {
     const h = window.location.hash.slice(1);
-    return (TABS.find((t) => t.id === h)?.id ?? "my") as Tab;
+    return (ALL_TABS.find((t) => t === h) ?? "my") as Tab;
   };
   const [tab, setTabState] = useState<Tab>(fromHash);
   const setTab = (t: Tab) => {
@@ -83,7 +67,6 @@ export default function App() {
   }, []);
 
   if (!v) return <main className="center">{err ?? "불러오는 중…"}</main>;
-  const bid = v.state.bid;
   const dept: Department | undefined = deptOf(v, roleCode);
   const chooseRole = (code: string) => {
     setRole(code);
@@ -119,23 +102,15 @@ export default function App() {
           <h1>C-201 입찰 · 기존 고객 약속 조율</h1>
           <p className="muted small">Corevia 영업·생산관리 W05 운영 서비스 (초안) · 부서별 권한 · 과거 기록으로 날짜를 골라 그날 기준으로 재현</p>
         </div>
-        <div className="status">
-          <span className="chip strong">입찰 {bid ? `${bid.state} · v${bid.version}` : "접수 전"}</span>
-          <span className="chip">저장소 {v.store}</span>
-          <span className="chip">입력 {v.input_mode}</span>
-          <span className="chip">원본 {v.raw_files_verified}개 해시 확인</span>
-        </div>
         <div className="scenarios">
-          <span className="muted small">시연(새 시뮬레이션 세션 · 기준일 {v.as_of})</span>
+          <span className="muted small" title={`새 시뮬레이션 세션에서 돌린다 · 기준일 ${v.as_of}`}>시연</span>
           {v.scenarios.map((s) => (
             <button key={s.id} title={`${s.description} — 새 시뮬레이션 세션에서 돌린다(지금 세션은 그대로)`} disabled={busy || !dept} onClick={() => run(() => api.scenario(s.id, v.as_of))}>{s.title}</button>
           ))}
           <button className="ghost" disabled={busy || !canReset} title={canReset ? "지금 세션의 사건을 지우고 기준일부터 다시 시작한다" : "기준 세션 초기화는 운영 관리 부서만"} onClick={() => { if (window.confirm(`세션 "${v.session.name}"의 사건을 모두 지운다`)) run(() => api.reset(v.as_of)); }}>이 세션 초기화</button>
         </div>
       </header>
-      <RoleBar v={v} dept={dept} roleCode={roleCode} onChoose={chooseRole} />
-      <SessionBar v={v} run={run} busy={busy} dept={dept} onCompare={() => setTab("sessions")} />
-      <AsOfBar v={v} run={run} busy={busy} dept={dept} />
+      <ContextBar v={v} run={run} busy={busy} dept={dept} roleCode={roleCode} onChoose={chooseRole} onCompare={() => setTab("sessions")} />
       {err && <div className="error" role="alert">{err}</div>}
       <div className="layout">
         <aside>
@@ -143,12 +118,8 @@ export default function App() {
           <TasksView v={v} />
         </aside>
         <main>
-          <nav className="tabs">
-            {TABS.map((t) => (
-              <button key={t.id} className={tab === t.id ? "tab active" : "tab"} onClick={() => setTab(t.id)}>{t.label}</button>
-            ))}
-          </nav>
-          {tab === "my" && <MyWorkView v={v} dept={dept} onAction={onAction} goRequests={() => setTab("requests")} />}
+          <TabNav tab={tab} setTab={setTab} />
+          {tab === "my" && <MyWorkView v={v} dept={dept} onAction={onAction} onChoose={chooseRole} onFocus={(event) => setFocus({ event, n: Date.now() })} goTab={setTab} />}
           {tab === "lanes" && <LanesView v={v} onAction={onAction} />}
           {tab === "inbox" && <InboxView v={v} />}
           {tab === "lines" && (<><LineBoardView v={v} /><SourceGapView v={v} /></>)}

@@ -134,7 +134,7 @@ export function JudgmentCard({ v }: { v: View }) {
   );
 }
 
-function Kpi({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: "ok" | "warn" | "bad" }) {
+export function Kpi({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: "ok" | "warn" | "bad" }) {
   return (
     <div className={`kpi kpi-${tone}`}>
       <div className="kpi-label">{label}</div>

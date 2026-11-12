@@ -3,44 +3,11 @@ import { api } from "./api";
 import type { Department, ItemDiff, MonthDiff, SessionCompare, SessionInfo, SessionKPI, SweepResult, View } from "./types";
 import { Section } from "./panels";
 import { PRODUCT_LABEL, ea, eok, pct } from "./format";
-import { canFeature } from "./perm";
 
 type Run = (fn: () => Promise<View>) => Promise<void>;
 
 const kindLabel = (s: SessionInfo) => (s.kind === "main" ? "기준" : "시뮬레이션");
 const sessionLabel = (s: SessionInfo) => `${s.name} · ${kindLabel(s)}${s.events >= 0 ? ` · 사건 ${s.events}` : ""}`;
-
-// 세션 막대(이슈 #37): 세션 고르기·새 시뮬레이션·지금 상태에서 분기·삭제. 기준 세션(main)은 나중의 운영 세션이다.
-export function SessionBar({ v, run, busy, dept, onCompare }: { v: View; run: Run; busy: boolean; dept?: Department; onCompare: () => void }) {
-  const cur = v.session;
-  const list = v.sessions ?? [cur];
-  const events = v.state.log?.length ?? 0;
-  const parent = list.find((s) => s.id === cur.parent_id);
-  const canMake = canFeature(dept, "sim.session");
-  const canDrop = canFeature(dept, "session.delete");
-  return (
-    <div className={`sessionbar ${cur.kind === "sim" ? "is-sim" : ""}`}>
-      <label className="field inline">
-        <span>세션</span>
-        <select value={cur.id} disabled={busy} onChange={(e) => run(() => api.open(e.target.value))}>
-          {list.map((s) => (
-            <option key={s.id} value={s.id}>{sessionLabel(s)}</option>
-          ))}
-        </select>
-      </label>
-      <span className={`chip ${cur.kind === "sim" ? "warn" : "strong"}`}>{cur.kind === "sim" ? "시뮬레이션 세션 · 제출은 [모의]" : "기준 세션(이후 운영 세션)"}</span>
-      {cur.parent_id && <span className="muted small">분기: {parent?.name ?? cur.parent_id} 사건 {cur.fork_seq}까지</span>}
-      <button className="ghost small" disabled={busy || !canMake} onClick={() => run(() => api.newSession("", v.as_of))} title={canMake ? "지금 세션 기준일로 빈 시뮬레이션 세션을 만든다" : "부서를 먼저 고른다"}>새 시뮬레이션</button>
-      <button className="ghost small" disabled={busy || !canMake} onClick={() => run(() => api.fork(events))} title={canMake ? "지금 상태(사건 전체)를 복사한 시뮬레이션 세션을 만든다" : "부서를 먼저 고른다"}>지금 상태에서 분기</button>
-      <button className="ghost small" disabled={busy || list.length < 2} onClick={onCompare}>세션 비교</button>
-      {cur.kind === "sim" && (
-        <button className="ghost small danger" disabled={busy || !canDrop} title={canDrop ? "" : "세션 삭제는 운영 관리 부서만"} onClick={() => { if (window.confirm(`세션 "${cur.name}"을 지운다`)) run(() => api.deleteSession(cur.id)); }}>
-          세션 삭제
-        </button>
-      )}
-    </div>
-  );
-}
 
 // 세션 비교(S2): 두 세션의 KPI·제품×월 공급/제안/부족·플래그·확인 요청·작업 차이.
 export function SessionCompareView({ v }: { v: View }) {

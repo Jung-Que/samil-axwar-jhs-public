@@ -6,13 +6,14 @@
   --line: #e2e5ea;
   --accent: #1d5fd1;
   --accent-soft: #e7efff;
-  --ok: #17803d;
+  --ok: #12703a;
   --ok-soft: #e5f5ea;
   --warn: #a35d00;
   --warn-soft: #fff3df;
   --bad: #b42318;
   --bad-soft: #fdecea;
   --gray-soft: #eef0f3;
+  --on-accent: #ffffff;
   color-scheme: light;
 }
 
@@ -32,6 +33,7 @@
     --bad: #ff8a80;
     --bad-soft: #3a1c1a;
     --gray-soft: #242830;
+    --on-accent: #0b1730;
     color-scheme: dark;
   }
 }
@@ -123,7 +125,7 @@ button {
   font: inherit;
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-radius: 6px;
   padding: 6px 12px;
   cursor: pointer;
@@ -176,7 +178,6 @@ textarea {
   margin-bottom: 12px;
 }
 
-.status,
 .scenarios,
 .chips,
 .row {
@@ -226,6 +227,11 @@ textarea {
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;
+  }
+
+  /* 좁은 화면: 탭과 본문(내 업무)을 먼저, 사건 입력은 뒤에(이슈 #47) */
+  .layout > aside {
+    order: 2;
   }
 }
 
@@ -572,22 +578,6 @@ table.grid td input {
 }
 
 
-/* 기준일 막대 */
-.asof {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--accent);
-  border-radius: 10px;
-  padding: 10px 14px;
-  margin-bottom: 12px;
-}
-
-.asof-pick,
-.asof-clock,
-.presets,
 .lane-actions {
   display: flex;
   flex-wrap: wrap;
@@ -666,59 +656,10 @@ ol.log button {
   margin-left: 8px;
 }
 
-/* 부서 막대(이슈 #43) */
-.rolebar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  margin: 0 0 10px;
-  border: 1px solid var(--accent);
-  border-radius: 8px;
-  background: var(--accent-soft);
-}
-
-.rolebar.no-role {
-  border-color: var(--bad);
-  background: var(--bad-soft);
-}
-
-.rolebar .right {
-  margin-left: auto;
-}
-
 .warn-text {
   color: var(--warn);
 }
 
-.lane-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-/* 세션 막대(이슈 #37) */
-.sessionbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  margin: 0 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--card);
-}
-
-.sessionbar.is-sim {
-  border-color: var(--warn);
-  background: var(--warn-soft);
-}
-
-.sessionbar select {
-  max-width: 420px;
-}
 
 button.danger {
   color: var(--bad);
@@ -795,4 +736,244 @@ button.danger {
 .pill-출하-완료 {
   background: var(--gray-soft);
   color: var(--muted);
+}
+/* 앱 틀(이슈 #47): 맥락 막대 하나 + 탭 4묶음 */
+.tiny {
+  font-size: 0.72rem;
+}
+
+.context {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  margin: 0 0 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.context.is-sim {
+  border-color: var(--warn);
+}
+
+.ctx-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-right: 1px solid var(--line);
+  min-width: 0;
+}
+
+.ctx-cell:last-child {
+  border-right: none;
+}
+
+.ctx-role {
+  background: var(--accent-soft);
+}
+
+.ctx-role.no-role {
+  background: var(--bad-soft);
+}
+
+.context.is-sim .ctx-session {
+  background: var(--warn-soft);
+}
+
+.ctx-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.ctx-cell select {
+  max-width: 100%;
+}
+
+.ctx-more summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.ctx-more[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pill.strong {
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.tone-ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.tone-warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.tone-bad {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.tone-accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.tone-gray {
+  background: var(--gray-soft);
+  color: var(--fg);
+}
+
+.tabnav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tabgroups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tabgroup {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--line);
+  font-weight: 600;
+  padding: 4px 14px;
+}
+
+.tabgroup.active {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+
+/* 내 업무(이슈 #47) */
+.mywork {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.mywork-main {
+  flex: 999 1 560px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mywork-side {
+  flex: 1 1 280px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.now-card.has-action {
+  border-color: var(--accent);
+  border-width: 2px;
+}
+
+.now-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.now-text {
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.now-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.now-text .muted {
+  margin: 2px 0 0;
+}
+
+.now-conds li {
+  font-size: 0.85rem;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.flow {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 6px;
+}
+
+.flow-step {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--gray-soft);
+}
+
+.flow-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.flow-sub {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.flow-step.is-done {
+  background: var(--ok-soft);
+}
+
+.flow-step.is-done .flow-title {
+  color: var(--ok);
+}
+
+.flow-step.is-now {
+  background: var(--accent-soft);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.flow-step.is-now .flow-title {
+  color: var(--accent);
+}
+
+.flow-step.is-stop {
+  background: var(--bad-soft);
+}
+
+.flow-step.is-stop .flow-title {
+  color: var(--bad);
+}
+
+.flow-next {
+  margin: 10px 0 0;
+}
+
+.kpis.one-col {
+  grid-template-columns: 1fr;
 }
