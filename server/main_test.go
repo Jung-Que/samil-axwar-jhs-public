@@ -71,8 +71,8 @@ func TestRoutes(t *testing.T) {
 		{"로그인 없는 계정 표는 401", "GET", "/api/auth/users", 401, `"error"`},
 		{"API 상태: 메모리 저장소", "GET", "/api/status", 200, `"store":"memory"`},
 		{"API 상태: 스키마", "GET", "/api/status", 200, `"db":"ok"`},
-		{"없는 API는 JSON 404", "GET", "/api/nope", 404, `"error":"not found"`},
-		{"없는 API는 POST도 JSON 404", "POST", "/api/nope", 404, `"error":"not found"`},
+		{"없는 API는 JSON 404", "GET", "/api/nope", 404, `"error":"요청한 주소를 찾을 수 없습니다."`},
+		{"없는 API는 POST도 JSON 404", "POST", "/api/nope", 404, `"error":"요청한 주소를 찾을 수 없습니다."`},
 		{"첫 화면", "GET", "/", 200, `id="root"`},
 		{"화면 주소 새로고침", "GET", "/orders/C-201", 200, `id="root"`},
 		{"정적 파일", "GET", "/assets/app.js", 200, "console.log"},
@@ -109,7 +109,7 @@ func TestW05API(t *testing.T) {
 	// 회신 대기 상태에서 다시 제출하면 규칙 위반(영업 부서로 입력)
 	role = "sales"
 	rec := do("POST", "/api/w05/events", `{"type":"E7_SUBMIT_PROPOSAL","actor_role":"영업","payload":{}}`)
-	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "제출은 승인") {
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "제출은 승인·조건부 승인 상태에서만 할 수 있습니다(현재 회신 대기).") {
 		t.Fatalf("잘못된 제출: %d %.300s", rec.Code, rec.Body.String())
 	}
 	if evs, _ := st.ListEvents(context.Background(), store.MainSession); len(evs) != 4 {
@@ -248,7 +248,7 @@ func TestW05SessionAPI(t *testing.T) {
 	if rec := do("DELETE", "/api/w05/sessions/"+fork, ""); rec.Code != http.StatusForbidden {
 		t.Fatalf("재무·전략의 세션 삭제: %d", rec.Code)
 	}
-	if rec := do("POST", "/api/w05/events?session="+fork, `{"type":"E2_DECISION","actor_role":"CEO/이사회","payload":{"participation":"조건부","options":{"OPT-02":"승인"}}}`); rec.Code != 200 || !strings.Contains(rec.Body.String(), "[모의 대행] 재무·전략 사용자가 CEO/이사회 권한으로 입력") || !strings.Contains(rec.Body.String(), `"entered_by":"재무·전략"`) {
+	if rec := do("POST", "/api/w05/events?session="+fork, `{"type":"E2_DECISION","actor_role":"CEO/이사회","payload":{"participation":"조건부","options":{"OPT-02":"승인"}}}`); rec.Code != 200 || !strings.Contains(rec.Body.String(), "[모의 대행] 재무·전략 사용자가 CEO/이사회 권한으로 입력했습니다(시뮬레이션 세션).") || !strings.Contains(rec.Body.String(), `"entered_by":"재무·전략"`) {
 		t.Fatalf("시뮬레이션 대행 입력: %d %.300s", rec.Code, rec.Body.String())
 	}
 	role = "admin"

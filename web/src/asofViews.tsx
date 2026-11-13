@@ -8,7 +8,7 @@ import { BASE, EChart, INK, INK2, LINE, RED, axis } from "./chart";
 // 업무 레인 보드: 레인별 들어온 것·할 수 있는 일·하고 있는 일·막힌 것.
 export function LanesView({ v, onAction }: { v: View; onAction: (a: LaneAction) => void }) {
   return (
-    <Section title="업무 레인 보드" mode={["real", "mock"]} note={`업무일 ${v.state.scenario.sim_date} 기준(기록 ~${v.cutoff}). "할 수 있는 일"을 누르면 그 사건 입력으로 간다. 출처: 원본·계산·실제 작동(사건 루프)·모의(외부 회신).`}>
+    <Section title="업무 레인 보드" mode={["real", "mock"]} note={`업무일 ${v.state.scenario.sim_date} 기준(기록 ~${v.cutoff})입니다. "할 수 있는 일"을 누르면 해당 사건 입력 화면으로 이동합니다. 출처: 원본·계산·실제 작동(사건 루프)·모의(외부 회신).`}>
       <div className="lanes">
         {v.lanes.map((l) => (
           <LaneCard key={l.role} lane={l} onAction={onAction} />
@@ -53,7 +53,7 @@ function LaneCard({ lane, onAction }: { lane: Lane; onAction: (a: LaneAction) =>
       )}
       {items("하고 있는 일", lane.doing)}
       {items("막힌 것", lane.blocked, "lane-blocked")}
-      {!lane.incoming?.length && !lane.can?.length && !lane.doing?.length && !lane.blocked?.length && <p className="muted small">지금 할 일 없음</p>}
+      {!lane.incoming?.length && !lane.can?.length && !lane.doing?.length && !lane.blocked?.length && <p className="muted small">현재 처리할 업무가 없습니다.</p>}
     </div>
   );
 }
@@ -71,7 +71,7 @@ export function InboxView({ v }: { v: View }) {
   if (!inbox) return <p className="muted">불러오는 중…</p>;
   const orders = (inbox.orders ?? []).filter((o) => !product || o.product_id === product);
   return (
-    <Section title="접수함" mode={["real"]} note={`업무일 ${inbox.sim_date} 기준, 기록 ~${inbox.cutoff}. 수주는 원본(sales_orders_cv), 상태·추정 납기는 그날까지 기록으로 계산.`}>
+    <Section title="접수함" mode={["real"]} note={`업무일 ${inbox.sim_date} 기준(기록 ~${inbox.cutoff})입니다. 수주는 원본(sales_orders_cv)이며, 상태·추정 납기는 해당 일자까지의 기록으로 계산합니다.`}>
       <div className="kpis">
         <Tile label="기록 마지막 날 접수" value={`${ea(inbox.today)}건`} />
         <Tile label="최근 7일 접수" value={`${ea(inbox.last7)}건`} />
@@ -151,7 +151,7 @@ export function LineBoardView({ v }: { v: View }) {
       mode={["real"]}
       note={
         <>
-          업무일 {v.state.scenario.sim_date} 기준(기록 ~{v.cutoff}). <b>이 보드의 월 생산·부하·상태는 배치 실적과 진행 주문 기록에서 온다</b>({batchSource(v)}). 부하는 진행 주문의 추정 납기 달(A-14) + C-201 가예약이고, 대리점 주문 {ea(b.agency_orders)}건 · {ea(b.agency_qty)} EA는 빠져 있다(A-17). 상태는 다음 달 부하 ÷ 배치 실적 월 생산(문턱 85%·100%, A-21, 표시용). <b>여유(연) 열만 엔진과 같은 능력 스냅샷</b>({b.snapshot_file} {b.snapshot_date})이라 다른 열과 규모가 다르다 → 아래 '원본 간 규모 차이'.
+          업무일 {v.state.scenario.sim_date} 기준(기록 ~{v.cutoff})입니다. <b>이 보드의 월 생산·부하·상태는 배치 실적과 진행 주문 기록을 기준으로 합니다</b>({batchSource(v)}). 부하는 진행 주문의 추정 납기 달(A-14) + C-201 가예약이며, 대리점 주문 {ea(b.agency_orders)}건 · {ea(b.agency_qty)} EA는 포함되지 않습니다(A-17). 상태는 다음 달 부하 ÷ 배치 실적 월 생산으로 표시합니다(문턱 85%·100%, A-21, 표시용). <b>여유(연) 열만 엔진과 같은 능력 스냅샷</b>({b.snapshot_file} {b.snapshot_date})을 사용하므로 다른 열과 규모가 다릅니다. 아래 '원본 간 규모 차이'를 확인해 주세요.
         </>
       }
     >
@@ -271,7 +271,7 @@ function LoadChart({ rows, months }: { rows: LineRow[]; months: string[] }) {
     };
   }, [rows, months]);
   if (!rows.length) return null;
-  return <EChart option={option} height={260} label="라인별 월 부하율. 수치는 아래 표의 부하 열에 있다." />;
+  return <EChart option={option} height={260} label="라인별 월 부하율. 수치는 아래 표의 부하 열에서 확인할 수 있습니다." />;
 }
 
 // 정답 비교: 기준일에 추정한 납기(그날까지 기록만)와 그 뒤 실제 출하. 검증 전용.
@@ -284,7 +284,7 @@ export function BacktestView({ v }: { v: View }) {
   return (
     <Section title="정답 비교 (검증 전용)" mode={["real"]} note={bt.note}>
       {!bt.available ? (
-        <p className="muted small">위 기준일 막대에서 2026-06-30보다 이른 날짜를 고르면 비교할 수 있다.</p>
+        <p className="muted small">위 기준일 막대에서 2026-06-30보다 이른 날짜를 선택하면 비교할 수 있습니다.</p>
       ) : (
         <div className="cols">
           {["PL-01", "PL-02"].map((p) => (

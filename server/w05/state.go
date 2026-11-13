@@ -213,7 +213,7 @@ func (s *State) Apply(b *Base, e Event) error {
 		return err
 	}
 	if e.By != "" && e.By != e.Actor {
-		note("[모의 대행] %s 사용자가 %s 권한으로 입력(시뮬레이션 세션)", e.By, e.Actor)
+		note("[모의 대행] %s 사용자가 %s 권한으로 입력했습니다(시뮬레이션 세션).", e.By, e.Actor)
 	}
 
 	switch e.Type {
@@ -225,10 +225,10 @@ func (s *State) Apply(b *Base, e Event) error {
 			return err
 		}
 		if len(s.Log) > 0 || s.Bid != nil {
-			return fmt.Errorf("세션 기준일은 첫 사건으로만 정한다(초기화 후 다시)")
+			return fmt.Errorf("세션 기준일은 첫 사건으로만 정할 수 있습니다. 세션을 초기화한 뒤 다시 입력해 주세요.")
 		}
 		if _, ok := parseDate(p.AsOf); !ok || p.AsOf < AsOfMin || p.AsOf > AsOfMax {
-			return fmt.Errorf("기준일은 %s~%s 사이(YYYY-MM-DD): %q", AsOfMin, AsOfMax, p.AsOf)
+			return fmt.Errorf("기준일은 %s~%s 사이의 날짜(YYYY-MM-DD)로 입력해 주세요(입력 %q).", AsOfMin, AsOfMax, p.AsOf)
 		}
 		s.Scenario = SessionScenario(p.AsOf)
 		e.SimDate = p.AsOf
@@ -242,7 +242,7 @@ func (s *State) Apply(b *Base, e Event) error {
 			return err
 		}
 		if _, ok := parseDate(p.SimDate); !ok || p.SimDate < s.Scenario.SimDate {
-			return fmt.Errorf("시계는 앞으로만 간다: %q (지금 %s)", p.SimDate, s.Scenario.SimDate)
+			return fmt.Errorf("시계는 앞으로만 옮길 수 있습니다(입력 %q, 현재 %s).", p.SimDate, s.Scenario.SimDate)
 		}
 		prev := s.Scenario.SimDate
 		s.Scenario.SimDate = p.SimDate
@@ -275,7 +275,7 @@ func (s *State) Apply(b *Base, e Event) error {
 
 	case EvRFP:
 		if s.Bid != nil {
-			return fmt.Errorf("이미 접수된 입찰이 있다(초기화 후 다시)")
+			return fmt.Errorf("이미 접수된 입찰이 있습니다. 세션을 초기화한 뒤 다시 입력해 주세요.")
 		}
 		var p RFPFields
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
@@ -298,11 +298,11 @@ func (s *State) Apply(b *Base, e Event) error {
 
 	case EvForApprove:
 		if s.Bid == nil || (s.Bid.State != BidReviewing && s.Bid.State != BidRereview) {
-			return fmt.Errorf("상신은 검토중·재검토 상태에서만 된다(지금 %s)", s.bidState())
+			return fmt.Errorf("상신은 검토중·재검토 상태에서만 할 수 있습니다(현재 %s).", s.bidState())
 		}
 		ev := Evaluate(b, s.Scenario)
 		if probs := proposalChecks(ev, s.Scenario); len(probs) > 0 {
-			return fmt.Errorf("상신 전 검사 실패: %s", strings.Join(probs, "; "))
+			return fmt.Errorf("상신 전 검사를 통과하지 못했습니다: %s", strings.Join(probs, "; "))
 		}
 		if s.Bid.State == BidRereview {
 			s.Bid.Version++
@@ -315,10 +315,10 @@ func (s *State) Apply(b *Base, e Event) error {
 
 	case EvDecision:
 		if s.Bid == nil || s.Bid.State != BidSubmitted {
-			return fmt.Errorf("결정은 상신 상태에서만 받는다(지금 %s)", s.bidState())
+			return fmt.Errorf("결정은 상신 상태에서만 입력할 수 있습니다(현재 %s).", s.bidState())
 		}
 		if want := ApproverRole[EvDecision]; e.Actor != want {
-			return fmt.Errorf("승인 권한 없음: 입찰 참여·투자 승인은 %s만 입력한다(입력자 %q, approval_authority_policy)", want, e.Actor)
+			return fmt.Errorf("승인 권한이 없습니다. 입찰 참여·투자 승인은 %s만 입력할 수 있습니다(입력자 %q, approval_authority_policy).", want, e.Actor)
 		}
 		var p DecisionFields
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
@@ -345,7 +345,7 @@ func (s *State) Apply(b *Base, e Event) error {
 				note("%s → %s", id, st)
 			case "", "언급없음":
 			default:
-				return fmt.Errorf("%s 결정 값 오류: %q", id, st)
+				return fmt.Errorf("%s 결정 값이 올바르지 않습니다(입력 %q).", id, st)
 			}
 		}
 		for _, d := range s.Decisions {
@@ -384,11 +384,11 @@ func (s *State) Apply(b *Base, e Event) error {
 		}
 		r := s.request(p.RequestID)
 		if r == nil || r.State == "반영" {
-			return fmt.Errorf("열린 확인 요청이 아니다: %s", p.RequestID)
+			return fmt.Errorf("열린 확인 요청이 아닙니다(%s).", p.RequestID)
 		}
 		// 회신은 요청 대상 부서만(부서별 권한, 이슈 #43). 바이어 요청은 E4(영업이 바이어 회신 입력)로 반영한다
 		if r.ToRole != "바이어" && e.Actor != r.ToRole {
-			return fmt.Errorf("회신 권한 없음: %s는 %s만 회신한다(입력자 %q)", r.ID, r.ToRole, e.Actor)
+			return fmt.Errorf("회신 권한이 없습니다. %s는 %s만 회신할 수 있습니다(입력자 %q).", r.ID, r.ToRole, e.Actor)
 		}
 		if err := s.applyAnswer(b, r.ID, p.Answer); err != nil {
 			return err
@@ -403,7 +403,7 @@ func (s *State) Apply(b *Base, e Event) error {
 
 	case EvBuyer:
 		if s.Bid == nil {
-			return fmt.Errorf("접수된 입찰이 없다")
+			return fmt.Errorf("접수된 입찰이 없습니다. RFP 접수(E1)를 먼저 입력해 주세요.")
 		}
 		var p BuyerReply
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
@@ -428,7 +428,7 @@ func (s *State) Apply(b *Base, e Event) error {
 			return err
 		}
 		if (p.ProductID != ProductBasic && p.ProductID != ProductDerma) || p.Qty <= 0 {
-			return fmt.Errorf("신규 수주는 PL-01·PL-02, 수량 > 0")
+			return fmt.Errorf("신규 수주는 PL-01·PL-02 제품에 수량을 0보다 크게 입력해 주세요.")
 		}
 		if s.Scenario.NewOrders == nil {
 			s.Scenario.NewOrders = map[string]int64{}
@@ -439,7 +439,7 @@ func (s *State) Apply(b *Base, e Event) error {
 
 	case EvSubmit:
 		if s.Bid == nil || (s.Bid.State != BidApproved && s.Bid.State != BidConditional) {
-			return fmt.Errorf("제출은 승인·조건부 승인 상태에서만 된다(지금 %s)", s.bidState())
+			return fmt.Errorf("제출은 승인·조건부 승인 상태에서만 할 수 있습니다(현재 %s).", s.bidState())
 		}
 		ev := Evaluate(b, s.Scenario)
 		lines := buildLines(ev, s.Scenario, s.Bid)
@@ -466,7 +466,7 @@ func (s *State) Apply(b *Base, e Event) error {
 		}
 		s.submittedSig = contentHash(lines, s.Scenario)
 		if s.IsSim() {
-			note("[모의] 시뮬레이션 세션 제출 — 실제 제출 아님")
+			note("[모의] 시뮬레이션 세션 제출입니다. 실제 제출은 아닙니다.")
 		}
 		note("제안 제출(점검표 통과) → 회신 대기, C-201 가예약 %d건(확정 약속을 밀지 않음, R2)", len(s.Reservations))
 		s.closeTasks("제안서 작성")
@@ -474,18 +474,18 @@ func (s *State) Apply(b *Base, e Event) error {
 
 	case EvSimAssumption: // 모의 가정(이슈 #39): 시뮬레이션 세션에서만
 		if !s.IsSim() {
-			return fmt.Errorf("기준 세션에서는 모의 가정을 넣지 않는다 — '지금 상태에서 분기'로 시뮬레이션 세션을 만든 뒤 넣는다(원본 제약은 대안 시나리오로 분리, A05 §6)")
+			return fmt.Errorf("기준 세션에서는 모의 가정을 입력할 수 없습니다. '지금 상태에서 분기'로 시뮬레이션 세션을 생성한 뒤 입력해 주세요(원본 제약은 대안 시나리오로 분리, A05 §6).")
 		}
 		var p SimAssumption
 		if err := decodeStrict(e.Payload, &p); err != nil {
-			return fmt.Errorf("모의 가정 형식 오류: %v", err)
+			return fmt.Errorf("모의 가정 형식이 올바르지 않습니다: %v", err)
 		}
 		notes, err := p.apply(&s.Scenario)
 		if err != nil {
 			return err
 		}
 		if len(notes) == 0 {
-			return fmt.Errorf("바꿀 모의 가정이 없다")
+			return fmt.Errorf("변경할 모의 가정이 없습니다. 바꿀 값을 하나 이상 입력해 주세요.")
 		}
 		s.Scenario.SimNotes = append(s.Scenario.SimNotes, notes...)
 		for _, n := range notes {
@@ -494,7 +494,7 @@ func (s *State) Apply(b *Base, e Event) error {
 		s.Scenario.HistOrders = b.histOrders(s.Scenario.AsOf, s.Scenario.SimDate, s.Scenario.HistBasis) // 반영 기준이 바뀌었을 수 있다
 
 	default:
-		return fmt.Errorf("모르는 사건 종류: %s", e.Type)
+		return fmt.Errorf("알 수 없는 사건 종류입니다: %s", e.Type)
 	}
 
 	s.reevaluate(b, e.Seq, note)
@@ -541,7 +541,7 @@ func (s *State) reevaluate(b *Base, seq int, note func(string, ...any)) {
 	if s.Eval.InitialGap > 0 && s.request("CR-08") == nil {
 		prot := masilProtected(b, s.Scenario, ProductDerma)
 		s.Requests = append(s.Requests, &ConfirmRequest{ID: "CR-08", ToRole: "Masil SCM",
-			Question: fmt.Sprintf("Masil 더마 발주(업무일 %s까지 %s EA) 중 최대 %s EA의 입고를 늦출 수 있는가(C-201 초도 %s)", CutoffOf(s.Scenario.SimDate), Commas(prot), Commas(min64(s.Eval.InitialGap, prot)), s.Scenario.DeliveryStart),
+			Question: fmt.Sprintf("Masil 더마 발주(업무일 %s까지 %s EA) 중 최대 %s EA의 입고를 늦출 수 있습니까(C-201 초도 %s)?", CutoffOf(s.Scenario.SimDate), Commas(prot), Commas(min64(s.Eval.InitialGap, prot)), s.Scenario.DeliveryStart),
 			Blocks:   []string{"R2", "PL-02 첫 달 수량"}, Due: addBusinessDays(s.Scenario.SimDate, 3), State: "요청", OpenedAt: seq, MaxQty: prot})
 		note("첫 달 요구가 공급보다 %s EA 많음 → Masil 보호분 침범 차단, CR-08(Masil SCM) 생성", Commas(s.Eval.InitialGap))
 	}
@@ -565,7 +565,7 @@ func (s *State) openInitialRequests(b *Base, seq int) {
 	add("CR-02", "생산관리", "PL-01 600만 EA를 소화할 수단(증산·외주·전환)과 연간 추가 가능 수량", addBusinessDays(recv, 5), "R6", "PL-01 수량")
 	for _, l := range ev.Lines {
 		if l.MasilDeficit > 0 {
-			add("CR-03", "생산관리", fmt.Sprintf("Masil SPO(%s %s EA)가 %s 계획(가동률 %.0f%%)에 들어 있는가", l.ProductID, Commas(l.MasilProtected), l.LineID, l.UtilPct), addBusinessDays(recv, 5), "R1", "A-07")
+			add("CR-03", "생산관리", fmt.Sprintf("Masil SPO(%s %s EA)가 %s 계획(가동률 %.0f%%)에 들어 있습니까?", l.ProductID, Commas(l.MasilProtected), l.LineID, l.UtilPct), addBusinessDays(recv, 5), "R1", "A-07")
 			break
 		}
 	}
@@ -581,10 +581,10 @@ func (s *State) openInitialRequests(b *Base, seq int) {
 		others = append(others, l.LineID+" "+Commas(l.SpareAnnual))
 		otherSpare += l.SpareAnnual
 	}
-	add("CR-10", "생산관리", fmt.Sprintf("PL-01을 다른 라인에서 만들 수 있는가: 라인별 전환·셋업 기간(주)과 연간 가능 수량(능력 스냅샷 여유 %s, 합 %s EA). 원본은 PL-01을 F1 전용으로 두지 않는다",
+	add("CR-10", "생산관리", fmt.Sprintf("PL-01을 다른 라인에서 생산할 수 있습니까? 라인별 전환·셋업 기간(주)과 연간 가능 수량을 알려 주세요(능력 스냅샷 여유 %s, 합 %s EA). 원본은 PL-01을 F1 전용으로 두지 않습니다.",
 		strings.Join(others, " · "), Commas(otherSpare)), addBusinessDays(recv, 5), "A-16", "R6")
 	cm := ev.Commitments
-	add("CR-11", "영업", fmt.Sprintf("진행 주문 %s건(PL-01 %s건 · PL-02 %s건)의 고객 합의 납기·수량 대응표. 지금은 리드타임 통계로 추정한다(A-14)",
+	add("CR-11", "영업", fmt.Sprintf("진행 주문 %s건(PL-01 %s건 · PL-02 %s건)의 고객 합의 납기·수량 대응표. 현재는 리드타임 통계로 추정합니다(A-14).",
 		Commas(int64(cm.InProgressCount)), Commas(int64(cm.CountByProduct[ProductBasic])), Commas(int64(cm.CountByProduct[ProductDerma]))), addBusinessDays(recv, 5), "A-14", "R8")
 	// R13: 이탈 경보(AT_RISK) 고객이 있으면 그 능력을 C-201에 돌려도 되는지 영업 임원에게 묻는다(자동 반환 금지)
 	if sg := atRisk(ev.Churn); sg != nil {
@@ -642,7 +642,7 @@ func (s *State) applyAnswer(b *Base, id string, a map[string]any) error {
 	case "CR-01":
 		v, _ := a["capacity_period"].(string)
 		if v != "annual" && v != "monthly" {
-			return fmt.Errorf("CR-01 회신: capacity_period는 annual·monthly")
+			return fmt.Errorf("CR-01 회신: 기간 단위는 연간·월간 중에서 선택해 주세요.")
 		}
 		s.Scenario.CapacityPeriod, s.Scenario.UnitConfirmed = v, true
 	case "CR-02":
@@ -651,13 +651,13 @@ func (s *State) applyAnswer(b *Base, id string, a map[string]any) error {
 	case "CR-03":
 		v, ok := a["masil_in_util"].(bool)
 		if !ok {
-			return fmt.Errorf("CR-03 회신: masil_in_util(true/false) 필요")
+			return fmt.Errorf("CR-03 회신: Masil 발주가 계획에 포함되는지(예·아니오) 선택해 주세요.")
 		}
 		s.Scenario.MasilInUtil = v
 	case "CR-07":
 		v, ok := a["mb_ready"].(bool)
 		if !ok {
-			return fmt.Errorf("CR-07 회신: mb_ready(true/false) 필요")
+			return fmt.Errorf("CR-07 회신: M-B 재계약 가능 여부(가능·불가)를 선택해 주세요.")
 		}
 		s.Scenario.MBReady = v
 		if w := int(num(a["validation_weeks"])); w > 0 {
@@ -668,7 +668,7 @@ func (s *State) applyAnswer(b *Base, id string, a map[string]any) error {
 		limit := masilProtected(b, s.Scenario, ProductDerma)
 		q := int64(num(a["released_qty"]))
 		if q < 0 || q > limit {
-			return fmt.Errorf("CR-08 회신: released_qty는 0~%s(업무일 %s까지 PL-02 Masil 보호량)", Commas(limit), CutoffOf(s.Scenario.SimDate))
+			return fmt.Errorf("CR-08 회신: 늦출 수 있는 수량은 0~%s EA 사이로 입력해 주세요(업무일 %s까지 PL-02 Masil 보호량).", Commas(limit), CutoffOf(s.Scenario.SimDate))
 		}
 		s.Scenario.MasilReleased = q
 	case "CR-10": // 기록만(엔진 반영은 설계 단계). 라인 코드·주수·수량만 검증한다
@@ -681,41 +681,41 @@ func (s *State) applyAnswer(b *Base, id string, a map[string]any) error {
 		for _, id := range anyList(a["lines"]) {
 			q, ok := spare[id]
 			if !ok {
-				return fmt.Errorf("CR-10 회신: %s는 PL-01 후보 라인이 아니다(L-01·더마 전용 L-02 제외 기존 라인만)", id)
+				return fmt.Errorf("CR-10 회신: %s는 PL-01 후보 라인이 아닙니다. L-01과 더마 전용 L-02를 제외한 기존 라인만 선택해 주세요.", id)
 			}
 			limit += q
 		}
 		if w := num(a["changeover_weeks"]); w < 0 || w > 104 {
-			return fmt.Errorf("CR-10 회신: changeover_weeks는 0~104")
+			return fmt.Errorf("CR-10 회신: 전환·셋업 기간은 0~104주 사이로 입력해 주세요.")
 		}
 		if q := int64(num(a["annual_qty"])); q < 0 || q > limit {
-			return fmt.Errorf("CR-10 회신: annual_qty는 0~%s(고른 라인의 능력 스냅샷 여유 합)", Commas(limit))
+			return fmt.Errorf("CR-10 회신: 연간 가능 수량은 0~%s EA 사이로 입력해 주세요(선택한 라인의 능력 스냅샷 여유 합).", Commas(limit))
 		}
 	case "CR-11": // 기록만(엔진 반영은 설계 단계)
 		if _, ok := a["received"].(bool); !ok {
-			return fmt.Errorf("CR-11 회신: received(true/false) 필요")
+			return fmt.Errorf("CR-11 회신: 확정 납기 대응표를 받았는지(받음·없음) 선택해 주세요.")
 		}
 		n := int64(num(a["orders"]))
 		total := int64(b.At(s.Scenario.SimDate).Commit.InProgressCount)
 		if n < 0 || n > total {
-			return fmt.Errorf("CR-11 회신: orders는 0~%s(진행 주문 수)", Commas(total))
+			return fmt.Errorf("CR-11 회신: 주문 수는 0~%s건 사이로 입력해 주세요(진행 주문 수).", Commas(total))
 		}
 	case "CR-09":
 		revised, ok := a["revised"].(bool)
 		if !ok {
-			return fmt.Errorf("CR-09 회신: revised(true/false) 필요")
+			return fmt.Errorf("CR-09 회신: 계약·예측 수정 확인 여부(예·아니오)를 선택해 주세요.")
 		}
 		sg := atRisk(b.At(s.Scenario.SimDate).Churn)
 		if sg == nil {
-			return fmt.Errorf("CR-09 회신: 지금 업무일에 이탈 경보 고객이 없다")
+			return fmt.Errorf("CR-09 회신: 현재 업무일에는 이탈 경보 고객이 없습니다.")
 		}
 		rel := map[string]int64{ProductBasic: int64(num(a["release_pl01"])), ProductDerma: int64(num(a["release_pl02"]))}
 		for p, q := range rel {
 			if q < 0 || q > sg.T12BookedQty[p] {
-				return fmt.Errorf("CR-09 회신: %s 반환 수량은 0~%s(최근 12개월 %s 수주)", p, Commas(sg.T12BookedQty[p]), sg.CustomerID)
+				return fmt.Errorf("CR-09 회신: %s 반환 수량은 0~%s EA 사이로 입력해 주세요(최근 12개월 %s 수주).", p, Commas(sg.T12BookedQty[p]), sg.CustomerID)
 			}
 			if !revised && q > 0 {
-				return fmt.Errorf("CR-09 회신: 계약·예측 수정이 확인되지 않으면 반환 수량은 0")
+				return fmt.Errorf("CR-09 회신: 계약·예측 수정이 확인되지 않으면 반환 수량은 0으로 입력해 주세요.")
 			}
 		}
 		s.Scenario.ChurnAnswered, s.Scenario.ChurnRevised = true, revised
@@ -725,7 +725,7 @@ func (s *State) applyAnswer(b *Base, id string, a map[string]any) error {
 			s.Scenario.ChurnRelease = nil
 		}
 	default:
-		return fmt.Errorf("%s는 바이어 회신(E4)으로 반영한다", id)
+		return fmt.Errorf("%s는 바이어 회신(E4)으로 입력해 주세요.", id)
 	}
 	return nil
 }
@@ -751,19 +751,19 @@ var ConditionCodes = map[string]string{
 
 func (p DecisionFields) validate() error {
 	if p.Participation != "승인" && p.Participation != "조건부" && p.Participation != "거절" {
-		return fmt.Errorf("참여 결정은 승인·조건부·거절 중 하나: %q", p.Participation)
+		return fmt.Errorf("참여 결정은 승인·조건부·거절 중에서 선택해 주세요(입력 %q).", p.Participation)
 	}
 	for _, c := range p.Conditions {
 		if _, ok := ConditionCodes[c]; !ok {
-			return fmt.Errorf("모르는 조건 코드: %q", c)
+			return fmt.Errorf("알 수 없는 조건 코드입니다: %q", c)
 		}
 	}
 	if p.PriceFloorPct != nil && (*p.PriceFloorPct > 0 || *p.PriceFloorPct < -50) {
-		return fmt.Errorf("단가 인하 하한은 -50~0(%%): %v", *p.PriceFloorPct)
+		return fmt.Errorf("단가 인하 하한은 -50~0%% 사이로 입력해 주세요(입력 %v).", *p.PriceFloorPct)
 	}
 	if p.DecidedAt != "" {
 		if _, ok := parseDate(p.DecidedAt); !ok {
-			return fmt.Errorf("결정일 형식은 YYYY-MM-DD: %q", p.DecidedAt)
+			return fmt.Errorf("결정일은 YYYY-MM-DD 형식으로 입력해 주세요(입력 %q).", p.DecidedAt)
 		}
 	}
 	return nil
@@ -784,23 +784,23 @@ type BuyerReply struct {
 func (p BuyerReply) validate() error {
 	if p.DeliveryStart != nil {
 		if _, err := time.Parse("2006-01", *p.DeliveryStart); err != nil {
-			return fmt.Errorf("납품 개시월 형식은 YYYY-MM: %q", *p.DeliveryStart)
+			return fmt.Errorf("납품 개시월은 YYYY-MM 형식으로 입력해 주세요(입력 %q).", *p.DeliveryStart)
 		}
 	}
 	if p.PriceCutPct != nil && (*p.PriceCutPct > 0 || *p.PriceCutPct < -50) {
-		return fmt.Errorf("단가 인하율은 -50~0(%%): %v", *p.PriceCutPct)
+		return fmt.Errorf("단가 인하율은 -50~0%% 사이로 입력해 주세요(입력 %v).", *p.PriceCutPct)
 	}
 	if p.PenaltyBasis != nil && *p.PenaltyBasis != "backlog" && *p.PenaltyBasis != "contract" {
-		return fmt.Errorf("페널티 기준은 backlog·contract: %q", *p.PenaltyBasis)
+		return fmt.Errorf("페널티 기준은 지연분(backlog)·계약 총액(contract) 중에서 선택해 주세요(입력 %q).", *p.PenaltyBasis)
 	}
 	if p.InitialQtyRequired != nil && (*p.InitialQtyRequired < 0 || *p.InitialQtyRequired > 1_500_000) {
-		return fmt.Errorf("첫 달 요구 수량 범위 오류: %d", *p.InitialQtyRequired)
+		return fmt.Errorf("첫 달 요구 수량은 0~1,500,000 EA 사이로 입력해 주세요(입력 %d).", *p.InitialQtyRequired)
 	}
 	if p.ContractMonths != nil && (*p.ContractMonths < 1 || *p.ContractMonths > 36) {
-		return fmt.Errorf("계약 기간은 1~36개월: %d", *p.ContractMonths)
+		return fmt.Errorf("계약 기간은 1~36개월 사이로 입력해 주세요(입력 %d).", *p.ContractMonths)
 	}
 	if p.Final != "" && p.Final != "수주" && p.Final != "실주" {
-		return fmt.Errorf("종결 값은 수주·실주")
+		return fmt.Errorf("종결 값은 수주·실주 중에서 선택해 주세요.")
 	}
 	return nil
 }
@@ -925,11 +925,11 @@ func proposalChecks(ev *Evaluation, sc Scenario) []string {
 func (s *State) checklist(ev *Evaluation, lines []*BidLine) []string {
 	var fails []string
 	if len(s.Decisions) == 0 {
-		return []string{"승인 결정이 없다"}
+		return []string{"승인 결정이 없습니다."}
 	}
 	d := s.Decisions[len(s.Decisions)-1]
 	if d.Freshness != "최신" {
-		fails = append(fails, fmt.Sprintf("결정 %s가 낡음(R15): 재상신 필요", d.ID))
+		fails = append(fails, fmt.Sprintf("결정 %s가 낡았습니다(R15). 재상신이 필요합니다.", d.ID))
 	}
 	byP := map[string]*BidLine{}
 	for _, l := range lines {
@@ -939,7 +939,7 @@ func (s *State) checklist(ev *Evaluation, lines []*BidLine) []string {
 		switch c {
 		case "COND_PL01_UNCONFIRMED":
 			if l := byP[ProductBasic]; l != nil && l.QtyStatus != "미확정" && !s.Scenario.PL01Confirmed {
-				fails = append(fails, "PL-01 수량이 확인 전인데 미확정이 아님")
+				fails = append(fails, "PL-01 수량이 생산관리 확인 전인데 미확정으로 표시되지 않았습니다.")
 			}
 		case "COND_NO_PRE_QUAL", "COND_OPT02_F2", "COND_OPT01_STAGED":
 			if probs := proposalChecks(ev, s.Scenario); len(probs) > 0 {
@@ -950,7 +950,7 @@ func (s *State) checklist(ev *Evaluation, lines []*BidLine) []string {
 		}
 	}
 	if d.PriceFloor != nil && s.Scenario.PriceCut < *d.PriceFloor-1e-9 {
-		fails = append(fails, fmt.Sprintf("단가 인하 %.1f%%가 승인 하한 %.1f%%보다 큼(COND_PRICE_FLOOR)", s.Scenario.PriceCut*100, *d.PriceFloor*100))
+		fails = append(fails, fmt.Sprintf("단가 인하 %.1f%%가 승인 하한 %.1f%%보다 큽니다(COND_PRICE_FLOOR).", s.Scenario.PriceCut*100, *d.PriceFloor*100))
 	}
 	return fails
 }
@@ -1045,14 +1045,14 @@ func (s *State) closeTasks(prefixes ...string) {
 
 func validateItems(items []RFPItem) error {
 	if len(items) == 0 {
-		return fmt.Errorf("RFP 품목이 없다")
+		return fmt.Errorf("RFP 품목이 없습니다. 품목을 하나 이상 입력해 주세요.")
 	}
 	for _, it := range items {
 		if it.ProductID != ProductBasic && it.ProductID != ProductDerma {
-			return fmt.Errorf("C-201 품목은 PL-01·PL-02만: %q", it.ProductID)
+			return fmt.Errorf("C-201 품목은 PL-01·PL-02만 입력할 수 있습니다(입력 %q).", it.ProductID)
 		}
 		if it.AnnualQty <= 0 || it.AnnualQty > 50_000_000 || it.UnitPriceUSD <= 0 || it.UnitPriceUSD > 1_000 {
-			return fmt.Errorf("%s 수량·단가 범위 오류", it.ProductID)
+			return fmt.Errorf("%s 수량·단가가 허용 범위를 벗어났습니다. 수량은 50,000,000 EA 이하, 단가는 USD 1,000 이하의 양수로 입력해 주세요.", it.ProductID)
 		}
 	}
 	return nil

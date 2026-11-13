@@ -35,7 +35,7 @@ import (
 func registerW05(mux *http.ServeMux, svc *w05.Service) {
 	unavailable := func(w http.ResponseWriter) bool {
 		if svc == nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "W05 서비스가 준비되지 않았다(저장소 확인)"})
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "W05 서비스가 준비되지 않았습니다. 저장소 상태를 확인한 뒤 다시 시도해 주세요."})
 			return true
 		}
 		return false
@@ -146,7 +146,7 @@ func registerW05(mux *http.ServeMux, svc *w05.Service) {
 			return
 		}
 		if strings.TrimSpace(in.Type) == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "type이 필요하다"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "사건 종류를 선택해 주세요."})
 			return
 		}
 		v, err := svc.SubmitAs(r.Context(), sessionOf(r), roleOf(r), in.Type, strings.TrimSpace(in.Actor), in.Payload)
@@ -248,7 +248,7 @@ func intParam(r *http.Request, key string, def, lo, hi int) int {
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "JSON 형식 오류: " + err.Error()})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "요청 형식이 올바르지 않습니다: " + err.Error()})
 		return false
 	}
 	return true

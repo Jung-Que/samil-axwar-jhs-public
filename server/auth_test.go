@@ -54,7 +54,7 @@ func TestAuthAPI(t *testing.T) {
 		t.Fatalf("시연 계정 목록: %.300s", rec.Body.String())
 	}
 	// 생산관리는 기준 세션에서 영업 사건(E1)을 넣을 수 없다(권한표 위반은 409)
-	if rec := call("POST", "/api/w05/events", `{"type":"E1_RFP","payload":{}}`, c); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "E1_RFP는 영업 권한") {
+	if rec := call("POST", "/api/w05/events", `{"type":"E1_RFP","payload":{}}`, c); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "권한이 없습니다. E1_RFP는 영업 권한입니다") {
 		t.Fatalf("생산관리의 E1: %d %.200s", rec.Code, rec.Body.String())
 	}
 	if rec := call("POST", "/api/auth/logout", "", c); rec.Code != 200 {
@@ -77,11 +77,11 @@ func TestPermissionsFromTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := newHandler(fakeBuild(t), st, newTestService(t, st)) // setupAccess: 역할 표가 이미 있으니 그대로 읽는다
-	if rec := doAs(h, "sales", "POST", "/api/w05/events", `{"type":"E1_RFP","payload":{}}`); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "E1_RFP는 생산관리 권한") {
+	if rec := doAs(h, "sales", "POST", "/api/w05/events", `{"type":"E1_RFP","payload":{}}`); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "권한이 없습니다. E1_RFP는 생산관리 권한입니다") {
 		t.Fatalf("표에서 옮긴 권한: %d %.200s", rec.Code, rec.Body.String())
 	}
 	w05.SetDepartments(orig)
-	if rec := doAs(h, "sales", "POST", "/api/w05/events", `{"type":"E1_RFP","payload":{}}`); strings.Contains(rec.Body.String(), "권한 없음") {
+	if rec := doAs(h, "sales", "POST", "/api/w05/events", `{"type":"E1_RFP","payload":{}}`); strings.Contains(rec.Body.String(), "권한이 없습니다") {
 		t.Fatalf("기본 권한표로 되돌린 뒤에도 막힘: %d %.200s", rec.Code, rec.Body.String())
 	}
 }

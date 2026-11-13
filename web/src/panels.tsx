@@ -51,7 +51,7 @@ export function SourceGapView({ v }: { v: View }) {
       mode={["real"]}
       note={
         <>
-          <span className="tag tag-가정">원본 간 불일치</span> 엔진의 여유·C-201 가용·제안 일정은 <b>{snapSource(v)}</b>를 쓴다(D6). 생산 라인 보드의 월 생산·부하·상태는 <b>{batchSource(v)}</b>와 진행 주문 기록({b.order_file}, 기록 ~{b.cutoff})을 쓴다. 두 원본은 capacity_qty를 연간으로 읽어도 월간으로 읽어도 실적과 스냅샷 가동률이 함께 맞지 않는다. A05 알려진 한계 목록에 없는 불일치라, 판단은 스냅샷으로 하고 배치 실적은 라인 보드의 비율(부하 ÷ 실적)로만 쓴다.
+          <span className="tag tag-가정">원본 간 불일치</span> 엔진의 여유·C-201 가용·제안 일정은 <b>{snapSource(v)}</b>를 사용합니다(D6). 생산 라인 보드의 월 생산·부하·상태는 <b>{batchSource(v)}</b>와 진행 주문 기록({b.order_file}, 기록 ~{b.cutoff})을 사용합니다. 두 원본은 capacity_qty를 연간·월간 어느 쪽으로 읽어도 실적과 스냅샷 가동률이 함께 맞지 않습니다. A05 알려진 한계 목록에 없는 불일치이므로, 판단은 스냅샷 기준으로 하고 배치 실적은 라인 보드의 비율(부하 ÷ 실적)에만 사용합니다.
         </>
       }
     >
@@ -84,7 +84,7 @@ export function SourceGapView({ v }: { v: View }) {
           </tbody>
         </table>
       </div>
-      <p className="muted small">빨간 칸: 연간 해석이면 실적이 능력을 넘고(100% 초과), 월간 해석이면 실적 비율이 스냅샷 가동률과 10%p 넘게 다르다. 단위는 생산관리 확인 요청(CR-01)으로 묻는다.</p>
+      <p className="muted small">빨간 칸은 연간 해석에서 실적이 능력을 넘거나(100% 초과), 월간 해석에서 실적 비율이 스냅샷 가동률과 10%p 넘게 차이 나는 경우입니다. 단위는 생산관리 확인 요청(CR-01)으로 확인합니다.</p>
     </Section>
   );
 }
@@ -103,7 +103,7 @@ export function Kpi({ label, value, sub, tone }: { label: string; value: string;
 export function ScheduleView({ v }: { v: View }) {
   const s = v.state;
   return (
-    <Section title="제안 일정: 라인×월 공급과 부족" mode={["real"]} note={`납품 개시 ${s.scenario.delivery_start}${s.scenario.start_confirmed ? "(바이어 확인)" : "(가정 A-04)"} · 계약 ${s.scenario.contract_months}개월 · 증설·전환 능력은 적격일 다음 달부터 산입(R3). 점선 = 조건부 공급. 단위 EA/월. '기존' 공급 = 능력 스냅샷 여유(Masil 보호 뒤) ÷ 12, OPT = strat_capex_plan_cv 추가 능력(연간) ÷ 12.`}>
+    <Section title="제안 일정: 라인×월 공급과 부족" mode={["real"]} note={`납품 개시 ${s.scenario.delivery_start}${s.scenario.start_confirmed ? "(바이어 확인)" : "(가정 A-04)"} · 계약 ${s.scenario.contract_months}개월. 증설·전환 능력은 적격일 다음 달부터 산입합니다(R3). 점선은 조건부 공급이며, 단위는 EA/월입니다. '기존' 공급은 능력 스냅샷 여유(Masil 보호 뒤) ÷ 12, OPT 공급은 증설 계획 원본(strat_capex_plan_cv)의 추가 능력(연간) ÷ 12입니다.`}>
       {["PL-02", "PL-01"].map((p) => {
         const pe = s.evaluation.products[p];
         const line = s.lines?.find((l) => l.product_id === p);
@@ -197,7 +197,7 @@ export function CompareView({ v }: { v: View }) {
       mode={["real"]}
       note={
         <>
-          <span className="tag tag-가정">대안 시나리오 · 제출 기준 아님</span> 기본은 OPT-01에도 설치 뒤 적격 기간(A-08)을 더한다. 비교는 원본 {c.source}을 적용해 적격 기간 0주로 계산한다. 결정·회신·납품 개시월·OPT-02는 기본과 같다. PL-02 수량, 단위 EA/월.
+          <span className="tag tag-가정">대안 시나리오 · 제출 기준 아님</span> 기본은 OPT-01에도 설치 뒤 적격 기간(A-08)을 더합니다. 비교는 원본 {c.source}을 적용해 적격 기간 0주로 계산합니다. 결정·회신·납품 개시월·OPT-02는 기본과 같습니다. PL-02 수량이며, 단위는 EA/월입니다.
         </>
       }
     >
@@ -258,7 +258,7 @@ export function CompareView({ v }: { v: View }) {
 export function CapacityView({ v }: { v: View }) {
   const ev = v.state.evaluation;
   return (
-    <Section title="라인 여유와 증설·전환안" mode={["real"]} note={`이 표는 엔진 판단 기준이다. 출처: ${snapSource(v)}(단위 ${v.state.scenario.unit_confirmed ? "확인됨" : "미확인"}). 여유 = 능력 × (1 − 가동률). F1 가동률 가중 ${pct(ev.f1_weighted_util, 2)} / 단순 ${pct(ev.f1_simple_util, 2)}. 생산 라인 보드의 월 생산(배치 실적)과는 규모가 다르다 → 아래 '원본 간 규모 차이'.`}>
+    <Section title="라인 여유와 증설·전환안" mode={["real"]} note={`이 표는 엔진 판단 기준입니다. 출처: ${snapSource(v)}(단위 ${v.state.scenario.unit_confirmed ? "확인됨" : "미확인"}). 여유 = 능력 × (1 − 가동률). F1 가동률 가중 ${pct(ev.f1_weighted_util, 2)} / 단순 ${pct(ev.f1_simple_util, 2)}. 생산 라인 보드의 월 생산(배치 실적)과는 규모가 다릅니다. 아래 '원본 간 규모 차이'를 확인해 주세요.`}>
       <div className="scroll">
         <table className="grid">
           <thead>
@@ -318,7 +318,7 @@ export function LedgerView({ v }: { v: View }) {
   const c = v.state.evaluation.commitments;
   const res = v.state.reservations ?? [];
   return (
-    <Section title="약속 원장" mode={["real"]} note="기존 확정 약속은 C-201 제안이 밀 수 없다(R2). Masil 발주는 Corevia 수주장부 밖이라 합성 매핑으로 L-01·L-02에 붙인다.">
+    <Section title="약속 원장" mode={["real"]} note="기존 확정 약속은 C-201 제안으로 밀어낼 수 없습니다(R2). Masil 발주는 Corevia 수주장부 밖에 있어 합성 매핑으로 L-01·L-02에 연결합니다.">
       <div className="cols">
         <div>
           <h3>진행 중 B2B 주문 (원본, 가동률 포함 가정 A-06)</h3>
@@ -333,7 +333,7 @@ export function LedgerView({ v }: { v: View }) {
               ))}
             </tbody>
           </table>
-          <p className="muted small">전체 {ea(c.in_progress_count)}건 · {ea(c.in_progress_qty)} EA. 추정 납기는 주문일 + 조건부 리드타임 중앙값(A-14, 검산용). 대리점 주문 {ea(v.data_basis.agency_orders)}건 · {ea(v.data_basis.agency_qty)} EA는 빠져 있다(A-17).</p>
+          <p className="muted small">전체 {ea(c.in_progress_count)}건 · {ea(c.in_progress_qty)} EA. 추정 납기는 주문일 + 조건부 리드타임 중앙값입니다(A-14, 검산용). 대리점 주문 {ea(v.data_basis.agency_orders)}건 · {ea(v.data_basis.agency_qty)} EA는 포함되지 않습니다(A-17).</p>
         </div>
         <div>
           <h3>Masil 발주 (보호, Win 등급) <span className="tag">합성 매핑</span></h3>
@@ -349,7 +349,7 @@ export function LedgerView({ v }: { v: View }) {
       </div>
       <h3>C-201 가예약 ({res.length}건)</h3>
       {res.length === 0 ? (
-        <p className="muted small">제출(E7) 전에는 가예약이 없다.</p>
+        <p className="muted small">현재 가예약이 없습니다. 제안을 제출하면(E7) 여기에 표시됩니다.</p>
       ) : (
         <div className="chips">
           {res.map((r) => <span key={r.product_id + r.month} className="chip">{r.product_id} {r.month} {ea(r.qty)} ({r.basis})</span>)}
@@ -370,9 +370,9 @@ export function ChurnView({ v }: { v: View }) {
       mode={["real"]}
       note={
         <>
-          매출 비중 10% 이상 고객의 월 수주(order_date)와 출하(ship_date)를 금액으로 나눠 본다({v.data_basis.order_file}, 닫힌 달 ~{sigs[0]?.month ?? "-"}).
-          재무 메모(sales_memo_cv)는 출하 기준으로 "정상"이라 보고하고, 영업 회의록은 신규 발주 감소를 "단정 금지"로 적었다 <span className="tag">부서 주장</span>.
-          임계값은 설계값이다(A-23). AT_RISK 고객의 진행 주문은 '검토'로 표시하고 보호를 유지하며, 영업 임원 확인(CR-09) 전에는 C-201에 능력을 돌려주지 않는다(A-24: {sc.churn_answered ? (sc.churn_revised ? "수정 확인, 반환 반영" : "수정 아님, 반환 0") : "회신 전, 반환 0"}).
+          매출 비중 10% 이상 고객의 월 수주(order_date)와 출하(ship_date)를 금액 기준으로 나눠 확인합니다({v.data_basis.order_file}, 마감된 달 ~{sigs[0]?.month ?? "-"}).
+          재무 메모(sales_memo_cv)는 출하 기준으로 "정상"이라 보고했고, 영업 회의록은 신규 발주 감소를 "단정 금지"로 기록했습니다 <span className="tag">부서 주장</span>.
+          임계값은 설계값입니다(A-23). AT_RISK 고객의 진행 주문은 '검토'로 표시하고 보호를 유지하며, 영업 임원 확인(CR-09) 전에는 C-201에 능력을 반환하지 않습니다(A-24: {sc.churn_answered ? (sc.churn_revised ? "수정 확인, 반환 반영" : "수정 아님, 반환 0") : "회신 전, 반환 0"}).
         </>
       }
     >
@@ -400,7 +400,7 @@ export function ChurnView({ v }: { v: View }) {
           </div>
         </div>
       ))}
-      {sigs.length === 0 && <p className="muted small">대상 고객 없음</p>}
+      {sigs.length === 0 && <p className="muted small">현재 매출 비중 10% 이상인 대상 고객이 없습니다.</p>}
     </Section>
   );
 }
@@ -408,8 +408,8 @@ export function ChurnView({ v }: { v: View }) {
 export function DecisionsView({ v }: { v: View }) {
   const ds = v.state.decisions ?? [];
   return (
-    <Section title="승인 결정" mode={["mock", "real"]} note="승인권자 회신은 모의다. 결정은 승인 당시 제안 내용에 묶이고, 내용이 바뀌면 낡음이 되어 다시 상신해야 한다(R15).">
-      {ds.length === 0 && <p className="muted small">결정 없음</p>}
+    <Section title="승인 결정" mode={["mock", "real"]} note="승인권자 회신은 모의입니다. 결정은 승인 당시 제안 내용에 연결되며, 내용이 바뀌면 '낡음'으로 표시되어 다시 상신해야 합니다(R15).">
+      {ds.length === 0 && <p className="muted small">현재 승인 결정이 없습니다. 승인권자가 결정하면(E2) 여기에 표시됩니다.</p>}
       {ds.map((d) => (
         <div key={d.decision_id} className="decision">
           <div>
@@ -437,8 +437,8 @@ export function TasksView({ v }: { v: View }) {
   return (
     <Section title={`작업함 (열림 ${open.length})`} mode={["real"]}>
       {open.length === 0 && (
-        <EmptyState compact swan="done" title={ts.length ? "열린 작업이 없다" : "작업이 아직 없다"}>
-          결정·제출 같은 사건이 작업을 만든다. 원인 사건 번호와 담당 부서가 함께 남는다.
+        <EmptyState compact swan="done" title={ts.length ? "현재 열린 작업이 없습니다" : "현재 작업이 없습니다"}>
+          결정·제출 같은 사건이 처리되면 작업이 생성되어 여기에 표시됩니다. 원인 사건 번호와 담당 부서가 함께 기록됩니다.
         </EmptyState>
       )}
       <ul className="tasks">
@@ -459,8 +459,8 @@ export function TasksView({ v }: { v: View }) {
 export function LogView({ v, onFork, busy }: { v: View; onFork?: (seq: number) => void; busy?: boolean }) {
   const log = [...(v.state.log ?? [])].reverse();
   return (
-    <Section title={`사건 로그 (${log.length}) · ${v.session.name}`} mode={["real"]} note="상태는 이 로그를 처음부터 다시 적용해 만든다. 규칙에 맞지 않는 사건은 기록되지 않는다. '여기서 분기'는 그 사건까지를 복사한 시뮬레이션 세션을 만든다(지금 세션은 그대로).">
-      {log.length === 0 && <p className="muted small">사건 없음. 왼쪽에서 사건을 넣거나 위의 시연 버튼을 누른다.</p>}
+    <Section title={`사건 로그 (${log.length}) · ${v.session.name}`} mode={["real"]} note="상태는 이 로그를 처음부터 다시 적용해 생성합니다. 규칙에 맞지 않는 사건은 기록되지 않습니다. '여기서 분기'를 누르면 해당 사건까지 복사한 시뮬레이션 세션이 생성됩니다(현재 세션은 변경되지 않음).">
+      {log.length === 0 && <p className="muted small">현재 기록된 사건이 없습니다. 왼쪽에서 사건을 입력하거나 위의 시연 버튼을 눌러 주세요.</p>}
       <ol className="log">
         {log.map((e: LogEntry) => (
           <li key={e.event.seq}>
@@ -481,7 +481,7 @@ export function LogView({ v, onFork, busy }: { v: View; onFork?: (seq: number) =
 
 export function AssumptionsView({ v }: { v: View }) {
   return (
-    <Section title="가정과 출처" mode={["real"]} note="원본 제약(능력·계약·승인권한)은 가정으로 지우지 않는다. 회신이 오면 '회신 반영'으로 바뀐다.">
+    <Section title="가정과 출처" mode={["real"]} note="원본 제약(능력·계약·승인권한)은 가정으로 없애지 않습니다. 회신이 오면 '회신 반영'으로 바뀝니다.">
       <table className="grid text">
         <thead><tr><th>ID</th><th>항목</th><th>지금 쓰는 값</th><th>성격</th><th>영향(쓰는 곳)</th></tr></thead>
         <tbody>

@@ -15,15 +15,15 @@ export function ownersOf(v: View, type: string): string {
 
 // canEvent는 지금 세션에서 이 부서가 이 사건을 넣을 수 있는지 본다.
 export function canEvent(v: View, d: Department | undefined, type: string, req?: ConfirmRequest): Check {
-  if (!d) return { ok: false, reason: "로그인한 계정의 역할을 찾지 못했다" };
+  if (!d) return { ok: false, reason: "로그인한 계정의 역할을 찾을 수 없습니다. 다시 로그인해 주세요." };
   const responder = type === "E3_REPLY" ? req?.to_role : undefined;
   const own = type === "E3_REPLY" ? responder === d.id : (d.events ?? []).includes(type);
   if (v.session.kind === "sim") {
-    if (!d.features.includes("sim.act")) return { ok: false, reason: `${d.label} 부서는 시뮬레이션 입력 권한이 없다` };
+    if (!d.features.includes("sim.act")) return { ok: false, reason: `${d.label} 부서에는 시뮬레이션 입력 권한이 없습니다.` };
     return own ? { ok: true } : { ok: true, proxy: true, reason: `대행: ${responder ?? ownersOf(v, type)} 권한(시뮬레이션)` };
   }
   if (own) return { ok: true };
-  return { ok: false, reason: `${responder ?? ownersOf(v, type)} 권한 — 대행은 시뮬레이션 세션에서` };
+  return { ok: false, reason: `이 작업은 ${responder ?? ownersOf(v, type)} 권한입니다. 시뮬레이션 세션에서는 대행 입력할 수 있습니다.` };
 }
 
 export function canFeature(d: Department | undefined, feat: string): boolean {

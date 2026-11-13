@@ -29,10 +29,10 @@ type session struct {
 }
 
 // ErrInvalid는 사건이 규칙에 맞지 않아 기록하지 않았다는 뜻이다(HTTP 409).
-var ErrInvalid = errors.New("사건을 적용할 수 없다")
+var ErrInvalid = errors.New("사건을 적용할 수 없습니다")
 
 // ErrNotFound는 없는 세션을 가리켰다는 뜻이다(HTTP 404).
-var ErrNotFound = errors.New("세션이 없다")
+var ErrNotFound = errors.New("세션을 찾을 수 없습니다")
 
 // NewService는 저장소의 기준 세션 사건을 읽어 상태를 만든다. 다른 세션은 처음 쓸 때 읽는다.
 func NewService(ctx context.Context, base *Base, st store.Store) (*Service, error) {
@@ -61,13 +61,13 @@ func (s *Service) load(ctx context.Context, id string) (*session, error) {
 			}
 		}
 		if cs == nil {
-			return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
+			return nil, fmt.Errorf("%w(%s).", ErrNotFound, id)
 		}
 	}
 	stored, err := s.st.ListEvents(ctx, id)
 	if errors.Is(err, store.ErrNoSession) {
 		delete(s.sess, id)
-		return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
+		return nil, fmt.Errorf("%w(%s).", ErrNotFound, id)
 	}
 	if err != nil {
 		return nil, err
@@ -222,7 +222,7 @@ func (s *Service) submitBy(ctx context.Context, sid, typ, actor, by string, payl
 	evs := append(append([]Event(nil), cs.events...), e)
 	ns, err := replay(s.base, evs, cs.meta.Kind)
 	if err != nil {
-		return s.view(ctx, cs), fmt.Errorf("%w: %v", ErrInvalid, unwrapLast(err))
+		return s.view(ctx, cs), fmt.Errorf("%w. %v", ErrInvalid, unwrapLast(err))
 	}
 	body, err := json.Marshal(e)
 	if err != nil {
@@ -233,7 +233,7 @@ func (s *Service) submitBy(ctx context.Context, sid, typ, actor, by string, payl
 			if c2, err2 := s.load(ctx, cs.meta.ID); err2 == nil {
 				cs = c2
 			}
-			return s.view(ctx, cs), fmt.Errorf("%w: 다른 사용자가 먼저 사건을 넣었다 — 새로고침 후 다시", ErrInvalid)
+			return s.view(ctx, cs), fmt.Errorf("%w. 다른 사용자가 먼저 사건을 입력했습니다. 새로고침한 뒤 다시 시도해 주세요.", ErrInvalid)
 		}
 		return s.view(ctx, cs), err
 	}
@@ -246,7 +246,7 @@ func validAsOf(asOf string) error {
 		return nil
 	}
 	if _, ok := parseDate(asOf); !ok || asOf < AsOfMin || asOf > AsOfMax {
-		return fmt.Errorf("%w: 기준일은 %s~%s 사이(YYYY-MM-DD): %q", ErrInvalid, AsOfMin, AsOfMax, asOf)
+		return fmt.Errorf("%w. 기준일은 %s~%s 사이의 날짜(YYYY-MM-DD)로 입력해 주세요(입력 %q).", ErrInvalid, AsOfMin, AsOfMax, asOf)
 	}
 	return nil
 }

@@ -91,7 +91,7 @@ func (b *Base) clockNotes(from, to string) []string {
 	c0, c1 := CutoffOf(from), CutoffOf(to)
 	if c1 <= c0 {
 		if to > DataEnd {
-			return []string{fmt.Sprintf("원본 기록은 %s까지라 그 뒤로는 새 기록이 들어오지 않는다", DataEnd)}
+			return []string{fmt.Sprintf("원본 기록은 %s까지라 그 뒤로는 새 기록이 들어오지 않습니다.", DataEnd)}
 		}
 		return nil
 	}

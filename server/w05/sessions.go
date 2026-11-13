@@ -111,7 +111,7 @@ func (s *Service) Fork(ctx context.Context, sid string, seq int, name string) (V
 		return View{}, err
 	}
 	if seq < 0 || seq > len(src.events) {
-		return s.view(ctx, src), fmt.Errorf("%w: 분기 사건 번호는 0~%d", ErrInvalid, len(src.events))
+		return s.view(ctx, src), fmt.Errorf("%w. 분기할 사건 번호는 0~%d 사이로 입력해 주세요.", ErrInvalid, len(src.events))
 	}
 	if name == "" {
 		name = fmt.Sprintf("%s 분기 @%d", src.meta.Name, seq)
@@ -130,9 +130,9 @@ func (s *Service) DeleteSession(ctx context.Context, sid string) error {
 	err := s.st.DeleteSession(ctx, sid)
 	switch {
 	case errors.Is(err, store.ErrMainSession):
-		return fmt.Errorf("%w: %v", ErrInvalid, err)
+		return fmt.Errorf("%w. 기준 세션은 삭제할 수 없습니다.", ErrInvalid)
 	case errors.Is(err, store.ErrNoSession):
-		return fmt.Errorf("%w: %s", ErrNotFound, sid)
+		return fmt.Errorf("%w(%s).", ErrNotFound, sid)
 	case err != nil:
 		return err
 	}
@@ -152,7 +152,7 @@ func firstNonEmpty(a, b string) string {
 func requireDept(user string) (Department, error) {
 	d, ok := deptByID(user)
 	if !ok {
-		return Department{}, fmt.Errorf("%w: %q", ErrNoRole, user)
+		return Department{}, fmt.Errorf("%w. 다시 로그인해 주세요(사용자 부서 %q).", ErrNoRole, user)
 	}
 	return d, nil
 }
@@ -163,7 +163,7 @@ func requireFeature(user, feat, what string) error {
 		return err
 	}
 	if !slices.Contains(d.Features, feat) {
-		return fmt.Errorf("%w: %s는 %s 부서 권한이 아니다", ErrForbidden, what, d.Label)
+		return fmt.Errorf("%w. %s는 %s 부서 권한이 아닙니다.", ErrForbidden, what, d.Label)
 	}
 	return nil
 }
@@ -186,10 +186,10 @@ func (s *Service) SubmitAs(ctx context.Context, sid, user, typ, actor string, pa
 		return View{}, err
 	}
 	if cs.meta.Kind == store.KindMain && actor != user {
-		return s.view(ctx, cs), fmt.Errorf("%w: 기준 세션에서는 자기 부서 권한으로만 입력한다(사용자 %s, 입력 권한 %s) — 대행은 시뮬레이션 세션에서", ErrForbidden, d.Label, actor)
+		return s.view(ctx, cs), fmt.Errorf("%w. 기준 세션에서는 소속 부서 권한으로만 입력할 수 있습니다(사용자 %s, 입력 권한 %s). 다른 부서 대행 입력은 시뮬레이션 세션에서 할 수 있습니다.", ErrForbidden, d.Label, actor)
 	}
 	if cs.meta.Kind != store.KindMain && !slices.Contains(d.Features, FeatSimAct) {
-		return s.view(ctx, cs), fmt.Errorf("%w: 시뮬레이션 입력은 %s 부서 권한이 아니다", ErrForbidden, d.Label)
+		return s.view(ctx, cs), fmt.Errorf("%w. 시뮬레이션 입력은 %s 부서 권한이 아닙니다.", ErrForbidden, d.Label)
 	}
 	return s.submitBy(ctx, sid, typ, actor, user, payload)
 }
@@ -276,7 +276,7 @@ func (s *Service) SweepIn(ctx context.Context, sid string, x SweepAxis, y *Sweep
 	}
 	res, err := Sweep(s.base, cs.state.Scenario, x, y)
 	if err != nil {
-		return SweepResult{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+		return SweepResult{}, fmt.Errorf("%w. %v", ErrInvalid, err)
 	}
 	return res, nil
 }

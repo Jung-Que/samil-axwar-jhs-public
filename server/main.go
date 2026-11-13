@@ -152,7 +152,7 @@ func spaHandler(webDir string) http.Handler {
 }
 
 func notFoundJSON(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "요청한 주소를 찾을 수 없습니다."})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

@@ -28,7 +28,7 @@ export function SessionCompareView({ v }: { v: View }) {
     api.compare(a, b).then(setC).catch((e: Error) => setErr(e.message));
   }, [a, b, v]);
   return (
-    <Section title="세션 비교" mode={["real"]} note="두 세션을 같은 표로 본다. 시뮬레이션 세션의 결과는 모의다. 달라진 칸은 강조한다.">
+    <Section title="세션 비교" mode={["real"]} note="두 세션을 같은 표에서 비교합니다. 시뮬레이션 세션의 결과는 모의입니다. 달라진 칸은 강조해 표시합니다.">
       <div className="row wrap">
         <label className="field inline"><span>A</span>
           <select value={a} onChange={(e) => setA(e.target.value)}>{list.map((s) => <option key={s.id} value={s.id}>{sessionLabel(s)}</option>)}</select>
@@ -214,7 +214,7 @@ export function SimulationView({ v, run, busy, dept, goTab }: { v: View; run: Ru
   return (
     <div className="split">
       <div className="split-main">
-          <Section title="민감도 격자" mode={["real"]} note="변수 1~2개를 골라 값을 쉼표로 적으면, 지금 세션 시나리오에서 그 값만 바꿔 엔진 평가를 반복한다. 사건을 남기지 않아 기준 세션에서도 된다(최대 400칸).">
+          <Section title="민감도 격자" mode={["real"]} note="변수 1~2개를 선택하고 값을 쉼표로 구분해 입력하면, 현재 세션 시나리오에서 그 값만 바꿔 엔진 평가를 반복합니다. 사건을 기록하지 않으므로 기준 세션에서도 사용할 수 있습니다(최대 400칸).">
             <div className="row wrap">
               <label className="field"><span>X 변수</span><select value={xp} onChange={(e) => setXp(e.target.value)}>{PARAMS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}</select></label>
               <label className="field wide"><span>X 값(쉼표)</span><input value={xv} onChange={(e) => setXv(e.target.value)} /></label>
@@ -226,8 +226,8 @@ export function SimulationView({ v, run, busy, dept, goTab }: { v: View; run: Ru
             {err && <p className="bad small">{err}</p>}
             {res && m && (
               <div>
-                <p className="muted small">지금 세션 그대로: {m.label} {fmtMetric(m.unit, res.base[metric])}. 진할수록 {GOOD.has(metric) ? "높음(좋음)" : "낮음(좋음)"}. {pickable ? "칸을 누르면 그 값이 아래 모의 가정 입력칸에 채워진다." : sim ? "" : "시뮬레이션 세션에서는 칸을 눌러 모의 가정 입력칸에 채울 수 있다."}</p>
-                <EChart option={heatOption} height={Math.max(160, 64 + res.cells.length * 46)} label={`민감도 격자: ${res.y_label || ""} × ${res.x_label}, 지표 ${m.label}. 수치는 '표로 보기'에 있다.`} onClick={(p) => { const d = p.data as { value?: number[] } | undefined; if (pickable && d?.value) pick(d.value[0], d.value[1]); }} />
+                <p className="muted small">현재 세션 기준: {m.label} {fmtMetric(m.unit, res.base[metric])}. 색이 진할수록 좋은 값입니다({GOOD.has(metric) ? "높을수록 좋음" : "낮을수록 좋음"}). {pickable ? "칸을 누르면 해당 값이 아래 모의 가정 입력칸에 채워집니다." : sim ? "" : "시뮬레이션 세션에서는 칸을 눌러 모의 가정 입력칸에 값을 채울 수 있습니다."}</p>
+                <EChart option={heatOption} height={Math.max(160, 64 + res.cells.length * 46)} label={`민감도 격자: ${res.y_label || ""} × ${res.x_label}, 지표 ${m.label}. 수치는 '표로 보기'에서 확인할 수 있습니다.`} onClick={(p) => { const d = p.data as { value?: number[] } | undefined; if (pickable && d?.value) pick(d.value[0], d.value[1]); }} />
                 <details className="table-view">
                   <summary className="small">표로 보기</summary>
                   <div className="scroll">
@@ -242,7 +242,7 @@ export function SimulationView({ v, run, busy, dept, goTab }: { v: View; run: Ru
                         {row.map((c, xi) => (
                           <td key={xi} className={picked === `${yi}:${xi}` ? "picked" : ""}>
                             {pickable ? (
-                              <button className="cellbtn" title="이 칸의 값을 모의 가정 입력칸에 채운다" onClick={() => pick(xi, yi)}>{fmtMetric(m.unit, c[metric])}</button>
+                              <button className="cellbtn" title="이 칸의 값을 모의 가정 입력칸에 채웁니다" onClick={() => pick(xi, yi)}>{fmtMetric(m.unit, c[metric])}</button>
                             ) : (
                               fmtMetric(m.unit, c[metric])
                             )}
@@ -262,11 +262,11 @@ export function SimulationView({ v, run, busy, dept, goTab }: { v: View; run: Ru
           <Section
             title="모의 가정 (E9)"
             mode={["real", "mock"]}
-            note="시뮬레이션 세션에서만 넣는다. 원본 제약은 그대로 두고 이 세션의 평가만 바꾼다(A05 §6 대안 시나리오). 빈 칸은 바꾸지 않는다. 증설안 결정은 실제 이사회 결정이 아니다."
+            note="시뮬레이션 세션에서만 입력할 수 있습니다. 원본 제약은 그대로 두고 이 세션의 평가만 바꿉니다(A05 §6 대안 시나리오). 빈 칸은 변경하지 않습니다. 증설안 결정은 실제 이사회 결정이 아닙니다."
           >
             {!sim ? (
               <p className="blocked">
-                지금은 기준 세션이다. 모의 가정은 넣지 않는다.{" "}
+                현재 기준 세션입니다. 모의 가정은 시뮬레이션 세션에서만 입력할 수 있습니다.{" "}
                 <button className="ghost small" disabled={busy || !dept} onClick={() => run(() => api.fork(v.state.log?.length ?? 0, `${v.session.name} 모의 가정`))}>지금 상태에서 분기해 시작</button>
               </p>
             ) : (
@@ -293,10 +293,10 @@ export function SimulationView({ v, run, busy, dept, goTab }: { v: View; run: Ru
                     </label>
                   ))}
                 </div>
-                <div className="row"><button disabled={busy || !dept || Object.values(f).every((x) => !x)} title={dept ? "" : "로그인한 계정의 역할을 찾지 못했다"} onClick={submit}>모의 가정 넣기(E9)</button>{picked && <span className="small warn-text">격자 칸 값을 채웠다. 확인하고 넣는다.</span>}{Object.values(f).some((x) => x) && <button className="ghost small" onClick={() => { setF({}); setPicked(null); }}>입력 비우기</button>}</div>
+                <div className="row"><button disabled={busy || !dept || Object.values(f).every((x) => !x)} title={dept ? "" : "로그인한 계정의 역할을 찾을 수 없습니다. 다시 로그인해 주세요."} onClick={submit}>모의 가정 넣기(E9)</button>{picked && <span className="small warn-text">격자 칸의 값을 채웠습니다. 값을 확인한 뒤 입력해 주세요.</span>}{Object.values(f).some((x) => x) && <button className="ghost small" onClick={() => { setF({}); setPicked(null); }}>입력 비우기</button>}</div>
               </>
             )}
-            <p className="muted small" style={{ marginBottom: 0 }}>지금 적용된 모의 가정은 옆 열 "이 세션에서 바꾼 것"에 있다.</p>
+            <p className="muted small" style={{ marginBottom: 0 }}>현재 적용된 모의 가정은 옆 열 "이 세션에서 바꾼 것"에서 확인할 수 있습니다.</p>
           </Section>
 
       </div>
@@ -379,7 +379,7 @@ function DiffList({ title, rows }: { title: string; rows: ItemDiff[] }) {
     <>
       <h3>{title} 차이 ({rows.length})</h3>
       {rows.length === 0 ? (
-        <p className="muted small">차이 없음</p>
+        <p className="muted small">두 세션 사이에 차이가 없습니다.</p>
       ) : (
         <table className="grid text">
           <thead><tr><th>항목</th><th>A</th><th>B</th></tr></thead>
@@ -408,10 +408,10 @@ function SessionTree({ v, run, busy, dept }: { v: View; run: Run; busy: boolean;
   const canMake = canFeature(dept, "sim.session");
   const events = v.state.log?.length ?? 0;
   return (
-    <Section title={`세션 (${list.length})`} mode={["real"]} note="기준 세션은 이후 운영 세션이다. 시뮬레이션은 분기해서 바꿔 보고 비교한다.">
+    <Section title={`세션 (${list.length})`} mode={["real"]} note="기준 세션은 이후 운영 세션으로 사용됩니다. 시뮬레이션 세션에서는 분기한 뒤 조건을 바꿔 보고 비교할 수 있습니다.">
       {list.every((s) => s.kind === "main") && (
-        <EmptyState compact swan="simulation" title="시뮬레이션 세션이 없다">
-          지금 상태를 분기해 조건을 바꿔 보고 기준 세션과 비교한다. 제출은 [모의]로 기록된다.
+        <EmptyState compact swan="simulation" title="현재 시뮬레이션 세션이 없습니다">
+          현재 상태를 분기해 조건을 바꿔 보고 기준 세션과 비교할 수 있습니다. 생성한 세션은 여기에 표시되며, 제출은 [모의]로 기록됩니다.
         </EmptyState>
       )}
       <ul className="sess-list">
@@ -438,8 +438,8 @@ function SessionTree({ v, run, busy, dept }: { v: View; run: Run; busy: boolean;
         })}
       </ul>
       <div className="row" style={{ marginTop: 10 }}>
-        <button className="ghost small" disabled={busy || !canMake} title={canMake ? "지금 세션 기준일로 빈 시뮬레이션 세션을 만든다" : "로그인한 계정의 역할을 찾지 못했다"} onClick={() => run(() => api.newSession("", v.as_of))}>새 시뮬레이션</button>
-        <button className="ghost small" disabled={busy || !canMake} title={canMake ? "지금 상태(사건 전체)를 복사한 시뮬레이션 세션을 만든다" : "로그인한 계정의 역할을 찾지 못했다"} onClick={() => run(() => api.fork(events))}>지금 상태에서 분기</button>
+        <button className="ghost small" disabled={busy || !canMake} title={canMake ? "현재 세션 기준일로 빈 시뮬레이션 세션을 생성합니다" : "로그인한 계정의 역할을 찾을 수 없습니다. 다시 로그인해 주세요."} onClick={() => run(() => api.newSession("", v.as_of))}>새 시뮬레이션</button>
+        <button className="ghost small" disabled={busy || !canMake} title={canMake ? "현재 상태(사건 전체)를 복사한 시뮬레이션 세션을 생성합니다" : "로그인한 계정의 역할을 찾을 수 없습니다. 다시 로그인해 주세요."} onClick={() => run(() => api.fork(events))}>지금 상태에서 분기</button>
       </div>
     </Section>
   );
@@ -451,9 +451,9 @@ function ChangedCard({ v }: { v: View }) {
   const from = v.session.fork_seq ?? 0;
   const evs = (v.state.log ?? []).filter((e) => e.event.seq > from && (e.event.type === "E4_BUYER_REPLY" || e.event.type === "E9_SIM_ASSUMPTION"));
   return (
-    <Section title="이 세션에서 바꾼 것" mode={["mock"]} note={v.session.parent_id ? `분기(사건 ${from}) 뒤에 들어온 바이어 회신과 모의 가정이다.` : "이 세션에 들어온 바이어 회신과 모의 가정이다."}>
+    <Section title="이 세션에서 바꾼 것" mode={["mock"]} note={v.session.parent_id ? `분기(사건 ${from}) 이후 입력된 바이어 회신과 모의 가정입니다.` : "이 세션에 입력된 바이어 회신과 모의 가정입니다."}>
       {evs.length === 0 && notes.length === 0 ? (
-        <p className="muted small">아직 없다. 아래 모의 가정을 넣거나 바이어 회신(E4)을 넣으면 여기에 쌓인다.</p>
+        <p className="muted small">현재 바뀐 항목이 없습니다. 모의 가정(E9)이나 바이어 회신(E4)을 입력하면 여기에 표시됩니다.</p>
       ) : (
         <ul className="tasks">
           {evs.map((e) => (
@@ -489,15 +489,15 @@ function ParentCompare({ v, goTab }: { v: View; goTab: (t: Tab) => void }) {
   }, [pid, v]);
   if (!pid) {
     return (
-      <Section title="세션 비교" mode={["real"]} note="분기한 시뮬레이션 세션이면 여기서 부모 세션과 바로 비교한다.">
+      <Section title="세션 비교" mode={["real"]} note="분기한 시뮬레이션 세션에서는 여기서 부모 세션과 바로 비교할 수 있습니다.">
         <p className="small">
-          지금 세션은 분기 세션이 아니다. <button className="ghost small" disabled={list.length < 2} onClick={() => goTab("sessions")}>세션 비교에서 두 세션 고르기</button>
+          현재 세션은 분기 세션이 아닙니다. <button className="ghost small" disabled={list.length < 2} onClick={() => goTab("sessions")}>세션 비교에서 두 세션 고르기</button>
         </p>
       </Section>
     );
   }
   return (
-    <Section title="부모 세션과 비교" mode={["real"]} note="A = 분기해 온 부모 세션, B = 지금 세션. 달라진 칸을 강조한다. 시뮬레이션 결과는 모의다.">
+    <Section title="부모 세션과 비교" mode={["real"]} note="A는 분기해 온 부모 세션, B는 현재 세션입니다. 달라진 칸은 강조해 표시합니다. 시뮬레이션 결과는 모의입니다.">
       {err && <p className="bad small">{err}</p>}
       {c && <KpiTable a={c.a} b={c.b} />}
       {c && (

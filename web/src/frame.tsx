@@ -12,24 +12,24 @@ type Run = (fn: () => Promise<View>) => Promise<unknown>;
 // 메뉴 묶음은 v3.1 목업(내 업무 / 입찰 / 승인 / 운영 상태 / 기록 / 시뮬레이션 / 근거)을 따른다.
 
 export const PAGES = [
-  { id: "my", path: "/my", group: "", label: "내 업무", title: "내 업무", desc: "내 부서가 지금 할 일, 나에게 온 확인 요청과 작업" },
-  { id: "flow", path: "/flow", group: "", label: "시연 흐름", title: "시연 흐름", desc: "로그인부터 부서 계정을 바꿔 가며 C-201 한 건을 끝까지 따라간다(사건 → 판단 → 승인 → 작업·상태 → 다음 사건)" },
-  { id: "judge", path: "/bids/C-201", group: "입찰", label: "C-201 판단·제안", title: "C-201 판단·제안", desc: "엔진 계산(능력 스냅샷 기준) · 월별 공급 · 플래그와 물을 곳" },
-  { id: "capacity", path: "/bids/C-201/capacity", group: "입찰", label: "여유·증설안", title: "여유·증설안", desc: "라인 여유(R1), 증설·전환안 적격 능력일(R3), OPT-01 비교" },
-  { id: "inbox", path: "/intake", group: "입찰", label: "접수함", title: "접수함", desc: "업무일까지 최근 며칠 동안 들어온 주문·신청(원본 기록)" },
-  { id: "approvals", path: "/approvals", group: "승인", label: "결정", title: "결정", desc: "상신된 제안안의 참여·대안 결정(CEO/이사회)과 지난 결정" },
-  { id: "requests", path: "/requests", group: "운영 상태", label: "확인 요청", title: "확인 요청", desc: "결정 모델이 부서·바이어에 묻는 것과 회신" },
-  { id: "tasks", path: "/tasks", group: "운영 상태", label: "작업", title: "작업", desc: "사건이 만든 작업(원인 사건 번호와 담당 부서)" },
-  { id: "ledger", path: "/ledger", group: "운영 상태", label: "약속 원장", title: "약속 원장", desc: "기존 B2B 약속·Masil 보호분·C-201 가예약과 이탈 신호" },
-  { id: "lanes", path: "/lanes", group: "운영 상태", label: "업무 레인", title: "업무 레인", desc: "부서 레인별 들어온 것·할 수 있는 일·막힌 것" },
-  { id: "lines", path: "/lines", group: "운영 상태", label: "생산 라인", title: "생산 라인", desc: "라인이 만드는 것과 지금 부하(배치 실적 기준)" },
-  { id: "log", path: "/log", group: "기록", label: "사건 로그", title: "사건 로그", desc: "이 세션에 기록된 사건(상태는 이 로그를 다시 적용해 만든다)" },
-  { id: "event", path: "/events/new", group: "기록", label: "사건 입력", title: "사건 입력", desc: "정해 둔 고정 값으로 사건을 넣는다(자유 문장·LLM 현재 제외)" },
-  { id: "sim", path: "/sim", group: "시뮬레이션", label: "세션·모의 가정", title: "시뮬레이션", desc: "세션 만들기·분기·시연, 모의 가정(E9)과 민감도 격자" },
-  { id: "sessions", path: "/sim/compare", group: "시뮬레이션", label: "세션 비교", title: "세션 비교", desc: "두 세션의 지표·제품×월·플래그·확인 요청·작업 차이" },
-  { id: "assume", path: "/basis/assumptions", group: "근거", label: "가정", title: "가정", desc: "참가자 가정과 근거(원본 제약은 가정으로 없애지 않는다)" },
-  { id: "backtest", path: "/basis/backtest", group: "근거", label: "정답 비교", title: "정답 비교", desc: "기준일 추정 납기 대 그 뒤 실제 출하(검증 전용)" },
-  { id: "access", path: "/admin/access", group: "관리", label: "사용자·권한", title: "사용자·권한", desc: "로그인 계정과 역할별 권한(DB 표 app_users · app_roles · app_role_permissions)" },
+  { id: "my", path: "/my", group: "", label: "내 업무", title: "내 업무", desc: "소속 부서의 현재 할 일과 받은 확인 요청·작업을 확인합니다." },
+  { id: "flow", path: "/flow", group: "", label: "시연 흐름", title: "시연 흐름", desc: "부서 계정을 바꿔 로그인하며 C-201 한 건을 끝까지 진행합니다(사건 → 판단 → 승인 → 작업·상태 → 다음 사건)." },
+  { id: "judge", path: "/bids/C-201", group: "입찰", label: "C-201 판단·제안", title: "C-201 판단·제안", desc: "엔진 계산(능력 스냅샷 기준), 월별 공급, 플래그와 문의할 곳을 확인합니다." },
+  { id: "capacity", path: "/bids/C-201/capacity", group: "입찰", label: "여유·증설안", title: "여유·증설안", desc: "라인 여유(R1), 증설·전환안 적격 능력일(R3), OPT-01 비교를 확인합니다." },
+  { id: "inbox", path: "/intake", group: "입찰", label: "접수함", title: "접수함", desc: "업무일 기준 최근 며칠간 접수된 주문·신청(원본 기록)을 확인합니다." },
+  { id: "approvals", path: "/approvals", group: "승인", label: "결정", title: "결정", desc: "상신된 제안안의 참여·대안을 결정(CEO/이사회)하고 지난 결정을 확인합니다." },
+  { id: "requests", path: "/requests", group: "운영 상태", label: "확인 요청", title: "확인 요청", desc: "결정 모델이 부서·바이어에 보낸 확인 요청과 회신을 확인합니다." },
+  { id: "tasks", path: "/tasks", group: "운영 상태", label: "작업", title: "작업", desc: "사건으로 생성된 작업을 원인 사건 번호, 담당 부서와 함께 확인합니다." },
+  { id: "ledger", path: "/ledger", group: "운영 상태", label: "약속 원장", title: "약속 원장", desc: "기존 B2B 약속, Masil 보호분, C-201 가예약과 이탈 신호를 확인합니다." },
+  { id: "lanes", path: "/lanes", group: "운영 상태", label: "업무 레인", title: "업무 레인", desc: "부서 레인별로 접수된 일, 할 수 있는 일, 막힌 일을 확인합니다." },
+  { id: "lines", path: "/lines", group: "운영 상태", label: "생산 라인", title: "생산 라인", desc: "라인별 생산 품목과 현재 부하(배치 실적 기준)를 확인합니다." },
+  { id: "log", path: "/log", group: "기록", label: "사건 로그", title: "사건 로그", desc: "이 세션에 기록된 사건입니다. 상태는 이 로그를 다시 적용해 계산합니다." },
+  { id: "event", path: "/events/new", group: "기록", label: "사건 입력", title: "사건 입력", desc: "정해진 고정 값으로 사건을 입력합니다(자유 문장·LLM은 현재 제외)." },
+  { id: "sim", path: "/sim", group: "시뮬레이션", label: "세션·모의 가정", title: "시뮬레이션", desc: "세션 생성·분기·시연과 모의 가정(E9), 민감도 격자를 실행합니다." },
+  { id: "sessions", path: "/sim/compare", group: "시뮬레이션", label: "세션 비교", title: "세션 비교", desc: "두 세션의 지표, 제품×월, 플래그, 확인 요청, 작업 차이를 비교합니다." },
+  { id: "assume", path: "/basis/assumptions", group: "근거", label: "가정", title: "가정", desc: "참가자 가정과 근거입니다. 원본 제약은 가정으로 없애지 않습니다." },
+  { id: "backtest", path: "/basis/backtest", group: "근거", label: "정답 비교", title: "정답 비교", desc: "기준일의 추정 납기와 이후 실제 출하를 비교합니다(검증 전용)." },
+  { id: "access", path: "/admin/access", group: "관리", label: "사용자·권한", title: "사용자·권한", desc: "로그인 계정과 역할별 권한을 확인합니다." },
 ] as const;
 
 export type PageId = (typeof PAGES)[number]["id"];
@@ -82,7 +82,7 @@ export function TopBar({ v, run, busy, user, onLogout }: TopProps) {
       </div>
       <div className="top-spacer" />
       <Link to="/events/new" className="btn">+ 사건 입력</Link>
-      <div className="top-user" aria-label="로그인한 사람">
+      <div className="top-user" aria-label="로그인 사용자">
         <span className="avatar" aria-hidden="true">{user.name.slice(0, 1)}</span>
         <span className="top-user-name">
           <b>{user.name}</b>
@@ -99,7 +99,7 @@ export function ModeBand({ v, run, busy }: { v: View; run: Run; busy: boolean })
   if (v.session.kind === "main") {
     return (
       <div className="band band-main" role="status">
-        <b>기준 세션</b> · 이 세션의 입력은 실제로 기록된다 · 자기 부서 권한으로만 입력
+        <b>기준 세션</b> · 입력 내용이 실제로 기록됩니다 · 소속 부서 권한으로만 입력할 수 있습니다
       </div>
     );
   }
@@ -107,7 +107,7 @@ export function ModeBand({ v, run, busy }: { v: View; run: Run; busy: boolean })
   return (
     <div className="band band-sim" role="status">
       <span className="band-swan"><Swan name="simulation" size={26} /></span>
-      <b>시뮬레이션 세션 · {v.session.name}</b> · 제출은 [모의] · 다른 부서 대행 입력이 기록된다
+      <b>시뮬레이션 세션 · {v.session.name}</b> · 제출은 [모의]로 처리됩니다 · 다른 부서 대행 입력도 기록됩니다
       {v.session.parent_id && <span> · 분기: {parent?.name ?? v.session.parent_id} 사건 {v.session.fork_seq}까지</span>}
       <button className="small" disabled={busy} onClick={() => run(() => api.open("main"))}>기준 세션으로</button>
     </div>
@@ -187,38 +187,38 @@ export function SessionTools({ v, run, busy, dept }: { v: View; run: Run; busy: 
     <div className="cols">
       <section className="card">
         <h2>시연 시나리오</h2>
-        <p className="muted small">새 시뮬레이션 세션을 만들어 고정 입력값으로 끝까지 돌린다(지금 세션은 그대로) · 기준일 {v.as_of}</p>
+        <p className="muted small">새 시뮬레이션 세션을 생성해 고정 입력값으로 끝까지 실행합니다(현재 세션은 유지됩니다) · 기준일 {v.as_of}</p>
         <div className="row">
           {v.scenarios.map((s) => (
             <button key={s.id} className="ghost" title={s.description} disabled={busy || !dept} onClick={() => run(() => api.scenario(s.id, v.as_of))}>{s.title}</button>
           ))}
         </div>
-        {!dept && <p className="small bad">로그인한 계정의 역할을 권한표에서 찾지 못했다</p>}
+        {!dept && <p className="small bad">로그인한 계정의 역할을 권한표에서 찾을 수 없습니다. 다시 로그인해 주세요.</p>}
         <ul className="tasks small">
           {v.scenarios.map((s) => <li key={s.id}><b>{s.title}</b> {s.description}</li>)}
         </ul>
       </section>
       <section className="card">
-        <h2>지금 세션 · {cur.name}</h2>
-        <p className="muted small">{isMain ? "기준 세션 초기화는 운영 관리만" : "시뮬레이션 세션은 만든 부서와 상관없이 정리할 수 있다(삭제는 운영 관리만)"}</p>
+        <h2>현재 세션 · {cur.name}</h2>
+        <p className="muted small">{isMain ? "기준 세션 초기화는 운영 관리 부서만 할 수 있습니다." : "시뮬레이션 세션은 생성한 부서와 관계없이 초기화할 수 있습니다. 삭제는 운영 관리 부서만 할 수 있습니다."}</p>
         <div className="row">
-          <button className="ghost" disabled={busy || !canReset} title={canReset ? "지금 세션의 사건을 지우고 기준일부터 다시 시작한다" : "기준 세션 초기화는 운영 관리 부서만"} onClick={() => { if (window.confirm(`세션 "${cur.name}"의 사건을 모두 지운다`)) run(() => api.reset(v.as_of)); }}>이 세션 초기화</button>
+          <button className="ghost" disabled={busy || !canReset} title={canReset ? "현재 세션의 사건을 삭제하고 기준일부터 다시 시작합니다" : "기준 세션 초기화는 운영 관리 부서만 할 수 있습니다"} onClick={() => { if (window.confirm(`세션 "${cur.name}"의 사건을 모두 삭제하시겠습니까?`)) run(() => api.reset(v.as_of)); }}>이 세션 초기화</button>
           {!isMain && (
-            <button className="ghost danger" disabled={busy || !canDrop} title={canDrop ? "" : "세션 삭제는 운영 관리 부서만"} onClick={() => { if (window.confirm(`세션 "${cur.name}"을 지운다`)) run(() => api.deleteSession(cur.id)); }}>세션 삭제</button>
+            <button className="ghost danger" disabled={busy || !canDrop} title={canDrop ? "" : "세션 삭제는 운영 관리 부서만 할 수 있습니다"} onClick={() => { if (window.confirm(`"${cur.name}" 세션을 삭제하시겠습니까?`)) run(() => api.deleteSession(cur.id)); }}>세션 삭제</button>
           )}
         </div>
         <h3>다른 기준일로 새 세션</h3>
-        <p className="muted small">그 날짜까지의 기록만 쓰는 새 시뮬레이션 세션 · 쓰는 기록 ~{v.cutoff} · 이사회 {v.board_date}</p>
+        <p className="muted small">선택한 날짜까지의 기록만 사용하는 새 시뮬레이션 세션을 생성합니다 · 사용 기록 ~{v.cutoff} · 이사회 {v.board_date}</p>
         <div className="row">
           <input type="date" aria-label="기준일" min={v.as_of_min} max={v.as_of_max} value={pick} onChange={(e) => setPick(e.target.value)} />
-          <button className="small" disabled={busy || !pick || !dept} title={dept ? "" : "로그인한 계정의 역할을 찾지 못했다"} onClick={() => run(() => api.newSession("", pick))}>시작</button>
+          <button className="small" disabled={busy || !pick || !dept} title={dept ? "" : "로그인한 계정의 역할을 찾을 수 없습니다. 다시 로그인해 주세요."} onClick={() => run(() => api.newSession("", pick))}>시작</button>
         </div>
         <div className="row">
           {PRESETS.map((d) => (
             <button key={d} className={d === pick ? "ghost small active" : "ghost small"} disabled={busy} onClick={() => setPick(d)}>{d}</button>
           ))}
         </div>
-        {v.state.evaluation.future_snapshot && <p className="small warn-text">미래 자료: 능력 스냅샷은 자료 마지막 날({v.data_end}) 것 하나뿐이다(T2)</p>}
+        {v.state.evaluation.future_snapshot && <p className="small warn-text">미래 자료: 능력 스냅샷은 자료 마지막 날({v.data_end}) 기준 하나만 있습니다(T2).</p>}
       </section>
     </div>
   );
@@ -241,12 +241,12 @@ export function ClockTools({ v, run, busy, dept }: { v: View; run: Run; busy: bo
   const sim = v.state.scenario.sim_date;
   // 시계: 기준 세션은 운영 관리만, 시뮬레이션 세션은 모든 부서(시스템 대행)
   const canClock = v.session.kind === "main" ? canFeature(dept, "main.clock") : canFeature(dept, "sim.act");
-  const why = canClock ? "" : v.session.kind === "main" ? "기준 세션 시계는 운영 관리 부서만" : "로그인한 계정의 역할을 찾지 못했다";
+  const why = canClock ? "" : v.session.kind === "main" ? "기준 세션 시계는 운영 관리 부서만 변경할 수 있습니다" : "로그인한 계정의 역할을 찾을 수 없습니다. 다시 로그인해 주세요.";
   const clock = (to: string) => run(() => api.event("E0_CLOCK", "시스템", { sim_date: to }));
   return (
     <section className="card">
       <h2>시계(E0)</h2>
-      <p className="muted small">업무일 {sim} · 날짜를 앞으로 옮기면 기한 초과·재요청이 다시 계산된다{why && ` · ${why}`}</p>
+      <p className="muted small">업무일 {sim} · 날짜를 앞으로 옮기면 기한 초과·재요청이 다시 계산됩니다{why && ` · ${why}`}</p>
       <div className="row">
         <button className="ghost small" disabled={busy || !canClock} title={why} onClick={() => clock(addDays(sim, 1))}>+1일</button>
         <button className="ghost small" disabled={busy || !canClock} title={why} onClick={() => clock(addDays(sim, 7))}>+1주</button>

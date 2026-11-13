@@ -131,16 +131,16 @@ function SupplyChart({ v }: { v: View }) {
     <Section
       title="PL-02 월별 공급과 부족"
       mode={["real"]}
-      note={`단위 EA/월 · 요구 월 ${ea(pe.monthly_demand)} EA(검정 파선) · 계약 ${ev.scenario.contract_months}개월 · 공급 출처별로 쌓고 맨 위에 부족(빨강 테두리)을 얹었다. 증설·전환 능력은 적격일 다음 달부터(R3).${anyCond ? " 흰 바탕에 파선 테두리 = 조건부(승인·선행 회신 전)." : ""} 막대에 올리면 그 달 수치가 나온다. 출처: ${snapSource(v)}.`}
+      note={`단위 EA/월 · 요구 월 ${ea(pe.monthly_demand)} EA(검정 파선) · 계약 ${ev.scenario.contract_months}개월. 공급을 출처별로 쌓고 맨 위에 부족(빨강 테두리)을 표시합니다. 증설·전환 능력은 적격일 다음 달부터 반영됩니다(R3).${anyCond ? " 흰 바탕에 파선 테두리는 조건부(승인·선행 회신 전) 공급입니다." : ""} 막대에 마우스를 올리면 해당 월 수치가 표시됩니다. 출처: ${snapSource(v)}.`}
     >
       {c && (
         <div className="row" role="group" aria-label="OPT-01 적격 기간 시나리오">
           <button className={alt ? "ghost small" : "small"} aria-pressed={!alt} onClick={() => setAlt(false)}>기본(적격 {c.base.validation_weeks}주, 제출 기준)</button>
           <button className={alt ? "small" : "ghost small"} aria-pressed={alt} onClick={() => setAlt(true)}>원본 "재검증 불필요"(적격 {c.alt.validation_weeks}주)</button>
-          <span className={alt ? "small warn-text" : "muted small"}>{alt ? "대안 시나리오: 제출 기준이 아니다. 굵은 달이 기본과 다르다." : "제출·판단은 이 시나리오로만 한다."}</span>
+          <span className={alt ? "small warn-text" : "muted small"}>{alt ? "대안 시나리오이며 제출 기준이 아닙니다. 굵게 표시된 달이 기본과 다릅니다." : "제출·판단은 이 시나리오 기준으로만 진행합니다."}</span>
         </div>
       )}
-      <EChart option={option} height={320} label={`PL-02 월별 공급과 부족${alt ? " (비교 시나리오)" : ""}. 수치는 아래 월별 표에 있다.`} />
+      <EChart option={option} height={320} label={`PL-02 월별 공급과 부족${alt ? " (비교 시나리오)" : ""}. 수치는 아래 월별 표에서 확인할 수 있습니다.`} />
       {side && (
         <p className="small" style={{ marginBottom: 0 }}>
           {alt ? "비교" : "기본"}: 제안 <b>{ea(side.schedule_total)} EA</b>(공급률 {pct(side.coverage_pct)}) · 부족 {ea(side.short_total)} EA · OPT-01 최초 반영 {side.first_supply_month || "없음"} · 전량 약속 시 지연분 노출 {eok(side.penalty_backlog_krw)}
@@ -159,7 +159,7 @@ function FlagsCard({ v }: { v: View }) {
   const askFor = (f: Flag) => open.filter((r) => (r.blocks ?? []).includes(f.rule));
   const last = s.log?.[s.log.length - 1];
   return (
-    <Section title={`미확인·위험·차단 (${flags.length})`} mode={["real"]} note="무엇이 판단을 막는지와, 그것을 누구에게 물었는지(열린 확인 요청)를 함께 보인다.">
+    <Section title={`미확인·위험·차단 (${flags.length})`} mode={["real"]} note="판단을 막는 항목과, 해당 항목을 확인 요청한 대상(열린 확인 요청)을 함께 표시합니다.">
       <ul className="flags">
         {flags.map((f) => {
           const asks = askFor(f);
@@ -211,23 +211,23 @@ function MyTurn({ v, dept, onAction, onTrySim }: { v: View; dept?: Department; o
         <span className="modes"><Mode kind="real" /></span>
       </header>
       {!dept ? (
-        <p className="small">로그인한 계정의 역할을 권한표에서 찾지 못해 지금 할 일을 보일 수 없다.</p>
+        <p className="small">로그인한 계정의 역할을 권한표에서 찾지 못해 현재 할 일을 표시할 수 없습니다. 부서 계정으로 다시 로그인해 주세요.</p>
       ) : first ? (
         <p className="small">
           <b>{dept.label}</b>: {first.label}. {v.state.bid ? `입찰 ${v.state.bid.state} · v${v.state.bid.version}.` : ""}
         </p>
       ) : (
         <p className="small">
-          <b>{dept.label}</b>: 지금 이 판단으로 넣을 사건은 없다. {actions.find((a) => !a.enabled)?.reason ?? ""}
+          <b>{dept.label}</b>: 현재 이 판단 단계에서 입력할 사건이 없습니다. {actions.find((a) => !a.enabled)?.reason ?? ""}
         </p>
       )}
       <div className="row">
         {first && <button onClick={() => onAction(first)}>{first.label}</button>}
-        <button className="ghost" disabled={!dept} title={dept ? "" : "로그인한 계정의 역할을 찾지 못했다"} onClick={onTrySim}>
+        <button className="ghost" disabled={!dept} title={dept ? "" : "로그인한 계정의 역할을 찾을 수 없습니다. 다시 로그인해 주세요."} onClick={onTrySim}>
           {v.session.kind === "sim" ? "시뮬레이션 페이지로" : "시뮬레이션에서 먼저 보기"}
         </button>
       </div>
-      {v.session.kind === "main" && <p className="muted small" style={{ marginBottom: 0 }}>시뮬레이션에서 먼저 보기 = 지금 상태를 분기한 시뮬레이션 세션을 만들고 그쪽으로 간다(기준 세션은 그대로).</p>}
+      {v.session.kind === "main" && <p className="muted small" style={{ marginBottom: 0 }}>'시뮬레이션에서 먼저 보기'를 누르면 현재 상태를 분기한 시뮬레이션 세션이 생성되고 해당 세션으로 이동합니다. 기준 세션은 변경되지 않습니다.</p>}
     </section>
   );
 }
@@ -250,7 +250,7 @@ function SourcesCard({ v }: { v: View }) {
   rows.push([`능력 단위 ${sc.capacity_period === "monthly" ? "월간" : "연간"}`, sc.unit_confirmed ? "회신 반영" : "가정", sc.unit_confirmed ? "생산관리 회신" : "D6, CR-01"]);
   if (bid) rows.push([`지체상금 월 ${pct(bid.penalty_rate_monthly * 100, 0)}`, "원본", "RFP"]);
   return (
-    <Section title="숫자의 출처" mode={["real"]} note="원본 기록·계산·합성·가정·회신 반영을 구분한다. 전체 가정은 근거 › 가정 페이지.">
+    <Section title="숫자의 출처" mode={["real"]} note="원본 기록·계산·합성·가정·회신 반영을 구분해 표시합니다. 전체 가정은 근거 › 가정 페이지에서 확인할 수 있습니다.">
       <ul className="tasks">
         {rows.map(([what, kind, src]) => (
           <li key={what}>
@@ -276,7 +276,7 @@ export function JudgeView({ v, dept, onAction, onTrySim }: { v: View; dept?: Dep
   const c = ev.compare_opt01;
   return (
     <>
-      <Section title="판단 요약" mode={["real"]} note={`숫자는 결정 모델(엔진)이 원본에서 다시 계산하고, 승인은 권한 부서가 한다. 입력은 고정 필드만 쓴다(LLM 현재 제외). 여유·공급 출처: ${snapSource(v)}. 생산 라인 보드의 배치 실적과는 규모가 다르다(여유·증설안 페이지).`}>
+      <Section title="판단 요약" mode={["real"]} note={`숫자는 결정 모델(엔진)이 원본에서 다시 계산하며, 승인은 권한 부서가 진행합니다. 입력은 고정 필드만 사용합니다(LLM 현재 제외). 여유·공급 출처: ${snapSource(v)}. 생산 라인 보드의 배치 실적과는 규모가 다릅니다(여유·증설안 페이지 참고).`}>
         <div className="kpis kpis-5">
           <Kpi label="PL-02 더마 제안 가능" value={`${ea(p2?.schedule_total)} EA`} sub={`요구 ${ea((p2?.monthly_demand ?? 0) * ev.scenario.contract_months)} 중 ${pct(p2?.coverage_pct)} · ${l2?.qty_status ?? "접수 전"}`} tone={p2 && p2.coverage_pct < 100 ? "warn" : "ok"} />
           <Kpi label="PL-01 기초" value={l1?.qty_status === "미확정" || !l1 ? "수량 미확정" : `${ea(p1?.schedule_total)} EA`} sub={`확인 전 상한 월 ${ea(p1?.months?.[0]?.supply)} EA · 요구 월 ${ea(p1?.monthly_demand)}`} tone="bad" />

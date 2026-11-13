@@ -17,10 +17,10 @@ import (
 // 사건의 Actor(권한을 쓴 부서)와 By(실제 입력한 부서)는 시뮬레이션 대행에서만 다르다.
 
 // ErrForbidden은 사용자 부서에 그 기능 권한이 없다는 뜻이다(HTTP 403).
-var ErrForbidden = errors.New("권한 없음")
+var ErrForbidden = errors.New("권한이 없습니다")
 
 // ErrNoRole은 쓰기 요청에 사용자 부서가 없다는 뜻이다(HTTP 401).
-var ErrNoRole = errors.New("로그인이 필요하다")
+var ErrNoRole = errors.New("로그인이 필요합니다")
 
 // 화면 기능 권한.
 const (
@@ -65,7 +65,7 @@ var Departments = []Department{
 		Duty:   "Masil 더마 발주 입고 조정 회신(재고 발주 승인 = SCM, approval_authority_policy)",
 		Events: []string{EvReply}, Replies: []string{"CR-08"}},
 	{Code: "finance", ID: "재무·전략", Dept: "재무·전략", Label: "재무·전략",
-		Duty: "환율·원가·회수기간 검토, 300억 조건 반영(그룹 재무). 지금은 조회·시뮬레이션"},
+		Duty: "환율·원가·회수기간 검토, 300억 조건 반영(그룹 재무). 현재는 조회·시뮬레이션만"},
 	{Code: "board", ID: "CEO/이사회", Dept: "경영진", Label: "CEO/이사회",
 		Duty:   "입찰 참여·투자 승인, 300억 최종 배분(approval_authority_policy)",
 		Events: []string{EvDecision}},
@@ -135,7 +135,7 @@ func eventActorAllowed(typ, actor string) error {
 		if _, ok := deptByID(actor); ok {
 			return nil
 		}
-		return fmt.Errorf("권한 없음: 모의 가정은 부서 사용자만 넣는다(입력 %q)", actor)
+		return fmt.Errorf("권한이 없습니다. 모의 가정은 부서 사용자만 입력할 수 있습니다(입력 %q).", actor)
 	}
 	var owners []string
 	for _, d := range Departments {
@@ -149,5 +149,5 @@ func eventActorAllowed(typ, actor string) error {
 	if len(owners) == 0 {
 		return nil // 권한표에 없는 사건 종류는 아래에서 "모르는 사건"으로 거절된다
 	}
-	return fmt.Errorf("권한 없음: %s는 %s 권한이다(입력 %q)", typ, strings.Join(owners, "·"), actor)
+	return fmt.Errorf("권한이 없습니다. %s는 %s 권한입니다(입력 %q).", typ, strings.Join(owners, "·"), actor)
 }

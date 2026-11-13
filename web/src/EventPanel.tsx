@@ -94,7 +94,7 @@ export function EventPanel({ v, run, focus, dept, only, title = "사건 입력" 
   };
 
   return (
-    <Section title={title} mode={["real", "mock"]} note="입력은 정리해 둔 고정 값(구조화 필드)만 쓴다. 바이어·이사회 회신은 모의 값이다. 규칙에 맞지 않는 사건은 거부되고 기록되지 않는다. 내 부서 권한 밖의 사건은 막힌다(시뮬레이션 세션은 대행).">
+    <Section title={title} mode={["real", "mock"]} note="정해 둔 고정 값(구조화 필드)으로만 입력합니다. 바이어·이사회 회신은 모의 값입니다. 규칙에 맞지 않는 사건은 거부되며 기록되지 않습니다. 소속 부서 권한 밖의 사건은 입력할 수 없습니다(시뮬레이션 세션에서는 대행 입력 가능).">
       <label className="field">
         <span>사건</span>
         <select value={type} onChange={(e) => setType(e.target.value)}>
@@ -102,7 +102,7 @@ export function EventPanel({ v, run, focus, dept, only, title = "사건 입력" 
             .filter(([k]) => k in ACTOR && k in state)
             .map(([k, label]) => {
               const p = perm(k);
-              const why = !p.ok ? ` (${p.reason})` : !state[k] ? " (지금 불가)" : p.proxy ? ` (${p.reason})` : "";
+              const why = !p.ok ? " (권한 없음)" : !state[k] ? " (현재 불가)" : p.proxy ? " (대행 입력)" : "";
               return (
                 <option key={k} value={k} disabled={!avail[k]}>
                   {label}{why}
@@ -112,9 +112,9 @@ export function EventPanel({ v, run, focus, dept, only, title = "사건 입력" 
         </select>
       </label>
       {dept && v.session.kind === "main" && (dept.events ?? []).every((e) => e === "E3_REPLY") && (dept.replies ?? []).length > 0 && (
-        <p className="small muted">{dept.label} 부서는 확인 요청 회신({(dept.replies ?? []).join("·")})을 넣는다 — 내 업무·확인 요청 페이지</p>
+        <p className="small muted">{dept.label} 부서는 확인 요청 회신({(dept.replies ?? []).join("·")})을 입력합니다. 내 업무 또는 확인 요청 페이지에서 입력해 주세요.</p>
       )}
-      {perm(type).proxy && <p className="small warn-text">[모의 대행] {perm(type).reason} — 입력 부서 {dept?.label}로 기록된다</p>}
+      {perm(type).proxy && <p className="small warn-text">[모의 대행] {perm(type).reason} — 입력 부서({dept?.label})가 함께 기록됩니다.</p>}
       {!perm(type).ok && <p className="small bad">{perm(type).reason}</p>}
 
       {kind && fields && (
@@ -241,10 +241,10 @@ export function RequestsView({ v, run, dept }: { v: View; run: Run; dept?: Depar
   const rs = v.state.requests ?? [];
   const [open, setOpen] = useState<string | null>(null);
   return (
-    <Section title={`확인 요청 (열림 ${rs.filter((r) => r.state !== "반영").length})`} mode={["real", "mock"]} note="요청 생성·기한 초과·재요청은 실제 작동, 회신 내용은 모의다. 바이어 항목(CR-04~06)은 E4 바이어 회신으로 반영된다. 회신은 요청 대상 부서만 넣는다(시뮬레이션 세션은 대행).">
+    <Section title={`확인 요청 (열림 ${rs.filter((r) => r.state !== "반영").length})`} mode={["real", "mock"]} note="요청 생성·기한 초과·재요청은 실제로 작동하며, 회신 내용은 모의입니다. 바이어 항목(CR-04~06)은 E4 바이어 회신으로 반영됩니다. 회신은 요청 대상 부서만 입력할 수 있습니다(시뮬레이션 세션에서는 대행 입력 가능).">
       {rs.length === 0 && (
-        <EmptyState compact swan="waiting" title="확인 요청이 아직 없다">
-          RFP 접수(E1) 뒤 엔진이 부서·바이어에 물을 것을 만든다.
+        <EmptyState compact swan="waiting" title="현재 확인 요청이 없습니다">
+          RFP가 접수되면(E1) 부서·바이어에 보낼 확인 요청이 여기에 표시됩니다.
         </EmptyState>
       )}
       {rs.length > 0 && <table className="grid text">
@@ -353,8 +353,8 @@ function ReplyForm({ r, run, done }: { r: ConfirmRequest; run: Run; done: () => 
           </>
         )}
       </div>
-      {r.request_id === "CR-09" && <p className="muted small">회신 권한: 영업 임원(기존 고객 약속 조정). 다른 역할이 넣으면 거절된다.</p>}
-      {(r.request_id === "CR-10" || r.request_id === "CR-11") && <p className="muted small">회신은 기록하고 후속 작업을 만든다. 엔진 계산 반영(타 라인 공급, 추정 납기 대체)은 설계 단계다.</p>}
+      {r.request_id === "CR-09" && <p className="muted small">회신 권한: 영업 임원(기존 고객 약속 조정). 다른 역할이 입력하면 거절됩니다.</p>}
+      {(r.request_id === "CR-10" || r.request_id === "CR-11") && <p className="muted small">회신을 기록하면 후속 작업이 생성됩니다. 엔진 계산 반영(타 라인 공급, 추정 납기 대체)은 설계 단계입니다.</p>}
       <button onClick={send}>회신 기록(E3)</button>
     </div>
   );

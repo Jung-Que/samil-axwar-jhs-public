@@ -40,7 +40,7 @@ export function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
         const a = r.accounts.find((x) => x.role_code === wantRole);
         if (a) pick(a, r.demo_password);
       })
-      .catch((e: Error) => setErr(`계정 목록을 불러오지 못했다: ${e.message}`));
+      .catch((e: Error) => setErr(`계정 목록을 불러오지 못했습니다(${e.message}). 페이지를 새로고침해 주세요.`));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = async (e: FormEvent) => {
@@ -116,7 +116,7 @@ export function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
                   <td className="nowrap"><code>{a.login_id}</code></td>
                   <td className="nowrap">{a.name}</td>
                   <td>{a.dept_label}{a.role_code === wantRole && <span className="pill tiny tone-accent"> 다음 차례</span>}</td>
-                  <td><button type="button" className="ghost small" aria-label={`${a.name} 계정 고르기`} onClick={() => pick(a)}>고르기</button></td>
+                  <td><button type="button" className="ghost small" aria-label={`${a.name} 계정 선택`} onClick={() => pick(a)}>선택</button></td>
                 </tr>
               ))}
             </tbody>
@@ -137,17 +137,17 @@ export function AccessPage({ v, user }: { v: View; user: User }) {
   const duty = (code: string) => t?.roles.find((r) => r.code === code)?.duty ?? "";
   return (
     <>
-      <Section title={`계정 (${t?.users.length ?? 0})`} mode={["real", "design"]} note={`app_users 표(저장소 ${t?.store ?? v.store}). 비밀번호는 해시만 저장한다. 계정 추가·수정·비활성은 설계 단계다.`}>
+      <Section title={`계정 (${t?.users.length ?? 0})`} mode={["real", "design"]} note={`로그인 계정 목록입니다(저장소 ${t?.store ?? v.store}). 비밀번호는 해시로만 저장됩니다. 계정 추가·수정·비활성화는 설계 단계입니다.`}>
         {err && <p className="bad small">{err}</p>}
         <div className="scroll">
           <table className="grid text">
             <thead>
-              <tr><th>아이디</th><th>이름</th><th>역할(부서)</th><th>맡는 일</th><th>만든 때</th></tr>
+              <tr><th>아이디</th><th>이름</th><th>역할(부서)</th><th>담당 업무</th><th>생성일</th></tr>
             </thead>
             <tbody>
               {(t?.users ?? []).map((u) => (
                 <tr key={u.login_id} className={u.login_id === user.login_id ? "row-strong" : ""}>
-                  <td className="nowrap"><code>{u.login_id}</code>{u.login_id === user.login_id && <span className="muted small"> · 지금 로그인</span>}</td>
+                  <td className="nowrap"><code>{u.login_id}</code>{u.login_id === user.login_id && <span className="muted small"> · 현재 로그인</span>}</td>
                   <td className="nowrap">{u.name}</td>
                   <td className="nowrap">{u.dept_label} <span className="muted small">{u.role_code}</span></td>
                   <td className="small">{duty(u.role_code)}</td>
@@ -158,7 +158,7 @@ export function AccessPage({ v, user }: { v: View; user: User }) {
           </table>
         </div>
       </Section>
-      <Section title={`역할별 권한 (${t?.permissions.length ?? 0}줄)`} mode={["real"]} note="app_roles · app_role_permissions 표. 서버는 시작할 때 이 표를 읽어 판단한다(표가 비어 있으면 server/w05/permissions.go 기본값을 넣는다). 기준 세션은 자기 역할 권한으로만, 시뮬레이션 세션은 대행 입력을 기록하며 허용한다.">
+      <Section title={`역할별 권한 (${t?.permissions.length ?? 0}줄)`} mode={["real"]} note="서버는 시작할 때 이 권한표를 읽어 판단합니다. 표가 비어 있으면 기본 권한을 적용합니다. 기준 세션에서는 소속 역할 권한으로만 입력할 수 있고, 시뮬레이션 세션에서는 대행 입력을 기록하며 허용합니다.">
         <PermissionTable v={v} current={user.role_code} />
       </Section>
     </>

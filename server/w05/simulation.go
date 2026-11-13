@@ -39,35 +39,35 @@ func (p SimAssumption) apply(sc *Scenario) ([]string, error) {
 		m, err := time.Parse("2006-01", *p.DeliveryStart)
 		first := mustDate(sc.AsOf)
 		if err != nil || m.Before(time.Date(first.Year(), first.Month(), 1, 0, 0, 0, 0, time.UTC)) || m.After(first.AddDate(3, 0, 0)) {
-			return nil, fmt.Errorf("납품 개시월은 기준일 달부터 3년 안(YYYY-MM): %q", *p.DeliveryStart)
+			return nil, fmt.Errorf("납품 개시월은 기준일 달부터 3년 안(YYYY-MM)으로 입력해 주세요(입력 %q).", *p.DeliveryStart)
 		}
 		sc.DeliveryStart = *p.DeliveryStart
 		add("납품 개시 %s", sc.DeliveryStart)
 	}
 	if p.ContractMonths != nil {
 		if *p.ContractMonths < 1 || *p.ContractMonths > 36 {
-			return nil, fmt.Errorf("계약 기간은 1~36개월: %d", *p.ContractMonths)
+			return nil, fmt.Errorf("계약 기간은 1~36개월 사이로 입력해 주세요(입력 %d).", *p.ContractMonths)
 		}
 		sc.ContractMonths = *p.ContractMonths
 		add("계약 %d개월", sc.ContractMonths)
 	}
 	if p.PriceCutPct != nil {
 		if *p.PriceCutPct > 0 || *p.PriceCutPct < -50 {
-			return nil, fmt.Errorf("단가 인하는 −50~0%%: %v", *p.PriceCutPct)
+			return nil, fmt.Errorf("단가 인하는 −50~0%% 사이로 입력해 주세요(입력 %v).", *p.PriceCutPct)
 		}
 		sc.PriceCut = *p.PriceCutPct / 100
 		add("단가 인하 %.1f%%", *p.PriceCutPct)
 	}
 	if p.FXShift != nil {
 		if *p.FXShift < -1000 || *p.FXShift > 1000 {
-			return nil, fmt.Errorf("환율 충격은 −1000~1000원: %v", *p.FXShift)
+			return nil, fmt.Errorf("환율 충격은 −1000~1000원 사이로 입력해 주세요(입력 %v).", *p.FXShift)
 		}
 		sc.FXShift = *p.FXShift
 		add("환율 충격 %+.0f원(USD 원료비 1:1 연동)", sc.FXShift)
 	}
 	if p.CapacityPeriod != nil {
 		if *p.CapacityPeriod != "annual" && *p.CapacityPeriod != "monthly" {
-			return nil, fmt.Errorf("능력 단위는 annual·monthly: %q", *p.CapacityPeriod)
+			return nil, fmt.Errorf("능력 단위는 연간(annual)·월간(monthly) 중에서 선택해 주세요(입력 %q).", *p.CapacityPeriod)
 		}
 		sc.CapacityPeriod = *p.CapacityPeriod
 		add("capacity_qty 단위 %s", map[string]string{"annual": "연간", "monthly": "월간"}[sc.CapacityPeriod])
@@ -78,7 +78,7 @@ func (p SimAssumption) apply(sc *Scenario) ([]string, error) {
 	}
 	for id, w := range p.ValidationWeeks {
 		if !validOpt(id) || w < 0 || w > 104 {
-			return nil, fmt.Errorf("적격 주수는 OPT-01·OPT-02, 0~104주: %s %d", id, w)
+			return nil, fmt.Errorf("적격 주수는 OPT-01·OPT-02에 0~104주로 입력해 주세요(입력 %s %d).", id, w)
 		}
 		if sc.OptValidation == nil {
 			sc.OptValidation = map[string]int{}
@@ -88,12 +88,12 @@ func (p SimAssumption) apply(sc *Scenario) ([]string, error) {
 	}
 	for id, st := range p.Options {
 		if !validOpt(id) {
-			return nil, fmt.Errorf("증설안은 OPT-01·OPT-02: %s", id)
+			return nil, fmt.Errorf("증설안은 OPT-01·OPT-02만 선택할 수 있습니다(입력 %s).", id)
 		}
 		switch st {
 		case OptProposed, OptApproved, OptDeferred, OptRejected:
 		default:
-			return nil, fmt.Errorf("%s 결정 값은 제안·승인·보류·거절: %q", id, st)
+			return nil, fmt.Errorf("%s 결정 값은 제안·승인·보류·거절 중에서 선택해 주세요(입력 %q).", id, st)
 		}
 		if sc.Options == nil {
 			sc.Options = map[string]OptionDecision{}
@@ -103,7 +103,7 @@ func (p SimAssumption) apply(sc *Scenario) ([]string, error) {
 	}
 	if p.NewOrderBasis != nil {
 		if *p.NewOrderBasis != HistNet && *p.NewOrderBasis != HistGross {
-			return nil, fmt.Errorf("신규 수주 반영 기준은 net·gross: %q", *p.NewOrderBasis)
+			return nil, fmt.Errorf("신규 수주 반영 기준은 순증분(net)·총량(gross) 중에서 선택해 주세요(입력 %q).", *p.NewOrderBasis)
 		}
 		sc.HistBasis = *p.NewOrderBasis
 		add("기준일 뒤 신규 수주 반영: %s", histBasisLabel(sc.HistBasis))
@@ -240,10 +240,10 @@ func paramAssumption(param string, raw json.RawMessage) (SimAssumption, string, 
 		err = json.Unmarshal(raw, &b)
 		p.MasilInUtil = &b
 	default:
-		return p, "", fmt.Errorf("모르는 격자 변수: %q", param)
+		return p, "", fmt.Errorf("알 수 없는 격자 변수입니다: %q", param)
 	}
 	if err != nil {
-		return p, "", fmt.Errorf("%s 값 형식 오류: %s", param, string(raw))
+		return p, "", fmt.Errorf("%s 값 형식이 올바르지 않습니다: %s", param, string(raw))
 	}
 	label := strings.Trim(string(raw), `"`)
 	if param == "price_cut_pct" || param == "fx_shift" {
@@ -268,22 +268,22 @@ func sweepMetrics(ev *Evaluation) map[string]float64 {
 // Sweep은 시나리오 sc에서 변수 1~2개를 바꿔 가며 엔진 평가만 반복한다(사건을 남기지 않는다).
 func Sweep(b *Base, sc Scenario, x SweepAxis, y *SweepAxis) (SweepResult, error) {
 	if len(x.Values) == 0 {
-		return SweepResult{}, fmt.Errorf("X축 값이 없다")
+		return SweepResult{}, fmt.Errorf("X축 값이 없습니다. 값을 하나 이상 입력해 주세요.")
 	}
 	ys := []json.RawMessage{nil}
 	if y != nil && y.Param != "" {
 		if y.Param == x.Param {
-			return SweepResult{}, fmt.Errorf("X·Y축 변수가 같다: %s", x.Param)
+			return SweepResult{}, fmt.Errorf("X축과 Y축 변수가 같습니다(%s). 서로 다른 변수를 선택해 주세요.", x.Param)
 		}
 		if len(y.Values) == 0 {
-			return SweepResult{}, fmt.Errorf("Y축 값이 없다")
+			return SweepResult{}, fmt.Errorf("Y축 값이 없습니다. 값을 하나 이상 입력해 주세요.")
 		}
 		ys = y.Values
 	} else {
 		y = nil
 	}
 	if len(x.Values)*len(ys) > maxSweepCells {
-		return SweepResult{}, fmt.Errorf("격자는 최대 %d칸: %d × %d", maxSweepCells, len(x.Values), len(ys))
+		return SweepResult{}, fmt.Errorf("격자는 최대 %d칸까지 실행할 수 있습니다(요청 %d × %d).", maxSweepCells, len(x.Values), len(ys))
 	}
 	res := SweepResult{XParam: x.Param, XLabel: SweepParams[x.Param], Metrics: SweepMetrics, Base: sweepMetrics(evaluate(b, sc))}
 	if y != nil {

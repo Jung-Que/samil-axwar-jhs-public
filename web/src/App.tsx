@@ -24,10 +24,10 @@ function noticeFor(prev: View, next: View): Notice | null {
   if (!b || a === b) return null;
   const last = next.state.log?.[next.state.log.length - 1]?.event.seq ?? 0;
   const made = (next.state.tasks ?? []).filter((t) => t.cause_seq === last && t.state === "열림");
-  const madeText = made.length ? `작업 ${made.length}건이 생겼다: ${made.map((t) => `${t.owner_role} ${t.title.split("(")[0].trim()}`).join(" · ")}` : "새로 생긴 작업은 없다.";
-  if (b === "상신") return { swan: "waiting", title: "상신했다 · CEO/이사회 결정 대기", desc: "결정이 들어오면 시연 흐름과 결정 페이지에 뜬다.", to: "/flow", toLabel: "시연 흐름 보기" };
-  if ((b === "승인" || b === "조건부 승인") && a === "상신") return { swan: "success", title: `결정을 기록했다 · ${b}`, desc: madeText, to: "/tasks", toLabel: "작업 보기" };
-  if (b === "회신 대기" && (a === "승인" || a === "조건부 승인")) return { swan: "success", title: "제안을 제출했다", desc: madeText, to: "/tasks", toLabel: "작업 보기" };
+  const madeText = made.length ? `작업 ${made.length}건이 생성되었습니다: ${made.map((t) => `${t.owner_role} ${t.title.split("(")[0].trim()}`).join(" · ")}` : "새로 생성된 작업이 없습니다.";
+  if (b === "상신") return { swan: "waiting", title: "상신했습니다 · CEO/이사회 결정 대기", desc: "결정이 입력되면 시연 흐름과 결정 페이지에 표시됩니다.", to: "/flow", toLabel: "시연 흐름 보기" };
+  if ((b === "승인" || b === "조건부 승인") && a === "상신") return { swan: "success", title: `결정을 기록했습니다 · ${b}`, desc: madeText, to: "/tasks", toLabel: "작업 보기" };
+  if (b === "회신 대기" && (a === "승인" || a === "조건부 승인")) return { swan: "success", title: "제안을 제출했습니다", desc: madeText, to: "/tasks", toLabel: "작업 보기" };
   return null;
 }
 
@@ -100,7 +100,7 @@ export default function App() {
         setSession(nv.session.id, nv.session.kind);
         setV(nv);
       })
-      .catch((e: Error) => setErr(`API 연결 실패: ${e.message}`));
+      .catch((e: Error) => setErr(`운영 상태를 불러오지 못했습니다(${e.message}). 잠시 후 다시 시도해 주세요.`));
   }, [user?.login_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // run은 API를 부르고 새 상태로 바꾼다. 성공 여부를 돌려줘 실패하면 페이지를 옮기지 않게 한다(오류 띠가 남도록).
@@ -134,7 +134,7 @@ export default function App() {
   if (!v)
     return err ? (
       <main className="center">
-        <EmptyState swan="error" title="서버에 연결하지 못했다" action={<button onClick={() => window.location.reload()}>다시 시도</button>}>
+        <EmptyState swan="error" title="서버에 연결하지 못했습니다" action={<button onClick={() => window.location.reload()}>다시 시도</button>}>
           {err}
         </EmptyState>
       </main>
@@ -169,7 +169,7 @@ export default function App() {
     const req = (v.state.requests ?? []).find((r) => r.request_id === a.request_id);
     const chk = canEvent(v, dept, a.event, req);
     if (!chk.ok) {
-      setErr(`권한 없음: ${chk.reason}`);
+      setErr(chk.reason ?? "이 작업을 실행할 권한이 없습니다.");
       return;
     }
     if (DIRECT[a.event]) run(() => api.event(a.event, DIRECT[a.event].actor, DIRECT[a.event].payload));
@@ -254,8 +254,8 @@ export default function App() {
             </>
           ) : (
             <section className="card">
-              <EmptyState swan="notfound" title="페이지를 찾을 수 없다" action={<Link to={pathOf("my")} className="btn">내 업무로</Link>}>
-                {loc.path} — 주소가 바뀌었거나 없는 화면이다.
+              <EmptyState swan="notfound" title="페이지를 찾을 수 없습니다" action={<Link to={pathOf("my")} className="btn">내 업무로</Link>}>
+                {loc.path} — 주소가 변경되었거나 존재하지 않는 화면입니다.
               </EmptyState>
             </section>
           )}
@@ -276,7 +276,7 @@ function ApprovalsPage({ v, run, dept }: { v: View; run: (fn: () => Promise<View
       ) : (
         <section className="card">
           <EmptyState swan="waiting" title="결정 대기 0 · 상신을 기다리는 중" action={<Link to="/bids/C-201" className="btn ghost-btn">C-201 판단 보기</Link>}>
-            입찰 상태 {bid ? `${bid.state} · v${bid.version}` : "접수 전"}. 영업이 제안안을 상신하면(E8) CEO/이사회가 여기서 결정한다.
+            현재 결정할 제안안이 없습니다(입찰 상태 {bid ? `${bid.state} · v${bid.version}` : "접수 전"}). 영업이 제안안을 상신하면(E8) 여기에 표시되며 CEO/이사회가 결정합니다.
           </EmptyState>
         </section>
       )}

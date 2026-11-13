@@ -148,12 +148,12 @@ func (s *State) Lanes(b *Base) []Lane {
 		}
 		lanes[role].Can = append(lanes[role].Can, a)
 	}
-	act("영업", EvRFP, "E1 RFP 접수", s.Bid == nil, "이미 접수된 입찰이 있다")
-	act("영업", EvForApprove, "E8 상신", st == BidReviewing || st == BidRereview, "검토중·재검토 상태에서만(지금 "+st+")")
-	act("영업", EvSubmit, "E7 제안 제출", st == BidApproved || st == BidConditional, "승인·조건부 승인 상태에서만(지금 "+st+")")
-	act("영업", EvBuyer, "E4 바이어 회신 입력", s.Bid != nil, "입찰 접수 전")
+	act("영업", EvRFP, "E1 RFP 접수", s.Bid == nil, "이미 접수된 입찰이 있습니다.")
+	act("영업", EvForApprove, "E8 상신", st == BidReviewing || st == BidRereview, "검토중·재검토 상태에서만 할 수 있습니다(현재 "+st+").")
+	act("영업", EvSubmit, "E7 제안 제출", st == BidApproved || st == BidConditional, "승인·조건부 승인 상태에서만 할 수 있습니다(현재 "+st+").")
+	act("영업", EvBuyer, "E4 바이어 회신 입력", s.Bid != nil, "입찰이 접수된 뒤에 입력할 수 있습니다.")
 	act("영업", EvNewOrder, "E5 신규 수주", true, "")
-	act("CEO/이사회", EvDecision, "E2 승인 결정", st == BidSubmitted, "상신 상태에서만(지금 "+st+")")
+	act("CEO/이사회", EvDecision, "E2 승인 결정", st == BidSubmitted, "상신 상태에서만 입력할 수 있습니다(현재 "+st+").")
 	for _, r := range s.Requests {
 		role := laneOf(r.ToRole)
 		if r.ToRole == "바이어" {
@@ -469,11 +469,11 @@ func (s *State) Backtest(b *Base) Backtest {
 	c := at.Cutoff
 	bt := Backtest{Cutoff: c, Rows: map[string][]BacktestRow{}, HitRate: map[string]float64{}, Orders: map[string]int{}}
 	if c >= DataEnd {
-		bt.Note = "자료 마지막 날(" + DataEnd + ") 기준이라 비교할 실제 출하가 없다. 더 이른 기준일을 고른다"
+		bt.Note = "자료 마지막 날(" + DataEnd + ") 기준이라 비교할 실제 출하가 없습니다. 더 이른 기준일을 선택해 주세요."
 		return bt
 	}
 	bt.Available = true
-	bt.Note = "검증 전용: 기준일 뒤 실제 출하를 비교에만 쓴다(판단에 쓰지 않음)"
+	bt.Note = "검증 전용: 기준일 뒤 실제 출하는 비교에만 사용합니다(판단에는 사용하지 않음)."
 	agg := map[string]map[string]*BacktestRow{}
 	hits := map[string]int{}
 	for _, o := range b.OpenOrders(c) {

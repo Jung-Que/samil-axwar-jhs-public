@@ -204,7 +204,7 @@ func requireLogin(st store.Store, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u, ok := userOf(r, st)
 		if !ok {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "로그인이 필요하다"})
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "로그인이 필요합니다."})
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxUser{}, u)))
@@ -268,7 +268,7 @@ func registerAuth(mux *http.ServeMux, st store.Store) {
 			hash = dummyHash()
 		}
 		if !checkPassword(hash, in.Password) || u.LoginID == "" {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "아이디 또는 비밀번호가 맞지 않다"})
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "아이디 또는 비밀번호가 올바르지 않습니다. 다시 입력해 주세요."})
 			return
 		}
 		raw := make([]byte, 32)
@@ -300,7 +300,7 @@ func registerAuth(mux *http.ServeMux, st store.Store) {
 	mux.HandleFunc("GET /api/auth/me", func(w http.ResponseWriter, r *http.Request) {
 		u, ok := userOf(r, st)
 		if !ok {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "로그인이 필요하다"})
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "로그인이 필요합니다."})
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"user": outOf(u)})

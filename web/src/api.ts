@@ -29,7 +29,7 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   });
   const data = await r.json().catch(() => ({}));
   if (r.status === 401 && !path.startsWith("/api/auth/")) unauthorized?.();
-  if (!r.ok) throw new ApiError(data.error ?? `HTTP ${r.status}`, r.status, data.view);
+  if (!r.ok) throw new ApiError(data.error ?? `요청을 처리하지 못했습니다(HTTP ${r.status}). 잠시 후 다시 시도해 주세요.`, r.status, data.view);
   return data as T;
 }
 

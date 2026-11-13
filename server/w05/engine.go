@@ -509,54 +509,54 @@ func flags(ev *Evaluation, sc Scenario) []Flag {
 		f = append(f, Flag{Code: code, Level: level, Rule: rule, Message: fmt.Sprintf(msg, a...)})
 	}
 	if ev.FutureSnapshot {
-		add("FUTURE_SNAPSHOT", "미확인", "T2", "능력 스냅샷은 %s 자료다. 기준일(자료 %s까지)보다 뒤에 만들어진 자료를 쓰고 있다", DataEnd, ev.Cutoff)
+		add("FUTURE_SNAPSHOT", "미확인", "T2", "능력 스냅샷은 %s 자료입니다. 기준일(자료 %s까지)보다 뒤에 만들어진 자료를 사용하고 있습니다.", DataEnd, ev.Cutoff)
 	}
 	if !sc.UnitConfirmed {
-		add("UNIT_UNCONFIRMED", "미확인", "R4", "capacity_qty 단위가 원본에 없어 연간 EA로 읽었다(D6). 생산관리 확인 전까지 '단위 미확인'")
+		add("UNIT_UNCONFIRMED", "미확인", "R4", "capacity_qty 단위가 원본에 없어 연간 EA로 읽었습니다(D6). 생산관리 확인 전까지 '단위 미확인'으로 표시합니다.")
 	}
 	for _, le := range ev.Lines {
 		if le.MasilDeficit > 0 {
-			add("MASIL_OVER_SPARE", "미확인", "R1", "%s 기본 여유(연 %s)가 Masil 보호분(%s)보다 %s EA 적다. Masil 발주가 가동률에 들어 있는지 확인 필요", le.LineID, Commas(le.SpareAnnual), Commas(le.MasilProtected), Commas(le.MasilDeficit))
+			add("MASIL_OVER_SPARE", "미확인", "R1", "%s 기본 여유(연 %s)가 Masil 보호분(%s)보다 %s EA 적습니다. Masil 발주가 가동률에 들어 있는지 확인이 필요합니다.", le.LineID, Commas(le.SpareAnnual), Commas(le.MasilProtected), Commas(le.MasilDeficit))
 		}
 	}
 	if !sc.PL01Confirmed {
 		b := ev.Products[ProductBasic]
-		add("PL01_UNCONFIRMED", "차단", "R6", "PL-01 600만 EA를 소화할 수단이 원본에 없다. 확인 전 제안은 '미확정' 또는 월 %s EA 이하", Commas(firstSupply(b)))
+		add("PL01_UNCONFIRMED", "차단", "R6", "PL-01 600만 EA를 소화할 수단이 원본에 없습니다. 확인 전 제안은 '미확정' 또는 월 %s EA 이하로 제한합니다.", Commas(firstSupply(b)))
 	}
 	for _, oe := range ev.Options {
 		if oe.Usable && len(oe.Pending) > 0 {
-			add("PREREQ_"+oe.OptionID, "미확인", "R3", "%s 능력은 선행조건(%s) 회신 전까지 조건부", oe.OptionID, strings.Join(oe.Pending, ", "))
+			add("PREREQ_"+oe.OptionID, "미확인", "R3", "%s 능력은 선행조건(%s) 회신 전까지 조건부입니다.", oe.OptionID, strings.Join(oe.Pending, ", "))
 		}
 		if !oe.Usable && oe.Status != OptRejected {
-			add("F2_REJECTED", "위험", "R3", "바이어가 F2 생산지를 받지 않아 %s 능력을 C-201에 쓸 수 없다", oe.OptionID)
+			add("F2_REJECTED", "위험", "R3", "바이어가 F2 생산지를 수용하지 않아 %s 능력을 C-201에 사용할 수 없습니다.", oe.OptionID)
 		}
 	}
 	if !sc.StartConfirmed {
-		add("START_ASSUMED", "미확인", "R7", "납품 개시월 %s는 가정(A-04). 바이어 확인 필요", sc.DeliveryStart)
+		add("START_ASSUMED", "미확인", "R7", "납품 개시월 %s는 가정입니다(A-04). 바이어 확인이 필요합니다.", sc.DeliveryStart)
 	}
 	if !sc.PenaltyConfirmed {
-		add("PENALTY_BASIS", "미확인", "R8", "페널티 기준액·상한이 RFP에 없다. 지연분 기준과 계약 총액 기준(월 %.2f억)을 함께 본다", ev.PenaltyMonthly/1e8)
+		add("PENALTY_BASIS", "미확인", "R8", "페널티 기준액·상한이 RFP에 없습니다. 지연분 기준과 계약 총액 기준(월 %.2f억)을 함께 확인합니다.", ev.PenaltyMonthly/1e8)
 	}
 	if ev.InitialGap > 0 {
-		add("MASIL_CONFLICT", "차단", "R2", "바이어 첫 달 요구 %s EA가 공급보다 %s EA 많다. 남은 L-02 슬롯은 Masil 보호분뿐이라 침범할 수 없다", Commas(sc.InitialQtyRequired), Commas(ev.InitialGap))
+		add("MASIL_CONFLICT", "차단", "R2", "바이어 첫 달 요구 %s EA가 공급보다 %s EA 많습니다. 남은 L-02 슬롯은 Masil 보호분뿐이라 침범할 수 없습니다.", Commas(sc.InitialQtyRequired), Commas(ev.InitialGap))
 	}
 	if d := ev.Products[ProductDerma]; d.ShortTotal > 0 {
-		add("PL02_SHORT", "위험", "R7", "PL-02 계약 기간 부족 %s EA(공급률 %.1f%%). 전량 약속 시 지연분 기준 노출 %.2f억", Commas(d.ShortTotal), d.CoveragePct, d.PenaltyBacklog/1e8)
+		add("PL02_SHORT", "위험", "R7", "PL-02가 계약 기간 동안 %s EA 부족합니다(공급률 %.1f%%). 전량 약속 시 지연분 기준 노출은 %.2f억입니다.", Commas(d.ShortTotal), d.CoveragePct, d.PenaltyBacklog/1e8)
 	}
 	if h := sc.HistOrders; len(h) > 0 {
-		add("HIST_ORDERS", "미확인", "R1", "세션 기준일(%s) 뒤 업무일(%s)까지 원본 신규 수주를 C-201 여유에서 뺐다: PL-01 %s · PL-02 %s EA(%s)",
+		add("HIST_ORDERS", "미확인", "R1", "세션 기준일(%s) 뒤 업무일(%s)까지의 원본 신규 수주를 C-201 여유에서 차감했습니다: PL-01 %s · PL-02 %s EA(%s).",
 			sc.AsOf, CutoffOf(sc.SimDate), Commas(h[ProductBasic]), Commas(h[ProductDerma]), histBasisLabel(sc.HistBasis))
 	}
 	for _, sg := range ev.Churn {
 		switch sg.Status {
 		case ChurnAtRisk:
-			add("CHURN_"+sg.CustomerID, "위험", "R12", "이탈 경보 %s(%s부터). 출하는 아직 이어져 재무(출하 기준) 보고에는 정상으로 보인다. 원인은 단정하지 않는다(영업 회의록)", churnText(sg), sg.Since)
+			add("CHURN_"+sg.CustomerID, "위험", "R12", "이탈 경보 %s(%s부터). 출하는 아직 이어지고 있어 재무(출하 기준) 보고에는 정상으로 표시됩니다. 원인은 단정하지 않습니다(영업 회의록).", churnText(sg), sg.Since)
 			if !sc.ChurnRevised {
-				add("R13_NO_RETURN", "미확인", "R13", "%s 진행 주문 %d건(PL-01 %s · PL-02 %s EA)은 '검토'로만 표시하고 보호를 유지한다. 영업 임원 확인(CR-09) 전에는 C-201에 능력을 돌려주지 않는다(반환 0)",
+				add("R13_NO_RETURN", "미확인", "R13", "%s 진행 주문 %d건(PL-01 %s · PL-02 %s EA)은 '검토'로만 표시하고 보호를 유지합니다. 영업 임원 확인(CR-09) 전에는 C-201에 능력을 돌려주지 않습니다(반환 0).",
 					sg.CustomerID, sg.OpenOrders, Commas(sg.OpenQty[ProductBasic]), Commas(sg.OpenQty[ProductDerma]))
 			}
 		case ChurnWatch:
-			add("CHURN_"+sg.CustomerID, "미확인", "R12", "이탈 관찰(WATCH) %s(%s부터). 단월 수주/출하가 2개월 연속 0.85 미만", churnText(sg), sg.Since)
+			add("CHURN_"+sg.CustomerID, "미확인", "R12", "이탈 관찰(WATCH) %s(%s부터). 단월 수주/출하가 2개월 연속 0.85 미만입니다.", churnText(sg), sg.Since)
 		}
 	}
 	return f

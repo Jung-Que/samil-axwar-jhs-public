@@ -80,7 +80,7 @@ func ScenarioByID(id, asOf string) (ScenarioInfo, error) {
 			return s, nil
 		}
 	}
-	return ScenarioInfo{}, fmt.Errorf("모르는 시나리오: %s", id)
+	return ScenarioInfo{}, fmt.Errorf("알 수 없는 시나리오입니다: %s", id)
 }
 
 func stepJSON(s Step) (json.RawMessage, error) { return json.Marshal(s.Payload) }
