@@ -64,68 +64,64 @@ export function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
           <BrandMark size={32} />
           <b>W05 수주·약속 운영</b>
         </div>
+        <div className="login-flow">
+          <h2>시연 순서</h2>
+          <ol className="flow-order">
+            {FLOW_ORDER.map((f, i) => {
+              const a = accounts.find((x) => x.role_code === f.role);
+              const on = i === FLOW_ORDER.findIndex((x) => x.role === wantRole); // 같은 부서가 두 번 나오면 첫 차례만
+              return (
+                <li key={i} className={on ? "on" : ""}>
+                  <b>{a?.name ?? f.role}</b> <span className="muted">{a?.dept_label}</span> · {f.what}
+                  {on && <span className="pill tiny tone-accent"> 다음 차례</span>}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
         <div className="login-hero">
           <img className="swan hero-img" src={SWAN.hero} alt="" draggable={false} />
           <p className="login-tagline">수면 위는 차분하게, 계산은 물 아래에서</p>
-          <p className="muted">대형 수주가 들어와도 기존 고객 약속을 지키도록 사건을 받고, 엔진이 원본으로 계산하고, 권한 있는 사람이 승인한다.</p>
         </div>
-        <p className="muted tiny">Aurora Holdings · Corevia 영업·생산관리 · 시연용 로그인</p>
       </section>
       <div className="login-form-panel">
-      <section className="login-card" aria-labelledby="login-title">
-        <h1 id="login-title">로그인</h1>
-        <form onSubmit={submit}>
-          <label className="field">
-            <span>아이디</span>
-            <input name="username" autoComplete="username" value={id} onChange={(e) => setId(e.target.value)} required autoFocus />
-          </label>
-          <label className="field">
-            <span>비밀번호</span>
-            <input ref={pwRef} name="password" type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} required />
-          </label>
-          {err && <p className="login-err small" role="alert">{err}</p>}
-          <button ref={submitRef} type="submit" className="login-submit" disabled={busy || !id || !pw}>{busy ? "확인 중…" : "로그인"}</button>
-        </form>
-        <p className="muted tiny">시연용 로그인 · 계정·권한은 DB 표(app_users · app_roles · app_role_permissions)에서 읽는다 · 회원 가입·비밀번호 변경 없음</p>
-      </section>
+        <section className="login-card" aria-labelledby="login-title">
+          <h1 id="login-title">로그인</h1>
+          <form onSubmit={submit}>
+            <label className="field">
+              <span>아이디</span>
+              <input name="username" autoComplete="username" value={id} onChange={(e) => setId(e.target.value)} required autoFocus />
+            </label>
+            <label className="field">
+              <span>비밀번호</span>
+              <input ref={pwRef} name="password" type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} required />
+            </label>
+            {err && <p className="login-err small" role="alert">{err}</p>}
+            <button ref={submitRef} type="submit" className="login-submit" disabled={busy || !id || !pw}>{busy ? "확인 중…" : "로그인"}</button>
+          </form>
+        </section>
 
-      <section className="card login-accounts" aria-labelledby="acc-title">
-        <h2 id="acc-title">시연 계정</h2>
-        <p className="muted small">
-          부서마다 하나다. 고르면 아이디{demoPw ? "와 비밀번호" : ""}가 채워진다.
-          {demoPw && <> 시연 비밀번호 <code>{demoPw}</code></>}
-        </p>
-        <div className="scroll">
+        <section className="card login-accounts" aria-labelledby="acc-title">
+          <div className="card-head">
+            <h2 id="acc-title">시연 계정</h2>
+            {demoPw && <span className="muted small">비밀번호 <code>{demoPw}</code></span>}
+          </div>
           <table className="grid text">
             <thead>
-              <tr><th>아이디</th><th>이름</th><th>부서</th><th>맡는 일</th><th /></tr>
+              <tr><th>아이디</th><th>이름</th><th>부서</th><th /></tr>
             </thead>
             <tbody>
               {accounts.map((a) => (
                 <tr key={a.login_id} className={a.login_id === id ? "row-strong" : ""}>
                   <td className="nowrap"><code>{a.login_id}</code></td>
                   <td className="nowrap">{a.name}</td>
-                  <td className="nowrap">{a.dept_label}{a.role_code === wantRole && <span className="pill tiny tone-accent"> 다음 차례</span>}</td>
-                  <td className="small">{a.duty}</td>
+                  <td>{a.dept_label}{a.role_code === wantRole && <span className="pill tiny tone-accent"> 다음 차례</span>}</td>
                   <td><button type="button" className="ghost small" aria-label={`${a.name} 계정 고르기`} onClick={() => pick(a)}>고르기</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-        <h3>시연 순서</h3>
-        <p className="muted small">C-201 한 건을 부서 계정을 바꿔 가며 따라간다. 로그인한 뒤 "시연 흐름" 페이지가 지금 차례를 알려 준다.</p>
-        <ol className="flow-order small">
-          {FLOW_ORDER.map((f, i) => {
-            const a = accounts.find((x) => x.role_code === f.role);
-            return (
-              <li key={i} className={f.role === wantRole ? "on" : ""}>
-                <b>{a ? `${a.name}(${a.login_id})` : f.role}</b> {a?.dept_label} — {f.what}
-              </li>
-            );
-          })}
-        </ol>
-      </section>
+        </section>
       </div>
     </div>
   );

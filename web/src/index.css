@@ -1872,8 +1872,6 @@ a.btn.small-btn {
 
 .flow-order li.on {
   font-weight: 700;
-  box-shadow: inset 3px 0 0 #111111;
-  padding-left: 6px;
 }
 
 @media (max-width: 900px) {
@@ -1995,8 +1993,8 @@ a.btn.ghost-btn {
 .login-brand-panel {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 24px;
+  justify-content: center;
+  gap: 28px;
   padding: 32px 44px;
   background: #FFFFFF;
 }
@@ -2006,6 +2004,17 @@ a.btn.ghost-btn {
   align-items: center;
   gap: 10px;
   font-size: 15px;
+}
+
+.login-flow h2 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: #4F4F4F;
+}
+
+.login-flow .flow-order {
+  margin: 0;
+  font-size: 13.5px;
 }
 
 .login-hero {
@@ -2066,4 +2075,9 @@ a.btn.ghost-btn {
   .empty-state.compact {
     align-items: flex-start;
   }
+}
+
+.login-accounts .pill,
+.flow-order .pill {
+  white-space: nowrap;
 }
