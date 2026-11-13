@@ -4,7 +4,7 @@ import { CompareView, Kpi, Mode, ScheduleView, Section, snapSource } from "./pan
 import { BASIS_LABEL, EVENT_LABEL, ea, eok, pct } from "./format";
 import { canEvent } from "./perm";
 
-// 판단·제안 탭(이슈 #49): 지표 → PL-02 월별 공급(기본/비교 전환) → 플래그와 물을 곳, 옆에 내 할 일·숫자의 출처.
+// 판단·제안 페이지(이슈 #49): 지표 → PL-02 월별 공급(기본/비교 전환) → 플래그와 물을 곳, 옆에 내 할 일·숫자의 출처.
 // 숫자는 모두 엔진 평가(evaluation)와 OPT-01 비교(compare_opt01)에서 온다. 화면은 다시 계산하지 않는다.
 
 const LEVEL_ORDER = { 차단: 0, 위험: 1, 미확인: 2 } as const;
@@ -176,7 +176,7 @@ function MyTurn({ v, dept, onAction, onTrySim }: { v: View; dept?: Department; o
         <span className="modes"><Mode kind="real" /></span>
       </header>
       {!dept ? (
-        <p className="small">위 맥락 막대에서 부서를 고르면 이 판단으로 지금 할 일이 보인다.</p>
+        <p className="small">위 막대에서 부서를 고르면 이 판단으로 지금 할 일이 보인다.</p>
       ) : first ? (
         <p className="small">
           <b>{dept.label}</b>: {first.label}. {v.state.bid ? `입찰 ${v.state.bid.state} · v${v.state.bid.version}.` : ""}
@@ -189,7 +189,7 @@ function MyTurn({ v, dept, onAction, onTrySim }: { v: View; dept?: Department; o
       <div className="row">
         {first && <button onClick={() => onAction(first)}>{first.label}</button>}
         <button className="ghost" disabled={!dept} title={dept ? "" : "부서를 먼저 고른다"} onClick={onTrySim}>
-          {v.session.kind === "sim" ? "시뮬레이션 탭으로" : "시뮬레이션에서 먼저 보기"}
+          {v.session.kind === "sim" ? "시뮬레이션 페이지로" : "시뮬레이션에서 먼저 보기"}
         </button>
       </div>
       {v.session.kind === "main" && <p className="muted small" style={{ marginBottom: 0 }}>시뮬레이션에서 먼저 보기 = 지금 상태를 분기한 시뮬레이션 세션을 만들고 그쪽으로 간다(기준 세션은 그대로).</p>}
@@ -215,7 +215,7 @@ function SourcesCard({ v }: { v: View }) {
   rows.push([`능력 단위 ${sc.capacity_period === "monthly" ? "월간" : "연간"}`, sc.unit_confirmed ? "회신 반영" : "가정", sc.unit_confirmed ? "생산관리 회신" : "D6, CR-01"]);
   if (bid) rows.push([`지체상금 월 ${pct(bid.penalty_rate_monthly * 100, 0)}`, "원본", "RFP"]);
   return (
-    <Section title="숫자의 출처" mode={["real"]} note="원본 기록·계산·합성·가정·회신 반영을 구분한다. 전체 가정은 근거 › 가정 탭.">
+    <Section title="숫자의 출처" mode={["real"]} note="원본 기록·계산·합성·가정·회신 반영을 구분한다. 전체 가정은 근거 › 가정 페이지.">
       <ul className="tasks">
         {rows.map(([what, kind, src]) => (
           <li key={what}>
@@ -241,7 +241,7 @@ export function JudgeView({ v, dept, onAction, onTrySim }: { v: View; dept?: Dep
   const c = ev.compare_opt01;
   return (
     <>
-      <Section title="판단 요약" mode={["real"]} note={`숫자는 결정 모델(엔진)이 원본에서 다시 계산하고, 승인은 권한 부서가 한다. 입력은 고정 필드만 쓴다(LLM 현재 제외). 여유·공급 출처: ${snapSource(v)}. 생산 라인 보드의 배치 실적과는 규모가 다르다(여유·증설안 탭).`}>
+      <Section title="판단 요약" mode={["real"]} note={`숫자는 결정 모델(엔진)이 원본에서 다시 계산하고, 승인은 권한 부서가 한다. 입력은 고정 필드만 쓴다(LLM 현재 제외). 여유·공급 출처: ${snapSource(v)}. 생산 라인 보드의 배치 실적과는 규모가 다르다(여유·증설안 페이지).`}>
         <div className="kpis kpis-5">
           <Kpi label="PL-02 더마 제안 가능" value={`${ea(p2?.schedule_total)} EA`} sub={`요구 ${ea((p2?.monthly_demand ?? 0) * ev.scenario.contract_months)} 중 ${pct(p2?.coverage_pct)} · ${l2?.qty_status ?? "접수 전"}`} tone={p2 && p2.coverage_pct < 100 ? "warn" : "ok"} />
           <Kpi label="PL-01 기초" value={l1?.qty_status === "미확정" || !l1 ? "수량 미확정" : `${ea(p1?.schedule_total)} EA`} sub={`확인 전 상한 월 ${ea(p1?.months?.[0]?.supply)} EA · 요구 월 ${ea(p1?.monthly_demand)}`} tone="bad" />

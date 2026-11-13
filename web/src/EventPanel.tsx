@@ -43,13 +43,16 @@ function presets(v: View, type: string): { label: string; payload: Fields }[] {
 }
 
 // 사건 입력: 고정 값(프리셋)을 골라 필드에 채우고, 필요하면 필드를 고친 뒤 기록한다.
-export function EventPanel({ v, run, focus, dept }: { v: View; run: Run; focus?: { event: string; n: number } | null; dept?: Department }) {
+// only가 있으면 그 사건 종류만 보인다(결정 페이지의 E2 등, 이슈 #53).
+export function EventPanel({ v, run, focus, dept, only, title = "사건 입력" }: { v: View; run: Run; focus?: { event: string; n: number } | null; dept?: Department; only?: string[]; title?: string }) {
   // 부서별 권한(이슈 #43): 상태로 가능한 사건 중 내 부서가 넣을 수 있는 것만(시뮬레이션 세션은 대행 포함)
-  const state = available(v);
+  const all = available(v);
+  const state: Record<string, boolean> = only ? Object.fromEntries(Object.entries(all).filter(([k]) => only.includes(k))) : all;
   const perm = (k: string) => canEvent(v, dept, k);
   const avail: Record<string, boolean> = Object.fromEntries(Object.keys(state).map((k) => [k, state[k] && perm(k).ok]));
   // 다음에 할 사건을 먼저 고른다. 내 부서 사건이 대행 사건보다 먼저다(이슈 #47).
-  const first = NEXT_ORDER.find((k) => avail[k] && !perm(k).proxy) ?? NEXT_ORDER.find((k) => avail[k]) ?? NEXT_ORDER.find((k) => perm(k).ok) ?? "E0_CLOCK";
+  const order = only ? NEXT_ORDER.filter((k) => only.includes(k)) : NEXT_ORDER;
+  const first = order.find((k) => avail[k] && !perm(k).proxy) ?? order.find((k) => avail[k]) ?? order.find((k) => perm(k).ok) ?? order[0] ?? "E0_CLOCK";
   const [type, setType] = useState(first);
   const [preset, setPreset] = useState(0);
   const [fields, setFields] = useState<Fields | null>(null);
@@ -90,12 +93,12 @@ export function EventPanel({ v, run, focus, dept }: { v: View; run: Run; focus?:
   };
 
   return (
-    <Section title="사건 입력" mode={["real", "mock"]} note="입력은 정리해 둔 고정 값(구조화 필드)만 쓴다. 바이어·이사회 회신은 모의 값이다. 규칙에 맞지 않는 사건은 거부되고 기록되지 않는다. 내 부서 권한 밖의 사건은 막힌다(시뮬레이션 세션은 대행).">
+    <Section title={title} mode={["real", "mock"]} note="입력은 정리해 둔 고정 값(구조화 필드)만 쓴다. 바이어·이사회 회신은 모의 값이다. 규칙에 맞지 않는 사건은 거부되고 기록되지 않는다. 내 부서 권한 밖의 사건은 막힌다(시뮬레이션 세션은 대행).">
       <label className="field">
         <span>사건</span>
         <select value={type} onChange={(e) => setType(e.target.value)}>
           {Object.entries(EVENT_LABEL)
-            .filter(([k]) => k in ACTOR)
+            .filter(([k]) => k in ACTOR && k in state)
             .map(([k, label]) => {
               const p = perm(k);
               const why = !p.ok ? ` (${p.reason})` : !state[k] ? " (지금 불가)" : p.proxy ? ` (${p.reason})` : "";
@@ -108,7 +111,7 @@ export function EventPanel({ v, run, focus, dept }: { v: View; run: Run; focus?:
         </select>
       </label>
       {dept && v.session.kind === "main" && (dept.events ?? []).every((e) => e === "E3_REPLY") && (dept.replies ?? []).length > 0 && (
-        <p className="small muted">{dept.label} 부서는 확인 요청 회신({(dept.replies ?? []).join("·")})을 넣는다 — "내 업무"·"확인 요청·결정" 탭</p>
+        <p className="small muted">{dept.label} 부서는 확인 요청 회신({(dept.replies ?? []).join("·")})을 넣는다 — 내 업무·확인 요청 페이지</p>
       )}
       {perm(type).proxy && <p className="small warn-text">[모의 대행] {perm(type).reason} — 입력 부서 {dept?.label}로 기록된다</p>}
       {!perm(type).ok && <p className="small bad">{perm(type).reason}</p>}

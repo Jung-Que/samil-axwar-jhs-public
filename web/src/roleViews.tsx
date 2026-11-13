@@ -1,8 +1,8 @@
 import type { Department, LaneAction, View } from "./types";
 import { Kpi, Mode, Section } from "./panels";
 import { EVENT_LABEL, ea, eok, pct } from "./format";
-import { canEvent, ownsTask } from "./perm";
-import type { Tab } from "./frame";
+import { myWork } from "./perm";
+import type { PageId as Tab } from "./frame";
 
 const FEATURE_LABEL: Record<string, string> = {
   view: "조회",
@@ -166,7 +166,7 @@ function JudgeSummary({ v, goTab }: { v: View; goTab: (t: Tab) => void }) {
   const p2 = ev.products["PL-02"];
   const l1 = v.state.lines?.find((l) => l.product_id === "PL-01");
   return (
-    <Section title="판단 요약" mode={["real"]} note="엔진 계산값(능력 스냅샷 기준). 근거와 플래그는 판단·제안 탭에 있다.">
+    <Section title="판단 요약" mode={["real"]} note="엔진 계산값(능력 스냅샷 기준). 근거와 플래그는 C-201 판단·제안 페이지에 있다.">
       <div className="kpis one-col">
         <Kpi label="PL-02 더마 제안 가능" value={`${ea(p2?.schedule_total)} EA`} sub={`요구 ${ea((p2?.monthly_demand ?? 0) * ev.scenario.contract_months)} 중 ${pct(p2?.coverage_pct)}`} tone={p2 && p2.coverage_pct < 100 ? "warn" : "ok"} />
         <Kpi label="PL-01 기초" value={l1?.qty_status === "미확정" || !l1 ? "수량 미확정" : `${ea(p1?.schedule_total)} EA`} sub={`확인 전 상한 월 ${ea(p1?.months?.[0]?.supply)} EA`} tone="bad" />
@@ -215,7 +215,7 @@ export function MyWorkView({ v, dept, onAction, onChoose, onFocus, goTab }: MyWo
       <div className="split">
         <div className="split-main">
           <Section title="내 업무" mode={["real"]} note="부서를 고르면 그 부서가 지금 할 일과 권한이 보인다. 시연은 입찰 흐름의 차례대로 부서를 바꿔 가며 넣는다.">
-            <p className="small">위 맥락 막대의 <b>내 부서</b>에서 부서를 고르거나, 아래 입찰 흐름에서 지금 차례 부서로 바로 바꾼다.</p>
+            <p className="small">위 막대의 <b>부서</b>에서 부서를 고르거나, 아래 입찰 흐름에서 지금 차례 부서로 바로 바꾼다.</p>
           </Section>
           <BidFlow v={v} onChoose={onChoose} />
           <PermissionSection v={v} open />
@@ -223,17 +223,9 @@ export function MyWorkView({ v, dept, onAction, onChoose, onFocus, goTab }: MyWo
       </div>
     );
   }
-  const reqs = (v.state.requests ?? []).filter((r) => r.to_role === dept.id && r.state !== "반영");
+  const { reqs, tasks, actions } = myWork(v, dept);
   const buyer = (v.state.requests ?? []).filter((r) => r.to_role === "바이어" && r.state !== "반영");
   const handlesBuyer = (dept.events ?? []).includes("E4_BUYER_REPLY");
-  const tasks = (v.state.tasks ?? []).filter((t) => t.state === "열림" && ownsTask(dept, t.owner_role));
-  const actions = (v.lanes ?? [])
-    .flatMap((l) => l.can ?? [])
-    .filter((a) => {
-      const req = (v.state.requests ?? []).find((r) => r.request_id === a.request_id);
-      const c = canEvent(v, dept, a.event, req);
-      return c.ok && !c.proxy;
-    });
   const mine = [...(v.state.log ?? [])].reverse().filter((e) => e.event.actor_role === dept.id || e.event.by === dept.id).slice(0, 8);
   const sim = v.session.kind === "sim";
   return (
@@ -242,7 +234,7 @@ export function MyWorkView({ v, dept, onAction, onChoose, onFocus, goTab }: MyWo
         <NowCard v={v} dept={dept} actions={actions} onAction={onAction} />
         <BidFlow v={v} dept={dept} onChoose={onChoose} />
         <div className="cols">
-          <Section title={`나에게 온 확인 요청 (${reqs.length})`} mode={["real", "mock"]} note={sim ? "시뮬레이션 세션: 다른 부서 요청도 대행 회신할 수 있다(확인 요청·결정 탭)." : "기준 세션: 내 부서로 온 요청만 회신한다."}>
+          <Section title={`나에게 온 확인 요청 (${reqs.length})`} mode={["real", "mock"]} note={sim ? "시뮬레이션 세션: 다른 부서 요청도 대행 회신할 수 있다(확인 요청 페이지)." : "기준 세션: 내 부서로 온 요청만 회신한다."}>
             {reqs.length === 0 ? (
               <p className="muted small">없음</p>
             ) : (

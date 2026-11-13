@@ -4,7 +4,7 @@ import type { Department, ItemDiff, MonthDiff, SessionCompare, SessionInfo, Sess
 import { Section } from "./panels";
 import { EVENT_LABEL, PRODUCT_LABEL, ea, eok, pct } from "./format";
 import { canFeature } from "./perm";
-import type { Tab } from "./frame";
+import type { PageId as Tab } from "./frame";
 
 type Run = (fn: () => Promise<View>) => Promise<void>;
 
@@ -49,7 +49,7 @@ export function SessionCompareView({ v }: { v: View }) {
   );
 }
 
-// ---- 시뮬레이션 탭(S3, 이슈 #39): 모의 가정 사건(E9)과 민감도 격자 ----
+// ---- 시뮬레이션 페이지(S3, 이슈 #39): 모의 가정 사건(E9)과 민감도 격자 ----
 
 const PARAMS: { key: string; label: string; kind: "num" | "str" | "bool" }[] = [
   { key: "price_cut_pct", label: "단가 인하(%)", kind: "num" },
@@ -141,7 +141,7 @@ export function SimulationView({ v, run, busy, dept, goTab }: { v: View; run: Ru
       .then(setRes)
       .catch((e: Error) => setErr(e.message));
   };
-  // 탭을 열거나 세션·상태가 바뀌면 지금 입력값으로 한 번 계산해 둔다.
+  // 페이지를 열거나 세션·상태가 바뀌면 지금 입력값으로 한 번 계산해 둔다.
   useEffect(sweep, [v.session.id, v.state.log?.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const m = res?.metrics.find((x) => x.key === metric);
   const all = res ? res.cells.flat().map((c) => c[metric]) : [];
@@ -431,7 +431,7 @@ function ChangedCard({ v }: { v: View }) {
   );
 }
 
-// 부모 세션과의 비교 요약(분기한 세션일 때). 자세한 월별·플래그 차이는 세션 비교 탭.
+// 부모 세션과의 비교 요약(분기한 세션일 때). 자세한 월별·플래그 차이는 세션 비교 페이지.
 function ParentCompare({ v, goTab }: { v: View; goTab: (t: Tab) => void }) {
   const list = v.sessions ?? [];
   const pid = v.session.parent_id && list.some((s) => s.id === v.session.parent_id) ? v.session.parent_id : undefined;
@@ -447,7 +447,7 @@ function ParentCompare({ v, goTab }: { v: View; goTab: (t: Tab) => void }) {
     return (
       <Section title="세션 비교" mode={["real"]} note="분기한 시뮬레이션 세션이면 여기서 부모 세션과 바로 비교한다.">
         <p className="small">
-          지금 세션은 분기 세션이 아니다. <button className="ghost small" disabled={list.length < 2} onClick={() => goTab("sessions")}>세션 비교 탭에서 두 세션 고르기</button>
+          지금 세션은 분기 세션이 아니다. <button className="ghost small" disabled={list.length < 2} onClick={() => goTab("sessions")}>세션 비교에서 두 세션 고르기</button>
         </p>
       </Section>
     );
