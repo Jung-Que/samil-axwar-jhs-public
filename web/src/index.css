@@ -1513,7 +1513,10 @@ a.btn:focus-visible,
 }
 
 .login-submit {
+  align-self: flex-start;
+  min-width: 120px;
   min-height: 38px;
+  padding: 0 28px;
   font-size: 15px;
 }
 
@@ -1845,8 +1848,17 @@ a.btn.ghost-btn {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: center;
   gap: 16px;
   padding: 32px 40px;
+}
+
+/* 로그인 카드·시연 계정 카드는 같은 좁은 너비로(이슈 #67) */
+.login-form-panel > .login-card,
+.login-form-panel > .login-accounts {
+  align-self: center;
+  width: 100%;
+  max-width: 400px;
 }
 
 @media (max-width: 900px) {
