@@ -617,26 +617,6 @@ button.danger {
   background: var(--accent-soft);
 }
 
-.loadcell {
-  min-width: 120px;
-}
-
-.loadbar {
-  display: flex;
-  height: 6px;
-  background: var(--gray-soft);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.lb-orders {
-  background: var(--accent);
-}
-
-.lb-c201 {
-  background: var(--warn);
-}
-
 .status-여유,
 .pill-진행 {
   background: var(--ok-soft);
@@ -817,107 +797,6 @@ button.danger {
   grid-template-columns: 1fr;
 }
 
-/* 판단·제안: PL-02 월별 공급 막대(이슈 #49) */
-.supchart {
-  display: flex;
-  gap: 6px;
-  min-width: 600px;
-  padding-top: 4px;
-}
-
-.supcol {
-  flex: 1 1 0;
-  min-width: 44px;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 2px;
-  text-align: center;
-}
-
-.supshort {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--bad);
-  min-height: 1.2em;
-}
-
-.supbar {
-  position: relative;
-  display: flex;
-  flex-direction: column-reverse;
-  border-bottom: 1px solid var(--line);
-}
-
-.supcol.is-changed .supbar {
-  outline: 2px solid var(--warn);
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-
-.supseg {
-  width: 100%;
-}
-
-.supdemand {
-  position: absolute;
-  left: -3px;
-  right: -3px;
-  border-top: 2px dashed var(--fg);
-  z-index: 1;
-}
-
-.supmonth {
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.supsched {
-  font-size: 0.72rem;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.seg-base {
-  background: var(--muted);
-}
-
-.seg-opt02 {
-  background: var(--warn);
-}
-
-.seg-opt01 {
-  background: var(--accent);
-}
-
-.seg-other {
-  background: var(--ok);
-}
-
-.seg-base.cond {
-  background: var(--gray-soft);
-  outline: 1px dashed var(--muted);
-  outline-offset: -1px;
-}
-
-.seg-opt02.cond {
-  background: var(--warn-soft);
-  outline: 1px dashed var(--warn);
-  outline-offset: -1px;
-}
-
-.seg-opt01.cond {
-  background: var(--accent-soft);
-  outline: 1px dashed var(--accent);
-  outline-offset: -1px;
-}
-
-.seg-other.cond {
-  background: var(--ok-soft);
-  outline: 1px dashed var(--ok);
-  outline-offset: -1px;
-}
-
 .legend {
   display: flex;
   flex-wrap: wrap;
@@ -928,19 +807,6 @@ button.danger {
 
 .legend .row {
   gap: 6px;
-}
-
-.swatch {
-  display: inline-block;
-  width: 14px;
-  height: 12px;
-  border-radius: 2px;
-}
-
-.swatch-line {
-  display: inline-block;
-  width: 16px;
-  border-top: 2px dashed var(--fg);
 }
 
 /* 플래그의 물을 곳 */
@@ -1275,14 +1141,6 @@ td.warn {
   color: #D7263D;
 }
 
-.lb-orders {
-  background: #4F4F4F;
-}
-
-.lb-c201 {
-  background: repeating-linear-gradient(45deg, #111111 0 2px, #FFFFFF 2px 4px);
-}
-
 .more-tables > summary {
   color: #111111;
   text-decoration: underline;
@@ -1326,65 +1184,6 @@ td.warn {
 
 .flow-step.is-stop .flow-title {
   color: #D7263D;
-}
-
-/* 판단·제안: 공급 막대. 출처는 채움·줄무늬로, 조건부는 파선으로 구분 */
-.supshort {
-  color: #D7263D;
-}
-
-.supcol.is-changed .supbar {
-  outline-color: #111111;
-}
-
-.supdemand {
-  border-top-color: #111111;
-}
-
-.seg-base {
-  background: #4F4F4F;
-}
-
-.seg-opt02 {
-  background: #111111;
-}
-
-.seg-opt01 {
-  background: repeating-linear-gradient(45deg, #111111 0 3px, #FFFFFF 3px 6px);
-}
-
-.seg-other {
-  background: #F2F2F2;
-  box-shadow: inset 0 0 0 1px #111111;
-}
-
-.seg-base.cond {
-  background: #F2F2F2;
-  outline: 1px dashed #4F4F4F;
-  outline-offset: -1px;
-}
-
-.seg-opt02.cond {
-  background: #FFFFFF;
-  outline: 1px dashed #111111;
-  outline-offset: -1px;
-}
-
-.seg-opt01.cond {
-  background: repeating-linear-gradient(45deg, #F2F2F2 0 4px, #FFFFFF 4px 8px);
-  outline: 1px dashed #111111;
-  outline-offset: -1px;
-}
-
-.seg-other.cond {
-  background: #FFFFFF;
-  box-shadow: none;
-  outline: 1px dashed #4F4F4F;
-  outline-offset: -1px;
-}
-
-.swatch-line {
-  border-top-color: #111111;
 }
 
 .ask {
@@ -2080,4 +1879,21 @@ a.btn.ghost-btn {
 .login-accounts .pill,
 .flow-order .pill {
   white-space: nowrap;
+}
+
+/* ===== 차트(이슈 #63, Apache ECharts) ===== */
+.echart {
+  width: 100%;
+  min-width: 0;
+}
+
+.table-view {
+  margin-top: 8px;
+}
+
+.table-view > summary {
+  cursor: pointer;
+  color: #111111;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

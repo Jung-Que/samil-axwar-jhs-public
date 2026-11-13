@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import type { Department, ItemDiff, MonthDiff, SessionCompare, SessionInfo, SessionKPI, SweepResult, View } from "./types";
 import { Section } from "./panels";
@@ -6,6 +6,7 @@ import { EVENT_LABEL, PRODUCT_LABEL, ea, eok, pct } from "./format";
 import { canFeature } from "./perm";
 import type { PageId as Tab } from "./frame";
 import { EmptyState } from "./brand";
+import { BASE, EChart, INK, INK2, LINE, PAPER, axis } from "./chart";
 
 type Run = (fn: () => Promise<View>) => Promise<unknown>;
 
@@ -148,19 +149,6 @@ export function SimulationView({ v, run, busy, dept, goTab }: { v: View; run: Ru
   const all = res ? res.cells.flat().map((c) => c[metric]) : [];
   const lo = Math.min(...all);
   const hi = Math.max(...all);
-  const heat = (val: number) => {
-    if (!(hi > lo)) return undefined;
-    const t = (val - lo) / (hi - lo);
-    const good = GOOD.has(metric) ? t : 1 - t;
-    // 팔레트 4단계(이슈 #51): 흰색 → #F2F2F2 → #4F4F4F → #111111. 진할수록 좋음.
-    const step = Math.min(3, Math.floor(good * 4));
-    return [
-      { background: "#FFFFFF", color: "#111111" },
-      { background: "#F2F2F2", color: "#111111" },
-      { background: "#4F4F4F", color: "#FFFFFF" },
-      { background: "#111111", color: "#FFFFFF" },
-    ][step];
-  };
   const formRef = useRef<HTMLDivElement>(null);
   const [picked, setPicked] = useState<string | null>(null);
   useEffect(() => setPicked(null), [res]);
@@ -179,6 +167,50 @@ export function SimulationView({ v, run, busy, dept, goTab }: { v: View; run: Ru
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  // 민감도 격자 히트맵(ECharts, 이슈 #63): 한 색(검정) 밝기 단계, 진할수록 좋음. 고른 칸은 굵은 테두리.
+  const heatOption = useMemo(() => {
+    if (!res || !m) return {};
+    const yLabels = res.y_values.length ? res.y_values : [m.label];
+    const good = GOOD.has(metric);
+    const data = res.cells.flatMap((row, yi) =>
+      row.map((c, xi) => {
+        const val = c[metric];
+        const t = hi > lo ? (val - lo) / (hi - lo) : 0.5;
+        // 팔레트 4단계(흰색 → #F2F2F2 → #4F4F4F → #111111), 진할수록 좋음. 연속 그라데이션은 팔레트 밖 회색을 만들므로 쓰지 않는다.
+        const step = Math.min(3, Math.floor((good ? t : 1 - t) * 4));
+        const fill = [PAPER, LINE, INK2, INK][step];
+        const dark = step >= 2;
+        const sel = picked === `${yi}:${xi}`;
+        return {
+          value: [xi, yi, val],
+          label: { color: dark ? PAPER : INK },
+          itemStyle: { color: fill, borderColor: sel ? (dark ? PAPER : INK) : step === 0 ? LINE : PAPER, borderWidth: sel ? 3 : 2 },
+        };
+      }),
+    );
+    return {
+      ...BASE,
+      legend: undefined,
+      grid: { left: 96, right: 16, top: 8, bottom: 56, containLabel: false },
+      tooltip: {
+        ...(BASE.tooltip as object),
+        trigger: "item",
+        formatter: (p: { value: number[] }) => `${res.x_label} <b>${res.x_values[p.value[0]]}</b>${res.y_param ? ` · ${res.y_label} <b>${res.y_values[p.value[1]]}</b>` : ""}<br>${m.label} <b>${fmtMetric(m.unit, p.value[2])}</b>`,
+      },
+      xAxis: axis({ type: "category", data: res.x_values, name: res.x_label, nameLocation: "middle", nameGap: 26, splitArea: { show: false }, splitLine: { show: false } }),
+      yAxis: axis({ type: "category", data: yLabels, name: res.y_param ? res.y_label : "", splitLine: { show: false }, axisLine: { show: false } }),
+      series: [
+        {
+          type: "heatmap",
+          data,
+          label: { show: true, fontSize: 12, formatter: (p: { value: number[] }) => fmtMetric(m.unit, p.value[2]) },
+          emphasis: { itemStyle: { borderColor: INK, borderWidth: 2 } },
+          cursor: pickable ? "pointer" : "default",
+        },
+      ],
+    };
+  }, [res, m, metric, lo, hi, picked, pickable]);
+
   return (
     <div className="split">
       <div className="split-main">
@@ -193,8 +225,12 @@ export function SimulationView({ v, run, busy, dept, goTab }: { v: View; run: Ru
             <button disabled={busy} onClick={sweep}>격자 계산</button>
             {err && <p className="bad small">{err}</p>}
             {res && m && (
-              <div className="scroll">
+              <div>
                 <p className="muted small">지금 세션 그대로: {m.label} {fmtMetric(m.unit, res.base[metric])}. 진할수록 {GOOD.has(metric) ? "높음(좋음)" : "낮음(좋음)"}. {pickable ? "칸을 누르면 그 값이 아래 모의 가정 입력칸에 채워진다." : sim ? "" : "시뮬레이션 세션에서는 칸을 눌러 모의 가정 입력칸에 채울 수 있다."}</p>
+                <EChart option={heatOption} height={Math.max(160, 64 + res.cells.length * 46)} label={`민감도 격자: ${res.y_label || ""} × ${res.x_label}, 지표 ${m.label}. 수치는 '표로 보기'에 있다.`} onClick={(p) => { const d = p.data as { value?: number[] } | undefined; if (pickable && d?.value) pick(d.value[0], d.value[1]); }} />
+                <details className="table-view">
+                  <summary className="small">표로 보기</summary>
+                  <div className="scroll">
                 <table className="grid">
                   <thead>
                     <tr><th>{res.y_label || ""} ＼ {res.x_label}</th>{res.x_values.map((x) => <th key={x}>{x}</th>)}</tr>
@@ -204,7 +240,7 @@ export function SimulationView({ v, run, busy, dept, goTab }: { v: View; run: Ru
                       <tr key={yi}>
                         <td><b>{res.y_values[yi] || m.label}</b></td>
                         {row.map((c, xi) => (
-                          <td key={xi} style={heat(c[metric])} className={picked === `${yi}:${xi}` ? "picked" : ""}>
+                          <td key={xi} className={picked === `${yi}:${xi}` ? "picked" : ""}>
                             {pickable ? (
                               <button className="cellbtn" title="이 칸의 값을 모의 가정 입력칸에 채운다" onClick={() => pick(xi, yi)}>{fmtMetric(m.unit, c[metric])}</button>
                             ) : (
@@ -216,6 +252,8 @@ export function SimulationView({ v, run, busy, dept, goTab }: { v: View; run: Ru
                     ))}
                   </tbody>
                 </table>
+                  </div>
+                </details>
               </div>
             )}
           </Section>

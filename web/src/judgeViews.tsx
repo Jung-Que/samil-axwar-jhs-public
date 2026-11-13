@@ -1,17 +1,17 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Department, Flag, LaneAction, OptCompare, ProductEval, View } from "./types";
 import { CompareView, Kpi, Mode, ScheduleView, Section, snapSource } from "./panels";
 import { BASIS_LABEL, EVENT_LABEL, ea, eok, pct } from "./format";
 import { canEvent } from "./perm";
+import { BASE, EChart, INK, INK2, LINE, PAPER, RED, axis } from "./chart";
 
 // 판단·제안 페이지(이슈 #49): 지표 → PL-02 월별 공급(기본/비교 전환) → 플래그와 물을 곳, 옆에 내 할 일·숫자의 출처.
 // 숫자는 모두 엔진 평가(evaluation)와 OPT-01 비교(compare_opt01)에서 온다. 화면은 다시 계산하지 않는다.
 
 const LEVEL_ORDER = { 차단: 0, 위험: 1, 미확인: 2 } as const;
 
-// 공급 출처별 막대 색(디자인 시스템 의미색): 기존 = 중립, OPT-02 = warn, OPT-01 = accent, 그 밖 = ok
+// 공급 출처 쌓는 순서(아래부터)
 const SEG_ORDER = ["base", "OPT-02", "MASIL-ADJ", "CUST-REL", "OPT-01"];
-const SEG_CLS: Record<string, string> = { base: "seg-base", "OPT-02": "seg-opt02", "OPT-01": "seg-opt01" };
 const SEG_SHORT: Record<string, string> = { base: "기존 여유", "OPT-02": "OPT-02", "OPT-01": "OPT-01", "MASIL-ADJ": "Masil 조정", "CUST-REL": "고객 반환" };
 
 type Seg = { basis: string; qty: number; conditional: boolean };
@@ -39,73 +39,108 @@ function columns(pe: ProductEval, c: OptCompare | undefined, alt: boolean): Col[
   });
 }
 
+// 출처별 채움·무늬(팔레트 다섯 색): 기존 여유 = 짙은 회색, OPT-02 = 검정, OPT-01 = 흰 바탕 빗금, Masil 조정 = 옅은 회색,
+// 고객 반환 = 흰 바탕 점. 조건부(승인·선행 회신 전)는 흰 바탕 + 그 출처 색 파선 테두리(투명도는 팔레트 밖 회색을 만들어 쓰지 않는다).
+// 부족 = 빨강 테두리(경고), 요구 = 검정 파선.
+const DIAG = { symbol: "rect", symbolSize: 1, dashArrayX: [1, 0], dashArrayY: [2, 4], rotation: Math.PI / 4, color: INK };
+const DOTS = { symbol: "circle", symbolSize: 0.8, dashArrayX: [[1, 5]], dashArrayY: [1, 5], color: INK };
+const condStyle = (b: string) => {
+  const st = SEG_STYLE[b] ?? {};
+  const edge = (st.borderColor as string | undefined) ?? (st.color as string | undefined) ?? INK2;
+  return { color: PAPER, borderColor: edge === PAPER ? INK : edge, borderType: "dashed", borderWidth: 1.5, ...(st.decal ? { decal: st.decal } : {}) };
+};
+const SEG_STYLE: Record<string, Record<string, unknown>> = {
+  base: { color: INK2 },
+  "OPT-02": { color: INK },
+  "OPT-01": { color: PAPER, borderColor: INK, borderWidth: 1, decal: DIAG },
+  "MASIL-ADJ": { color: LINE, borderColor: INK2, borderWidth: 1 },
+  "CUST-REL": { color: PAPER, borderColor: INK2, borderWidth: 1, decal: DOTS },
+};
+
 function SupplyChart({ v }: { v: View }) {
   const ev = v.state.evaluation;
   const pe = ev.products["PL-02"];
   const c = ev.compare_opt01;
   const [alt, setAlt] = useState(false);
+  const cols = useMemo(() => (pe ? columns(pe, c, alt && !!c) : []), [pe, c, alt]);
+  const option = useMemo(() => {
+    const used = [...new Set(cols.flatMap((col) => col.segs.map((s) => s.basis)))].sort((a, b) => SEG_ORDER.indexOf(a) - SEG_ORDER.indexOf(b));
+    const months = cols.map((col) => col.month);
+    const supply = used.map((b) => {
+      const all = cols.every((col) => col.segs.every((s) => s.basis !== b || s.conditional));
+      return {
+        name: `${SEG_SHORT[b] ?? b}${all ? "(조건부)" : ""}`,
+        type: "bar",
+        stack: "supply",
+        barMaxWidth: 34,
+        itemStyle: all ? condStyle(b) : { ...(SEG_STYLE[b] ?? { color: LINE, borderColor: INK2, borderWidth: 1 }) },
+        data: cols.map((col) => {
+          const s = col.segs.find((x) => x.basis === b);
+          if (!s || !s.qty) return null;
+          return s.conditional && !all ? { value: s.qty, itemStyle: condStyle(b) } : { value: s.qty };
+        }),
+      };
+    });
+    const short = {
+      name: "부족",
+      type: "bar",
+      stack: "supply",
+      barMaxWidth: 34,
+      itemStyle: { color: PAPER, borderColor: RED, borderWidth: 1.5 },
+      data: cols.map((col) => (col.short ? col.short : null)),
+    };
+    const demand = {
+      name: "요구",
+      type: "line",
+      step: "middle",
+      symbol: "none",
+      lineStyle: { color: INK, type: "dashed", width: 1.5 },
+      itemStyle: { color: INK },
+      data: cols.map((col) => col.demand),
+      z: 5,
+    };
+    return {
+      ...BASE,
+      grid: { left: 52, right: 12, top: 40, bottom: 28 },
+      tooltip: {
+        ...(BASE.tooltip as object),
+        trigger: "axis",
+        axisPointer: { type: "shadow", shadowStyle: { color: LINE } },
+        formatter: (ps: { dataIndex: number }[]) => {
+          const col = cols[ps[0]?.dataIndex ?? 0];
+          if (!col) return "";
+          const rows = col.segs.map((s) => `${BASIS_LABEL[s.basis] ?? s.basis} <b>${ea(s.qty)}</b> EA${s.conditional ? " (조건부)" : ""}`);
+          return [`<b>${col.month}${col.changed ? " · 기본과 다름" : ""}</b>`, ...rows, `제안 <b>${ea(col.schedule)}</b> EA`, `요구 ${ea(col.demand)} EA`, col.short ? `<span style="color:${RED}">부족 <b>${ea(col.short)}</b> EA</span>` : "부족 없음"].join("<br>");
+        },
+      },
+      legend: { ...(BASE.legend as object), data: [...supply.map((x) => x.name), "부족", "요구"] },
+      xAxis: axis({
+        type: "category",
+        data: months,
+        splitLine: { show: false },
+        axisLabel: { color: INK2, formatter: (m: string) => (cols.find((x) => x.month === m)?.changed ? `{b|${m.slice(2)}}` : m.slice(2)), rich: { b: { fontWeight: "bold", color: INK } } },
+      }),
+      yAxis: axis({ type: "value", axisLine: { show: false }, axisLabel: { color: INK2, formatter: (n: number) => (n >= 10000 ? `${Math.round(n / 1000)}k` : ea(n)) } }),
+      series: [...supply, short, demand],
+    };
+  }, [cols]);
   if (!pe) return null;
-  const cols = columns(pe, c, alt && !!c);
-  const H = 190;
-  const max = Math.max(1, ...cols.map((col) => Math.max(col.demand, col.segs.reduce((a, s) => a + s.qty, 0))));
   const side = c ? (alt ? c.alt : c.base) : undefined;
-  const used = [...new Set(cols.flatMap((col) => col.segs.map((s) => s.basis)))].sort((a, b) => SEG_ORDER.indexOf(a) - SEG_ORDER.indexOf(b));
-  const allCond = (b: string) => cols.every((col) => col.segs.every((s) => s.basis !== b || s.conditional));
   const anyCond = cols.some((col) => col.segs.some((s) => s.conditional));
   return (
     <Section
       title="PL-02 월별 공급과 부족"
       mode={["real"]}
-      note={`요구 월 ${ea(pe.monthly_demand)} EA(점선) · 계약 ${ev.scenario.contract_months}개월 · 막대는 공급 출처별로 쌓았다. 증설·전환 능력은 적격일 다음 달부터(R3). 막대 위 빨간 숫자 = 그 달 부족, 아래 = 제안 EA. 출처: ${snapSource(v)}.`}
+      note={`단위 EA/월 · 요구 월 ${ea(pe.monthly_demand)} EA(검정 파선) · 계약 ${ev.scenario.contract_months}개월 · 공급 출처별로 쌓고 맨 위에 부족(빨강 테두리)을 얹었다. 증설·전환 능력은 적격일 다음 달부터(R3).${anyCond ? " 흰 바탕에 파선 테두리 = 조건부(승인·선행 회신 전)." : ""} 막대에 올리면 그 달 수치가 나온다. 출처: ${snapSource(v)}.`}
     >
       {c && (
         <div className="row" role="group" aria-label="OPT-01 적격 기간 시나리오">
           <button className={alt ? "ghost small" : "small"} aria-pressed={!alt} onClick={() => setAlt(false)}>기본(적격 {c.base.validation_weeks}주, 제출 기준)</button>
           <button className={alt ? "small" : "ghost small"} aria-pressed={alt} onClick={() => setAlt(true)}>원본 "재검증 불필요"(적격 {c.alt.validation_weeks}주)</button>
-          <span className={alt ? "small warn-text" : "muted small"}>{alt ? "대안 시나리오: 제출 기준이 아니다. 테두리 칸이 기본과 다르다." : "제출·판단은 이 시나리오로만 한다."}</span>
+          <span className={alt ? "small warn-text" : "muted small"}>{alt ? "대안 시나리오: 제출 기준이 아니다. 굵은 달이 기본과 다르다." : "제출·판단은 이 시나리오로만 한다."}</span>
         </div>
       )}
-      <div className="scroll">
-        <div className="supchart" role="img" aria-label={`PL-02 월별 공급과 부족${alt ? " (비교 시나리오)" : ""}. 수치는 아래 월별 표에 있다.`}>
-          {cols.map((col) => (
-            <div key={col.month} className={`supcol ${col.changed ? "is-changed" : ""}`}>
-              <span className="supshort">{col.short ? ea(col.short) : ""}</span>
-              <div className="supbar" style={{ height: H }}>
-                <div className="supdemand" style={{ bottom: (col.demand / max) * H }} title={`요구 ${ea(col.demand)} EA`} />
-                {col.segs.map((s) => (
-                  <div
-                    key={s.basis}
-                    className={`supseg ${SEG_CLS[s.basis] ?? "seg-other"} ${s.conditional ? "cond" : ""}`}
-                    style={{ height: Math.max(1, (s.qty / max) * H) }}
-                    title={`${BASIS_LABEL[s.basis] ?? s.basis} ${ea(s.qty)} EA${s.conditional ? " (조건부)" : ""}`}
-                  />
-                ))}
-              </div>
-              <span className="supmonth">{col.month.slice(2)}</span>
-              <span className="supsched">{ea(col.schedule)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="legend">
-        {used.map((b) => (
-          <span key={b} className="row">
-            <span aria-hidden="true" className={`swatch ${SEG_CLS[b] ?? "seg-other"} ${allCond(b) ? "cond" : ""}`} />
-            {SEG_SHORT[b] ?? b}
-            {allCond(b) ? "(조건부)" : ""}
-          </span>
-        ))}
-        {anyCond && (
-          <span className="row">
-            <span aria-hidden="true" className="swatch seg-base cond" />
-            옅은 점선 = 조건부(승인·선행 회신 전)
-          </span>
-        )}
-        <span className="row">
-          <span aria-hidden="true" className="swatch-line" />
-          요구
-        </span>
-      </div>
+      <EChart option={option} height={320} label={`PL-02 월별 공급과 부족${alt ? " (비교 시나리오)" : ""}. 수치는 아래 월별 표에 있다.`} />
       {side && (
         <p className="small" style={{ marginBottom: 0 }}>
           {alt ? "비교" : "기본"}: 제안 <b>{ea(side.schedule_total)} EA</b>(공급률 {pct(side.coverage_pct)}) · 부족 {ea(side.short_total)} EA · OPT-01 최초 반영 {side.first_supply_month || "없음"} · 전량 약속 시 지연분 노출 {eok(side.penalty_backlog_krw)}

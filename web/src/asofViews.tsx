@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import type { Backtest, Inbox, Lane, LaneAction, LineRow, View } from "./types";
 import { ColHead, Section, batchSource } from "./panels";
 import { PRODUCT_LABEL, ea, slug } from "./format";
+import { BASE, EChart, INK, INK2, LINE, RED, axis } from "./chart";
 
 // 업무 레인 보드: 레인별 들어온 것·할 수 있는 일·하고 있는 일·막힌 것.
 export function LanesView({ v, onAction }: { v: View; onAction: (a: LaneAction) => void }) {
@@ -154,6 +155,7 @@ export function LineBoardView({ v }: { v: View }) {
         </>
       }
     >
+      <LoadChart rows={rows} months={months} />
       <div className="scroll">
         <table className="grid">
           <thead>
@@ -200,16 +202,76 @@ export function LineBoardView({ v }: { v: View }) {
 function LoadBar({ orders, c201, base, baseLabel }: { orders: number; c201: number; base: number; baseLabel: string }) {
   const total = orders + c201;
   const pct = base > 0 ? Math.round((total / base) * 100) : 0;
-  const w = (x: number) => `${Math.min(100, base > 0 ? (x / base) * 100 : 0)}%`;
   return (
-    <div className="loadcell" title={`주문 ${ea(orders)} + C-201 ${ea(c201)} / ${baseLabel} ${ea(base)} (EA/월)`}>
-      <div className="loadbar">
-        <span className="lb-orders" style={{ width: w(orders) }} />
-        <span className="lb-c201" style={{ width: w(c201) }} />
-      </div>
-      <span className="small">{ea(total)} ({pct}%)</span>
-    </div>
+    <span className={pct > 100 ? "bad" : ""} title={`주문 ${ea(orders)} + C-201 ${ea(c201)} / ${baseLabel} ${ea(base)} (EA/월)`}>
+      {ea(total)} <span className="small">({pct}%)</span>
+    </span>
   );
+}
+
+// 라인별 다음 달들 부하율(ECharts, 이슈 #63): 막대 = (주문 + C-201 가예약) ÷ 월 생산. 기준선 85%(주의)·100%(한도, 빨강).
+// 달은 가까울수록 진하게(순서 있는 회색 단계), 100%를 넘는 막대는 빨강 테두리.
+const MONTH_FILL = [INK, INK2, LINE];
+
+function LoadChart({ rows, months }: { rows: LineRow[]; months: string[] }) {
+  const option = useMemo(() => {
+    const base = (r: LineRow) => (r.kind === "new" ? r.monthly_cap : r.t12_monthly);
+    const pctOf = (r: LineRow, i: number) => {
+      const m = r.load[i];
+      const b = base(r);
+      return m && b > 0 ? Math.round(((m.orders + m.c201) / b) * 100) : 0;
+    };
+    const series = months.map((month, i) => ({
+      name: month,
+      type: "bar",
+      barMaxWidth: 22,
+      barGap: "15%",
+      itemStyle: { color: MONTH_FILL[i] ?? LINE, borderColor: i >= 2 ? INK2 : undefined, borderWidth: i >= 2 ? 1 : 0 },
+      data: rows.map((r) => {
+        const v = pctOf(r, i);
+        return v > 100 ? { value: v, itemStyle: { borderColor: RED, borderWidth: 2 } } : v;
+      }),
+      ...(i === 0
+        ? {
+            markLine: {
+              symbol: "none",
+              silent: true,
+              label: { position: "insideEndTop", color: INK2, fontSize: 11, formatter: "{c}%" },
+              data: [
+                { yAxis: 85, lineStyle: { color: INK2, type: "dashed", width: 1 } },
+                { yAxis: 100, lineStyle: { color: RED, type: "dashed", width: 1.5 }, label: { color: RED } },
+              ],
+            },
+          }
+        : {}),
+    }));
+    return {
+      ...BASE,
+      grid: { left: 44, right: 40, top: 32, bottom: 28 },
+      tooltip: {
+        ...(BASE.tooltip as object),
+        trigger: "axis",
+        axisPointer: { type: "shadow", shadowStyle: { color: LINE } },
+        formatter: (ps: { dataIndex: number }[]) => {
+          const r = rows[ps[0]?.dataIndex ?? 0];
+          if (!r) return "";
+          const b = base(r);
+          return [`<b>${r.line_id}</b> ${PRODUCT_LABEL[r.product_id] ?? r.product_id} · ${r.kind === "new" ? "OPT-02 월 능력" : "배치 실적 월 생산"} ${ea(b)} EA`,
+            ...months.map((m, i) => {
+              const x = r.load[i];
+              const p = pctOf(r, i);
+              return `${m}: 주문 ${ea(x?.orders ?? 0)} + C-201 ${ea(x?.c201 ?? 0)} → <b${p > 100 ? ` style="color:${RED}"` : ""}>${p}%</b>`;
+            })].join("<br>");
+        },
+      },
+      legend: { ...(BASE.legend as object), data: months },
+      xAxis: axis({ type: "category", data: rows.map((r) => r.line_id), splitLine: { show: false } }),
+      yAxis: axis({ type: "value", axisLine: { show: false }, axisLabel: { color: INK2, formatter: "{value}%" } }),
+      series,
+    };
+  }, [rows, months]);
+  if (!rows.length) return null;
+  return <EChart option={option} height={260} label="라인별 월 부하율. 수치는 아래 표의 부하 열에 있다." />;
 }
 
 // 정답 비교: 기준일에 추정한 납기(그날까지 기록만)와 그 뒤 실제 출하. 검증 전용.
