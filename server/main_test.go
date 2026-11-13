@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"axwar/server/store"
 	"axwar/server/w05"
@@ -42,6 +44,12 @@ func newTestService(t *testing.T, st store.Store) *w05.Service {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 계정·권한 표(이슈 #55): 시연 계정과 기본 권한표를 넣는다. 로그인 쿠키 캐시는 테스트마다 비운다
+	// (지난 테스트의 핸들러 주소가 재사용되면 다른 저장소의 쿠키를 쓰게 된다).
+	clear(loginCache)
+	if err := setupAccess(context.Background(), st); err != nil {
+		t.Fatal(err)
+	}
 	return svc
 }
 
@@ -56,7 +64,11 @@ func TestRoutes(t *testing.T) {
 		{"상태 확인", "GET", "/healthz", 200, "ok"},
 		{"상태 확인 HEAD", "HEAD", "/healthz", 200, ""},
 		{"API 상태", "GET", "/api/status", 200, `"stage":"draft"`},
-		{"W05 상태", "GET", "/api/w05/state", 200, `"raw_files_verified":15`},
+		{"W05 상태: 로그인 없으면 401", "GET", "/api/w05/state", 401, `"error"`},
+		{"없는 W05 API도 로그인 먼저", "GET", "/api/w05/nope", 401, `"error"`},
+		{"시연 계정 목록은 로그인 없이", "GET", "/api/auth/accounts", 200, `"login_id":"sales01"`},
+		{"로그인 없는 me는 401", "GET", "/api/auth/me", 401, `"error"`},
+		{"로그인 없는 계정 표는 401", "GET", "/api/auth/users", 401, `"error"`},
 		{"API 상태: 메모리 저장소", "GET", "/api/status", 200, `"store":"memory"`},
 		{"API 상태: 스키마", "GET", "/api/status", 200, `"db":"ok"`},
 		{"없는 API는 JSON 404", "GET", "/api/nope", 404, `"error":"not found"`},
@@ -119,13 +131,13 @@ func TestW05API(t *testing.T) {
 	if rec := do("POST", "/api/w05/events", `{"type":"E2_DECISION","actor_role":"CEO/이사회","payload":{}}`); rec.Code != http.StatusForbidden {
 		t.Fatalf("영업이 CEO/이사회 권한으로 입력: %d %.200s", rec.Code, rec.Body.String())
 	}
-	// 부서 헤더 없는 쓰기는 401
+	// 로그인하지 않은 쓰기·조회는 401(이슈 #55)
 	role = ""
 	if rec := do("POST", "/api/w05/events", `{"type":"E5_NEW_ORDER","payload":{}}`); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("부서 없는 쓰기: %d", rec.Code)
+		t.Fatalf("로그인 없는 쓰기: %d", rec.Code)
 	}
-	if rec := do("GET", "/api/w05/state", ""); rec.Code != 200 {
-		t.Fatalf("부서 없는 조회: %d", rec.Code)
+	if rec := do("GET", "/api/w05/state", ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("로그인 없는 조회: %d", rec.Code)
 	}
 	role = "admin"
 	if rec := do("POST", "/api/w05/scenarios/nope", ""); rec.Code != 500 {
@@ -136,15 +148,40 @@ func TestW05API(t *testing.T) {
 	}
 }
 
-// doAs는 사용자 부서 헤더(영문 코드)를 붙여 요청한다(role이 비면 헤더 없음).
+// doAs는 역할(영문 코드)의 시연 계정으로 로그인한 쿠키를 붙여 요청한다(role이 비면 로그인 없음).
 func doAs(h http.Handler, role, method, path, body string) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	if role != "" {
-		req.Header.Set(RoleHeader, role)
+		req.AddCookie(loginAs(h, role))
 	}
 	h.ServeHTTP(rec, req)
 	return rec
+}
+
+var loginCache = map[string]*http.Cookie{}
+
+// loginAs는 역할의 시연 계정으로 로그인하고 쿠키를 돌려준다(핸들러·역할마다 한 번).
+func loginAs(h http.Handler, role string) *http.Cookie {
+	key := fmt.Sprintf("%p|%s", h, role)
+	if c, ok := loginCache[key]; ok {
+		return c
+	}
+	id := ""
+	for _, a := range demoAccounts {
+		if a.Role == role {
+			id = a.LoginID
+		}
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/api/auth/login", strings.NewReader(fmt.Sprintf(`{"login_id":%q,"password":%q}`, id, defaultDemoPassword))))
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == loginCookie {
+			loginCache[key] = c
+			return c
+		}
+	}
+	panic(fmt.Sprintf("로그인 실패(%s): %d %s", role, rec.Code, rec.Body.String()))
 }
 
 // 기준일 재현 API: 기준일 세션 시작 → 접수함·정답 비교·레인/라인 보드.
@@ -261,7 +298,24 @@ func (downStore) CreateSession(context.Context, store.Session, []store.Event) er
 	return errors.New("db down")
 }
 func (downStore) DeleteSession(context.Context, string) error { return errors.New("db down") }
-func (downStore) Close()                                      {}
+func (downStore) SeedAccess(context.Context, []store.Role, []store.Perm, []store.User) (bool, error) {
+	return false, errors.New("db down")
+}
+func (downStore) ListRoles(context.Context) ([]store.Role, []store.Perm, error) {
+	return nil, nil, errors.New("db down")
+}
+func (downStore) ListUsers(context.Context) ([]store.User, error) { return nil, errors.New("db down") }
+func (downStore) GetUser(context.Context, string) (store.User, error) {
+	return store.User{}, errors.New("db down")
+}
+func (downStore) CreateLogin(context.Context, string, string, time.Time) error {
+	return errors.New("db down")
+}
+func (downStore) LoginUser(context.Context, string, time.Time) (store.User, error) {
+	return store.User{}, errors.New("db down")
+}
+func (downStore) DeleteLogin(context.Context, string) error { return errors.New("db down") }
+func (downStore) Close()                                    {}
 
 func TestStoreDown(t *testing.T) {
 	h := newHandler(fakeBuild(t), downStore{}, nil)

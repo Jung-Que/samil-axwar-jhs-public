@@ -1,4 +1,4 @@
-import type { Backtest, Inbox, SessionCompare, SweepAxis, SweepResult, View } from "./types";
+import type { Account, AccessTables, Backtest, Inbox, SessionCompare, SweepAxis, SweepResult, User, View } from "./types";
 
 // API 오류. 규칙 위반(409)이면 서버가 현재 상태(view)를 함께 보낸다.
 export class ApiError extends Error {
@@ -11,42 +11,24 @@ export class ApiError extends Error {
   }
 }
 
-// 사용자 부서(이슈 #43). 화면에서 고르는 부서 선택이고, 서버로는 영문 코드를 X-W05-Role 헤더로 보낸다.
-// 시연용 롤 체크라 로그인·인증은 없다(사용자 결정 11/13). 쓰기 요청은 부서가 없으면 서버가 401을 돌려준다.
-const ROLE_KEY = "w05.role";
-let role = (() => {
-  const fromUrl = new URLSearchParams(window.location.search).get("role"); // 시연용 링크: ?role=production 등
-  if (fromUrl) return fromUrl;
-  try {
-    return localStorage.getItem(ROLE_KEY) || "";
-  } catch {
-    return "";
-  }
-})();
-
-export function currentRole(): string {
-  return role;
-}
-
-export function setRole(code: string) {
-  role = code;
-  try {
-    localStorage.setItem(ROLE_KEY, code);
-  } catch {
-    /* 저장 불가여도 이번 화면에서는 쓴다 */
-  }
+// 로그인(이슈 #55): 서버가 HttpOnly 쿠키로 로그인 세션을 기억한다. 사용자 부서는 로그인한 계정의 역할이다.
+// 로그인이 풀리면(401) onUnauthorized로 화면에 알려 로그인 페이지로 보낸다.
+let unauthorized: (() => void) | null = null;
+export function onUnauthorized(fn: () => void) {
+  unauthorized = fn;
 }
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  if (role) headers["X-W05-Role"] = role;
   const r = await fetch(path, {
     method,
     headers,
+    credentials: "same-origin",
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await r.json().catch(() => ({}));
+  if (r.status === 401 && !path.startsWith("/api/auth/")) unauthorized?.();
   if (!r.ok) throw new ApiError(data.error ?? `HTTP ${r.status}`, r.status, data.view);
   return data as T;
 }
@@ -104,4 +86,13 @@ export const api = {
   compare: (a: string, b: string) => call<SessionCompare>("GET", `/api/w05/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`),
   // 민감도 격자: 사건 없이 지금 세션 시나리오로 엔진 평가만 반복한다.
   sweep: (x: SweepAxis, y?: SweepAxis) => call<SweepResult>("POST", withSession("/api/w05/sweep"), { x, ...(y ? { y } : {}) }),
+};
+
+// 로그인 API(이슈 #55, server/auth.go)
+export const auth = {
+  login: (login_id: string, password: string) => call<{ user: User }>("POST", "/api/auth/login", { login_id, password }),
+  logout: () => call<{ ok: boolean }>("POST", "/api/auth/logout", {}),
+  me: () => call<{ user: User }>("GET", "/api/auth/me"),
+  accounts: () => call<{ accounts: Account[]; demo_password?: string }>("GET", "/api/auth/accounts"),
+  users: () => call<AccessTables>("GET", "/api/auth/users"),
 };

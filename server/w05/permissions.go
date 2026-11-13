@@ -13,14 +13,14 @@ import (
 // "C-101 재협상/판가 = 영업 임원")이라 따로 둔다. 경영진(CEO/이사회)은 입찰 참여·투자 승인, 운영 관리(관리자)는
 // 기준 세션 시계·초기화와 시뮬레이션 세션 정리를 맡는다.
 //
-// 사용자 부서는 화면에서 고르는 부서 선택이다(X-W05-Role 헤더, 영문 코드). 시연용이라 롤 체크까지만 하고 로그인·인증은
-// 두지 않는다(사용자 결정 11/13). 사건의 Actor(권한을 쓴 부서)와 By(실제 입력한 부서)는 시뮬레이션 대행에서만 다르다.
+// 사용자 부서는 로그인한 계정의 역할이다(이슈 #55, server/auth.go). 아래 표는 기본값이고, 서버는 DB 표를 읽어 쓴다.
+// 사건의 Actor(권한을 쓴 부서)와 By(실제 입력한 부서)는 시뮬레이션 대행에서만 다르다.
 
 // ErrForbidden은 사용자 부서에 그 기능 권한이 없다는 뜻이다(HTTP 403).
 var ErrForbidden = errors.New("권한 없음")
 
 // ErrNoRole은 쓰기 요청에 사용자 부서가 없다는 뜻이다(HTTP 401).
-var ErrNoRole = errors.New("부서를 고른다(X-W05-Role)")
+var ErrNoRole = errors.New("로그인이 필요하다")
 
 // 화면 기능 권한.
 const (
@@ -80,6 +80,10 @@ func init() {
 		Departments[i].Features = append(append([]string(nil), commonFeatures...), Departments[i].Features...)
 	}
 }
+
+// SetDepartments는 권한표를 바꾼다. 서버는 시작할 때 DB의 역할·권한 표(app_roles·app_role_permissions, 이슈 #55)를
+// 읽어 넣는다(표가 비어 있으면 위 기본값을 먼저 넣는다). 요청을 받기 전에 한 번만 부른다.
+func SetDepartments(ds []Department) { Departments = ds }
 
 // 시스템 내부 행위자(사용자 부서로 고를 수 없음). 시뮬레이터는 #39 이전 모의 가정 사건과의 호환용이다.
 const (

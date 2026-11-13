@@ -40,6 +40,35 @@ var migrations = []string{
 	ALTER TABLE w05_events ADD COLUMN session_id text NOT NULL DEFAULT 'main' REFERENCES w05_sessions(id) ON DELETE CASCADE;
 	ALTER TABLE w05_events DROP CONSTRAINT w05_events_pkey;
 	ALTER TABLE w05_events ADD PRIMARY KEY (session_id, seq)`,
+	// 4: 계정·권한(이슈 #55). 역할(부서)·역할별 권한·계정·로그인 세션. 처음 뜰 때 비어 있으면 서버가
+	// 지금 권한표(server/w05/permissions.go)와 시연 계정을 넣는다. 비밀번호·로그인 토큰은 해시만 저장한다.
+	`CREATE TABLE app_roles (
+		code    text PRIMARY KEY,
+		dept_id text NOT NULL UNIQUE,
+		dept    text NOT NULL,
+		label   text NOT NULL,
+		duty    text NOT NULL DEFAULT '',
+		sort    integer NOT NULL DEFAULT 0
+	);
+	CREATE TABLE app_role_permissions (
+		role_code text NOT NULL REFERENCES app_roles(code) ON DELETE CASCADE,
+		kind      text NOT NULL CHECK (kind IN ('event', 'reply', 'feature')),
+		item      text NOT NULL,
+		PRIMARY KEY (role_code, kind, item)
+	);
+	CREATE TABLE app_users (
+		login_id      text PRIMARY KEY,
+		name          text NOT NULL,
+		role_code     text NOT NULL REFERENCES app_roles(code),
+		password_hash text NOT NULL,
+		created_at    timestamptz NOT NULL DEFAULT now()
+	);
+	CREATE TABLE app_logins (
+		token_hash text PRIMARY KEY,
+		login_id   text NOT NULL REFERENCES app_users(login_id) ON DELETE CASCADE,
+		created_at timestamptz NOT NULL DEFAULT now(),
+		expires_at timestamptz NOT NULL
+	)`,
 }
 
 // CurrentSchema는 이 코드가 기대하는 스키마 버전이다.

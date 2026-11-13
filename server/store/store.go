@@ -58,6 +58,16 @@ type Store interface {
 	// CreateSession은 세션을 만들고 처음 사건(분기면 부모의 앞부분)을 한 번에 넣는다.
 	CreateSession(ctx context.Context, s Session, events []Event) error
 	DeleteSession(ctx context.Context, id string) error
+
+	// 계정·권한(이슈 #55, access.go). SeedAccess는 비어 있는 표에만 넣는다(넣었으면 true).
+	SeedAccess(ctx context.Context, roles []Role, perms []Perm, users []User) (bool, error)
+	ListRoles(ctx context.Context) ([]Role, []Perm, error)
+	ListUsers(ctx context.Context) ([]User, error)
+	GetUser(ctx context.Context, loginID string) (User, error)
+	// 로그인 세션: 토큰 자체가 아니라 토큰 해시를 저장한다.
+	CreateLogin(ctx context.Context, tokenHash, loginID string, expires time.Time) error
+	LoginUser(ctx context.Context, tokenHash string, now time.Time) (User, error)
+	DeleteLogin(ctx context.Context, tokenHash string) error
 	Close()
 }
 

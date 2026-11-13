@@ -1,12 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "./api";
-import type { Department, SessionInfo, View } from "./types";
+import type { Department, SessionInfo, User, View } from "./types";
 import { canFeature, myWork } from "./perm";
 import { Link } from "./router";
 
 type Run = (fn: () => Promise<View>) => Promise<void>;
 
-// 앱 틀(이슈 #53): 위 막대(부서·세션·업무일·사건 입력) + 세션 띠 + 왼쪽 메뉴 + 본문 페이지.
+// 앱 틀(이슈 #53): 위 막대(세션·업무일·로그인한 사람·사건 입력) + 세션 띠 + 왼쪽 메뉴 + 본문 페이지.
 // 한 페이지에 다 있던 탭 13개와 왼쪽 패널(사건 입력·작업)을 주소가 있는 페이지로 나눴다(SPA 유지, src/router.tsx).
 // 메뉴 묶음은 v3.1 목업(내 업무 / 입찰 / 승인 / 운영 상태 / 기록 / 시뮬레이션 / 근거)을 따른다.
 
@@ -27,6 +27,7 @@ export const PAGES = [
   { id: "sessions", path: "/sim/compare", group: "시뮬레이션", label: "세션 비교", title: "세션 비교", desc: "두 세션의 지표·제품×월·플래그·확인 요청·작업 차이" },
   { id: "assume", path: "/basis/assumptions", group: "근거", label: "가정", title: "가정", desc: "참가자 가정과 근거(원본 제약은 가정으로 없애지 않는다)" },
   { id: "backtest", path: "/basis/backtest", group: "근거", label: "정답 비교", title: "정답 비교", desc: "기준일 추정 납기 대 그 뒤 실제 출하(검증 전용)" },
+  { id: "access", path: "/admin/access", group: "관리", label: "사용자·권한", title: "사용자·권한", desc: "로그인 계정과 역할별 권한(DB 표 app_users · app_roles · app_role_permissions)" },
 ] as const;
 
 export type PageId = (typeof PAGES)[number]["id"];
@@ -51,11 +52,9 @@ const sessionLabel = (s: SessionInfo) => `${s.name} · ${kindLabel(s)}${s.events
 
 // ---- 위 막대 ----
 
-type TopProps = { v: View; run: Run; busy: boolean; dept?: Department; roleCode: string; onChoose: (code: string) => void };
+type TopProps = { v: View; run: Run; busy: boolean; user: User; onLogout: () => void };
 
-export function TopBar({ v, run, busy, dept, roleCode, onChoose }: TopProps) {
-  const list = v.departments ?? [];
-  const groups = [...new Set(list.map((d) => d.dept))];
+export function TopBar({ v, run, busy, user, onLogout }: TopProps) {
   const sessions = v.sessions ?? [v.session];
   return (
     <header className="topbar">
@@ -77,18 +76,15 @@ export function TopBar({ v, run, busy, dept, roleCode, onChoose }: TopProps) {
         <span className="muted small">기준일 {v.as_of}</span>
       </div>
       <div className="top-spacer" />
-      <div className="top-field">
-        <label className="top-label" htmlFor="top-dept">부서</label>
-        <select id="top-dept" value={roleCode} onChange={(e) => onChoose(e.target.value)} className={dept ? "" : "need"}>
-          <option value="">부서를 고른다</option>
-          {groups.map((g) => (
-            <optgroup key={g} label={g}>
-              {list.filter((d) => d.dept === g).map((d) => <option key={d.code} value={d.code}>{d.label}</option>)}
-            </optgroup>
-          ))}
-        </select>
-      </div>
       <Link to="/events/new" className="btn">+ 사건 입력</Link>
+      <div className="top-user" aria-label="로그인한 사람">
+        <span className="avatar" aria-hidden="true">{user.name.slice(0, 1)}</span>
+        <span className="top-user-name">
+          <b>{user.name}</b>
+          <span className="muted small">{user.dept_label} · {user.login_id}</span>
+        </span>
+        <button className="ghost small" onClick={onLogout}>로그아웃</button>
+      </div>
     </header>
   );
 }
@@ -191,7 +187,7 @@ export function SessionTools({ v, run, busy, dept }: { v: View; run: Run; busy: 
             <button key={s.id} className="ghost" title={s.description} disabled={busy || !dept} onClick={() => run(() => api.scenario(s.id, v.as_of))}>{s.title}</button>
           ))}
         </div>
-        {!dept && <p className="small bad">위 막대에서 부서를 고르면 돌릴 수 있다</p>}
+        {!dept && <p className="small bad">로그인한 계정의 역할을 권한표에서 찾지 못했다</p>}
         <ul className="tasks small">
           {v.scenarios.map((s) => <li key={s.id}><b>{s.title}</b> {s.description}</li>)}
         </ul>
@@ -209,7 +205,7 @@ export function SessionTools({ v, run, busy, dept }: { v: View; run: Run; busy: 
         <p className="muted small">그 날짜까지의 기록만 쓰는 새 시뮬레이션 세션 · 쓰는 기록 ~{v.cutoff} · 이사회 {v.board_date}</p>
         <div className="row">
           <input type="date" aria-label="기준일" min={v.as_of_min} max={v.as_of_max} value={pick} onChange={(e) => setPick(e.target.value)} />
-          <button className="small" disabled={busy || !pick || !dept} title={dept ? "" : "부서를 먼저 고른다"} onClick={() => run(() => api.newSession("", pick))}>시작</button>
+          <button className="small" disabled={busy || !pick || !dept} title={dept ? "" : "로그인한 계정의 역할을 찾지 못했다"} onClick={() => run(() => api.newSession("", pick))}>시작</button>
         </div>
         <div className="row">
           {PRESETS.map((d) => (
@@ -239,7 +235,7 @@ export function ClockTools({ v, run, busy, dept }: { v: View; run: Run; busy: bo
   const sim = v.state.scenario.sim_date;
   // 시계: 기준 세션은 운영 관리만, 시뮬레이션 세션은 모든 부서(시스템 대행)
   const canClock = v.session.kind === "main" ? canFeature(dept, "main.clock") : canFeature(dept, "sim.act");
-  const why = canClock ? "" : v.session.kind === "main" ? "기준 세션 시계는 운영 관리 부서만" : "부서를 먼저 고른다";
+  const why = canClock ? "" : v.session.kind === "main" ? "기준 세션 시계는 운영 관리 부서만" : "로그인한 계정의 역할을 찾지 못했다";
   const clock = (to: string) => run(() => api.event("E0_CLOCK", "시스템", { sim_date: to }));
   return (
     <section className="card">

@@ -11,6 +11,7 @@ type memory struct {
 	mu       sync.Mutex
 	sessions []Session
 	events   map[string][]Event
+	acc      memAccess // 계정·권한(access.go)
 }
 
 // NewMemory는 메모리 저장소를 만든다. 스키마는 늘 최신으로 보고, 기준 세션(main)을 미리 둔다.
@@ -18,6 +19,7 @@ func NewMemory() Store {
 	return &memory{
 		sessions: []Session{{ID: MainSession, Name: "기준 세션", Kind: KindMain, CreatedAt: time.Now().UTC()}},
 		events:   map[string][]Event{},
+		acc:      memAccess{logins: map[string]memLogin{}},
 	}
 }
 

@@ -176,7 +176,7 @@ function MyTurn({ v, dept, onAction, onTrySim }: { v: View; dept?: Department; o
         <span className="modes"><Mode kind="real" /></span>
       </header>
       {!dept ? (
-        <p className="small">위 막대에서 부서를 고르면 이 판단으로 지금 할 일이 보인다.</p>
+        <p className="small">로그인한 계정의 역할을 권한표에서 찾지 못해 지금 할 일을 보일 수 없다.</p>
       ) : first ? (
         <p className="small">
           <b>{dept.label}</b>: {first.label}. {v.state.bid ? `입찰 ${v.state.bid.state} · v${v.state.bid.version}.` : ""}
@@ -188,7 +188,7 @@ function MyTurn({ v, dept, onAction, onTrySim }: { v: View; dept?: Department; o
       )}
       <div className="row">
         {first && <button onClick={() => onAction(first)}>{first.label}</button>}
-        <button className="ghost" disabled={!dept} title={dept ? "" : "부서를 먼저 고른다"} onClick={onTrySim}>
+        <button className="ghost" disabled={!dept} title={dept ? "" : "로그인한 계정의 역할을 찾지 못했다"} onClick={onTrySim}>
           {v.session.kind === "sim" ? "시뮬레이션 페이지로" : "시뮬레이션에서 먼저 보기"}
         </button>
       </div>

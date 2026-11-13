@@ -244,7 +244,7 @@ func TestPostgresMigration3KeepsEvents(t *testing.T) {
 	defer conn.Close(context.Background())
 	// 스키마 2 상태를 만든다: 이전 마이그레이션 1·2만 적용하고 사건 두 건을 넣는다
 	setup := []string{
-		"DROP TABLE IF EXISTS w05_events, w05_sessions, app_meta, schema_migrations CASCADE",
+		"DROP TABLE IF EXISTS app_logins, app_users, app_role_permissions, app_roles, w05_events, w05_sessions, app_meta, schema_migrations CASCADE",
 		migrations[0], migrations[1],
 		"CREATE TABLE schema_migrations (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())",
 		"INSERT INTO schema_migrations (version) VALUES (1), (2)",

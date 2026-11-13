@@ -254,7 +254,7 @@ export function SimulationView({ v, run, busy, dept, goTab }: { v: View; run: Ru
                     </label>
                   ))}
                 </div>
-                <div className="row"><button disabled={busy || !dept || Object.values(f).every((x) => !x)} title={dept ? "" : "부서를 먼저 고른다"} onClick={submit}>모의 가정 넣기(E9)</button>{picked && <span className="small warn-text">격자 칸 값을 채웠다. 확인하고 넣는다.</span>}{Object.values(f).some((x) => x) && <button className="ghost small" onClick={() => { setF({}); setPicked(null); }}>입력 비우기</button>}</div>
+                <div className="row"><button disabled={busy || !dept || Object.values(f).every((x) => !x)} title={dept ? "" : "로그인한 계정의 역할을 찾지 못했다"} onClick={submit}>모의 가정 넣기(E9)</button>{picked && <span className="small warn-text">격자 칸 값을 채웠다. 확인하고 넣는다.</span>}{Object.values(f).some((x) => x) && <button className="ghost small" onClick={() => { setF({}); setPicked(null); }}>입력 비우기</button>}</div>
               </>
             )}
             <p className="muted small" style={{ marginBottom: 0 }}>지금 적용된 모의 가정은 옆 열 "이 세션에서 바꾼 것"에 있다.</p>
@@ -394,8 +394,8 @@ function SessionTree({ v, run, busy, dept }: { v: View; run: Run; busy: boolean;
         })}
       </ul>
       <div className="row" style={{ marginTop: 10 }}>
-        <button className="ghost small" disabled={busy || !canMake} title={canMake ? "지금 세션 기준일로 빈 시뮬레이션 세션을 만든다" : "부서를 먼저 고른다"} onClick={() => run(() => api.newSession("", v.as_of))}>새 시뮬레이션</button>
-        <button className="ghost small" disabled={busy || !canMake} title={canMake ? "지금 상태(사건 전체)를 복사한 시뮬레이션 세션을 만든다" : "부서를 먼저 고른다"} onClick={() => run(() => api.fork(events))}>지금 상태에서 분기</button>
+        <button className="ghost small" disabled={busy || !canMake} title={canMake ? "지금 세션 기준일로 빈 시뮬레이션 세션을 만든다" : "로그인한 계정의 역할을 찾지 못했다"} onClick={() => run(() => api.newSession("", v.as_of))}>새 시뮬레이션</button>
+        <button className="ghost small" disabled={busy || !canMake} title={canMake ? "지금 상태(사건 전체)를 복사한 시뮬레이션 세션을 만든다" : "로그인한 계정의 역할을 찾지 못했다"} onClick={() => run(() => api.fork(events))}>지금 상태에서 분기</button>
       </div>
     </Section>
   );

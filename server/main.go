@@ -36,6 +36,11 @@ func main() {
 	}
 	defer st.Close()
 
+	// 계정·권한 표(이슈 #55): 비어 있으면 기본 권한표와 시연 계정을 넣고, 표의 권한으로 판단한다.
+	if err := setupAccess(ctx, st); err != nil {
+		log.Fatalf("계정·권한 준비 실패: %v", err)
+	}
+
 	// W05 원본 복사본은 바이너리에 들어 있다. 해시가 다르면 뜨지 않는다(D4).
 	base, err := w05.LoadBase()
 	if err != nil {
@@ -100,12 +105,15 @@ func newHandler(webDir string, st store.Store, svc *w05.Service) http.Handler {
 		writeJSON(w, status, body)
 	})
 
-	registerW05(mux, svc)
+	// 로그인(이슈 #55). W05 업무 API는 모두 로그인한 계정으로만 부른다.
+	registerAuth(mux, st)
+	w05mux := http.NewServeMux()
+	registerW05(w05mux, svc)
+	w05mux.HandleFunc("/api/w05/", notFoundJSON)
+	mux.Handle("/api/w05/", requireLogin(st, w05mux))
 
 	// 없는 API는 화면(index.html)이 아니라 JSON 404로 답한다.
-	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-	})
+	mux.HandleFunc("/api/", notFoundJSON)
 
 	mux.Handle("/", spaHandler(webDir))
 	return mux
@@ -141,6 +149,10 @@ func spaHandler(webDir string) http.Handler {
 		}
 		http.ServeFile(w, r, index)
 	})
+}
+
+func notFoundJSON(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

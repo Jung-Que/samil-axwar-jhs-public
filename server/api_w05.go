@@ -13,7 +13,8 @@ import (
 
 // W05 업무 API. 상태는 사건 로그를 다시 적용해 만들고, 사건은 규칙에 맞을 때만 기록된다.
 // 사건 로그는 세션마다 따로다(이슈 #37). 아래 엔드포인트의 ?session=은 없으면 기준 세션(main)이다.
-// 쓰기 요청은 사용자 부서 헤더 X-W05-Role(영문 코드)이 필요하다(없으면 401). 권한은 부서별이다(이슈 #43, permissions.go):
+// 모든 요청은 로그인이 필요하고(없으면 401, auth.go), 사용자 부서는 로그인한 계정의 역할이다(이슈 #55).
+// 권한은 부서별이다(이슈 #43, 권한표는 DB 역할·권한 표에서 읽는다):
 // 기준 세션은 자기 부서 권한으로만 입력(다르면 403), 시뮬레이션 세션은 다른 부서 대행을 기록하며 허용,
 // 기준 세션 초기화·기준 세션 시연·세션 삭제는 운영 관리만. 사건 권한표 위반은 409.
 //
@@ -205,18 +206,6 @@ func registerW05(mux *http.ServeMux, svc *w05.Service) {
 
 // sessionOf는 ?session= 값이다(없으면 ""= 기준 세션).
 func sessionOf(r *http.Request) string { return strings.TrimSpace(r.URL.Query().Get("session")) }
-
-// RoleHeader는 사용자 부서를 싣는 헤더다(영문 코드). 화면의 부서 선택이 넣는다. 시연용 롤 체크라 인증은 없다
-// (사용자 결정 11/13). 쓰기 요청은 이 헤더가 필요하다(이슈 #43).
-const RoleHeader = "X-W05-Role"
-
-// roleOf는 헤더 코드를 부서 ID로 바꾼다(없거나 모르는 코드면 "" → 서비스가 401).
-func roleOf(r *http.Request) string {
-	if d, ok := w05.DeptByCode(r.Header.Get(RoleHeader)); ok {
-		return d.ID
-	}
-	return ""
-}
 
 type optIn struct {
 	AsOf       string `json:"as_of"`

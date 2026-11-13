@@ -70,7 +70,7 @@ function BidFlow({ v, dept, onChoose }: { v: View; dept?: Department; onChoose: 
       {turn && (
         <p className="flow-next small">
           다음은 <b>{turn.label}</b> 차례다. {v.session.kind === "sim" ? "시뮬레이션 세션이라 지금 부서로 대행 입력도 된다." : "기준 세션은 그 부서만 넣는다."}{" "}
-          <button className="ghost small" onClick={() => onChoose(turn.code)}>부서 바꾸기: {turn.label}</button>
+          <button className="ghost small" onClick={() => onChoose(turn.code)}>{turn.label} 계정으로 다시 로그인</button>
         </p>
       )}
     </Section>
@@ -214,8 +214,8 @@ export function MyWorkView({ v, dept, onAction, onChoose, onFocus, goTab }: MyWo
     return (
       <div className="split">
         <div className="split-main">
-          <Section title="내 업무" mode={["real"]} note="부서를 고르면 그 부서가 지금 할 일과 권한이 보인다. 시연은 입찰 흐름의 차례대로 부서를 바꿔 가며 넣는다.">
-            <p className="small">위 막대의 <b>부서</b>에서 부서를 고르거나, 아래 입찰 흐름에서 지금 차례 부서로 바로 바꾼다.</p>
+          <Section title="내 업무" mode={["real"]} note="로그인한 계정의 역할로 지금 할 일과 권한을 보인다. 시연은 입찰 흐름의 차례대로 그 부서 계정으로 다시 로그인해 넣는다.">
+            <p className="small">로그인한 계정의 역할을 권한표에서 찾지 못했다. 아래 입찰 흐름에서 지금 차례 부서 계정으로 다시 로그인한다.</p>
           </Section>
           <BidFlow v={v} onChoose={onChoose} />
           <PermissionSection v={v} open />
@@ -310,7 +310,7 @@ export function MyWorkView({ v, dept, onAction, onChoose, onFocus, goTab }: MyWo
 
 function PermissionSection({ v, current, open }: { v: View; current?: string; open?: boolean }) {
   return (
-    <Section title="부서별 권한표" mode={["real"]} note="서버가 이 표로 판단한다(server/w05/permissions.go).">
+    <Section title="부서별 권한표" mode={["real"]} note="서버가 이 표로 판단한다(DB 역할·권한 표, 관리 › 사용자·권한).">
       <details open={open}>
         <summary className="small">표 펼치기</summary>
         <PermissionTable v={v} current={current} />
@@ -319,7 +319,7 @@ function PermissionSection({ v, current, open }: { v: View; current?: string; op
   );
 }
 
-function PermissionTable({ v, current }: { v: View; current?: string }) {
+export function PermissionTable({ v, current }: { v: View; current?: string }) {
   return (
     <div className="scroll">
       <table className="grid text">

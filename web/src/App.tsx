@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, api, currentRole, setRole, setSession } from "./api";
-import type { Department, LaneAction, View } from "./types";
+import { ApiError, api, auth, onUnauthorized, setSession } from "./api";
+import type { Department, LaneAction, User, View } from "./types";
 import { SessionCompareView, SimulationView } from "./sessionViews";
 import { AssumptionsView, CapacityView, ChurnView, CompareView, DecisionsView, LedgerView, LogView, SourceGapView, TasksView } from "./panels";
 import { JudgeView } from "./judgeViews";
@@ -10,6 +10,7 @@ import { MyWorkView } from "./roleViews";
 import { canEvent, deptOf } from "./perm";
 import { ClockTools, ModeBand, PageHead, SessionTools, SideNav, TopBar, pageById, pageFor, pathOf, type Page, type PageId } from "./frame";
 import { Link, navigate, useLocation } from "./router";
+import { AccessPage, LoginPage } from "./login";
 
 // 바로 기록해도 되는 사건(입력 필드가 필요 없음). 나머지는 사건 입력 페이지로 보낸다.
 const DIRECT: Record<string, { actor: string; payload: unknown }> = {
@@ -17,13 +18,14 @@ const DIRECT: Record<string, { actor: string; payload: unknown }> = {
   E7_SUBMIT_PROPOSAL: { actor: "영업", payload: {} },
 };
 
-// W05 운영 서비스 화면(SPA). 주소마다 페이지 하나(이슈 #53): 내 업무 → 입찰 판단 → 결정 → 운영 상태 → 기록 → 시뮬레이션 → 근거.
+// W05 운영 서비스 화면(SPA). 로그인(/login, 이슈 #55)부터 시작하고, 주소마다 페이지 하나(이슈 #53):
+// 내 업무 → 입찰 판단 → 결정 → 운영 상태 → 기록 → 시뮬레이션 → 근거 → 관리.
 // 상태(View)는 한 번 받아 모든 페이지가 함께 쓰고, 사건을 넣으면 서버가 돌려준 새 상태로 바꾼다.
 export default function App() {
+  const [user, setUser] = useState<User | null | undefined>(undefined); // undefined = 확인 중
   const [v, setV] = useState<View | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [roleCode, setRoleCode] = useState(currentRole());
   const loc = useLocation();
   // 사건 입력 페이지에서 고를 사건(할 일에서 누른 사건). 주소 ?type=으로도 연다.
   const [focus, setFocus] = useState<{ event: string; n: number } | null>(() => {
@@ -31,14 +33,28 @@ export default function App() {
     return t ? { event: t, n: Date.now() } : null;
   });
 
-  // 처음 주소 정리: / → 내 업무, 예전 탭 해시(#judge 등) → 그 페이지
+  // 처음: 예전 탭 해시(#judge 등)는 그 페이지로 옮기고, 로그인했는지 본다. 로그인이 풀리면(401) 로그인 페이지로.
   useEffect(() => {
     const old = pageById(window.location.hash.slice(1));
     if (old) navigate(old.path, true);
-    else if (loc.path === "/") navigate(pathOf("my"), true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    onUnauthorized(() => {
+      setUser(null);
+      setV(null);
+    });
+    auth
+      .me()
+      .then((r) => setUser(r.user))
+      .catch(() => setUser(null));
+  }, []);
+
+  // 로그인 여부에 맞춰 주소를 맞춘다: 로그인 전에는 /login만, 로그인 뒤 /login·/ 이면 내 업무로.
+  useEffect(() => {
+    if (user === null && loc.path !== "/login") navigate("/login", true);
+    else if (user && (loc.path === "/login" || loc.path === "/")) navigate(pathOf("my"), true);
+  }, [user, loc.path]);
 
   useEffect(() => {
+    if (!user) return;
     // 기억해 둔 세션이 지워졌으면(404) 기준 세션으로 연다.
     api
       .state()
@@ -54,7 +70,7 @@ export default function App() {
         setV(nv);
       })
       .catch((e: Error) => setErr(`API 연결 실패: ${e.message}`));
-  }, []);
+  }, [user?.login_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = useCallback(async (fn: () => Promise<View>) => {
     setBusy(true);
@@ -74,15 +90,20 @@ export default function App() {
   // 페이지를 바꾸면 지난 페이지의 오류 띠는 지운다.
   useEffect(() => setErr(null), [loc.path]);
 
+  if (user === undefined) return <main className="center">불러오는 중…</main>;
+  if (user === null) return <LoginPage onLogin={(u) => { setErr(null); setUser(u); }} />;
   if (!v) return <main className="center">{err ?? "불러오는 중…"}</main>;
-  const dept: Department | undefined = deptOf(v, roleCode);
+  const dept: Department | undefined = deptOf(v, user.role_code);
   const go = (id: PageId) => navigate(pathOf(id));
-  const chooseRole = (code: string) => {
-    setRole(code);
-    setRoleCode(code);
-    setErr(null);
-    go("my");
+  const logout = (next = "/login") => {
+    auth.logout().finally(() => {
+      setUser(null);
+      setV(null);
+      navigate(next);
+    });
   };
+  // 입찰 흐름의 "다음 차례" 부서 계정으로 다시 로그인(로그인 페이지가 그 부서 계정을 미리 고른다)
+  const switchTo = (roleCode: string) => logout(`/login?role=${encodeURIComponent(roleCode)}`);
   const openEvent = (event: string) => {
     setFocus({ event, n: Date.now() });
     navigate(`${pathOf("event")}?type=${encodeURIComponent(event)}`);
@@ -112,7 +133,7 @@ export default function App() {
   const body = (p: Page) => {
     switch (p.id) {
       case "my":
-        return <MyWorkView v={v} dept={dept} onAction={onAction} onChoose={chooseRole} onFocus={openEvent} goTab={go} />;
+        return <MyWorkView v={v} dept={dept} onAction={onAction} onChoose={switchTo} onFocus={openEvent} goTab={go} />;
       case "judge":
         return <JudgeView v={v} dept={dept} onAction={onAction} onTrySim={trySim} />;
       case "capacity":
@@ -148,12 +169,14 @@ export default function App() {
         return <AssumptionsView v={v} />;
       case "backtest":
         return <BacktestView v={v} />;
+      case "access":
+        return <AccessPage v={v} user={user} />;
     }
   };
 
   return (
     <div className="shell">
-      <TopBar v={v} run={run} busy={busy} dept={dept} roleCode={roleCode} onChoose={chooseRole} />
+      <TopBar v={v} run={run} busy={busy} user={user} onLogout={() => logout()} />
       <ModeBand v={v} run={run} busy={busy} />
       <div className="shell-body">
         <SideNav v={v} dept={dept} current={page?.id} />

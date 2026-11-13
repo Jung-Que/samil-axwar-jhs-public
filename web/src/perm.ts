@@ -15,7 +15,7 @@ export function ownersOf(v: View, type: string): string {
 
 // canEvent는 지금 세션에서 이 부서가 이 사건을 넣을 수 있는지 본다.
 export function canEvent(v: View, d: Department | undefined, type: string, req?: ConfirmRequest): Check {
-  if (!d) return { ok: false, reason: "부서를 먼저 고른다" };
+  if (!d) return { ok: false, reason: "로그인한 계정의 역할을 찾지 못했다" };
   const responder = type === "E3_REPLY" ? req?.to_role : undefined;
   const own = type === "E3_REPLY" ? responder === d.id : (d.events ?? []).includes(type);
   if (v.session.kind === "sim") {

@@ -455,3 +455,12 @@ export type Backtest = {
   hit_rate: Record<string, number>;
   orders: Record<string, number>;
 };
+// 로그인 계정(이슈 #55, server/auth.go). 비밀번호 해시는 내려오지 않는다.
+export type User = { login_id: string; name: string; role_code: string; dept_id: string; dept_label: string; created_at?: string };
+export type Account = { login_id: string; name: string; role_code: string; dept_label: string; duty: string };
+export type AccessTables = {
+  users: User[];
+  roles: { code: string; dept_id: string; dept: string; label: string; duty: string; users: number }[];
+  permissions: { role_code: string; kind: "event" | "reply" | "feature"; item: string }[];
+  store: string;
+};
