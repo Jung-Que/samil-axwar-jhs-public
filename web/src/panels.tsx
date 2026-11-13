@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { View, ProductEval, LineEval, OptionEval, LogEntry } from "./types";
 import { BASIS_LABEL, EVENT_LABEL, PRODUCT_LABEL, ea, eok, pct, slug, won } from "./format";
+import { EmptyState } from "./brand";
 
 // 화면마다 실제 작동 / 모의 / 설계 단계를 표시한다(A04).
 export function Mode({ kind }: { kind: "real" | "mock" | "design" }) {
@@ -435,6 +436,11 @@ export function TasksView({ v }: { v: View }) {
   const done = ts.filter((t) => t.state !== "열림");
   return (
     <Section title={`작업함 (열림 ${open.length})`} mode={["real"]}>
+      {open.length === 0 && (
+        <EmptyState compact swan="done" title={ts.length ? "열린 작업이 없다" : "작업이 아직 없다"}>
+          결정·제출 같은 사건이 작업을 만든다. 원인 사건 번호와 담당 부서가 함께 남는다.
+        </EmptyState>
+      )}
       <ul className="tasks">
         {open.map((t) => (
           <li key={t.task_id}><span className="role">{t.owner_role}</span> {t.title} <span className="muted small">{t.due_date ? `~${t.due_date}` : ""} · 사건 #{t.cause_seq}</span></li>

@@ -5,8 +5,9 @@ import { Section } from "./panels";
 import { EVENT_LABEL, PRODUCT_LABEL, ea, eok, pct } from "./format";
 import { canFeature } from "./perm";
 import type { PageId as Tab } from "./frame";
+import { EmptyState } from "./brand";
 
-type Run = (fn: () => Promise<View>) => Promise<void>;
+type Run = (fn: () => Promise<View>) => Promise<unknown>;
 
 const kindLabel = (s: SessionInfo) => (s.kind === "main" ? "기준" : "시뮬레이션");
 const sessionLabel = (s: SessionInfo) => `${s.name} · ${kindLabel(s)}${s.events >= 0 ? ` · 사건 ${s.events}` : ""}`;
@@ -370,6 +371,11 @@ function SessionTree({ v, run, busy, dept }: { v: View; run: Run; busy: boolean;
   const events = v.state.log?.length ?? 0;
   return (
     <Section title={`세션 (${list.length})`} mode={["real"]} note="기준 세션은 이후 운영 세션이다. 시뮬레이션은 분기해서 바꿔 보고 비교한다.">
+      {list.every((s) => s.kind === "main") && (
+        <EmptyState compact swan="simulation" title="시뮬레이션 세션이 없다">
+          지금 상태를 분기해 조건을 바꿔 보고 기준 세션과 비교한다. 제출은 [모의]로 기록된다.
+        </EmptyState>
+      )}
       <ul className="sess-list">
         {rows.map(({ s, depth }) => {
           const cur = s.id === v.session.id;

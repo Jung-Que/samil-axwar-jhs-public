@@ -4,6 +4,7 @@ import type { AccessTables, Account, User, View } from "./types";
 import { Section } from "./panels";
 import { PermissionTable } from "./roleViews";
 import { FLOW_ORDER } from "./flowViews";
+import { BrandMark, SWAN } from "./brand";
 
 // 로그인 페이지(이슈 #55). 시연용: 부서마다 계정 하나(처음 뜰 때 서버가 넣는다), 회원 가입·비밀번호 변경은 없다.
 // 주소 ?role=production 이면 그 부서 계정을 미리 고른다(입찰 흐름에서 "다음 차례" 부서로 다시 로그인할 때).
@@ -57,12 +58,21 @@ export function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
   };
 
   return (
-    <div className="login-wrap">
-      <section className="login-card" aria-labelledby="login-title">
-        <div className="login-brand">
+    <div className="login-split">
+      <section className="login-brand-panel" aria-label="서비스 소개">
+        <div className="login-mark">
+          <BrandMark size={32} />
           <b>W05 수주·약속 운영</b>
-          <span className="muted small">Corevia 영업·생산관리 · Aurora Holdings</span>
         </div>
+        <div className="login-hero">
+          <img className="swan hero-img" src={SWAN.hero} alt="" draggable={false} />
+          <p className="login-tagline">수면 위는 차분하게, 계산은 물 아래에서</p>
+          <p className="muted">대형 수주가 들어와도 기존 고객 약속을 지키도록 사건을 받고, 엔진이 원본으로 계산하고, 권한 있는 사람이 승인한다.</p>
+        </div>
+        <p className="muted tiny">Aurora Holdings · Corevia 영업·생산관리 · 시연용 로그인</p>
+      </section>
+      <div className="login-form-panel">
+      <section className="login-card" aria-labelledby="login-title">
         <h1 id="login-title">로그인</h1>
         <form onSubmit={submit}>
           <label className="field">
@@ -116,6 +126,7 @@ export function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
           })}
         </ol>
       </section>
+      </div>
     </div>
   );
 }

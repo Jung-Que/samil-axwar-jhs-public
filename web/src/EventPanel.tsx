@@ -4,8 +4,9 @@ import type { ConfirmRequest, Department, View } from "./types";
 import { Section } from "./panels";
 import { EVENT_LABEL, slug } from "./format";
 import { canEvent } from "./perm";
+import { EmptyState } from "./brand";
 
-type Run = (fn: () => Promise<View>) => Promise<void>;
+type Run = (fn: () => Promise<View>) => Promise<unknown>;
 type Fields = Record<string, unknown>;
 
 // 구조화된 고정 필드로 입력하는 사건. 자유 문장·LLM은 현재 제외(11/10 사용자 결정).
@@ -241,8 +242,12 @@ export function RequestsView({ v, run, dept }: { v: View; run: Run; dept?: Depar
   const [open, setOpen] = useState<string | null>(null);
   return (
     <Section title={`확인 요청 (열림 ${rs.filter((r) => r.state !== "반영").length})`} mode={["real", "mock"]} note="요청 생성·기한 초과·재요청은 실제 작동, 회신 내용은 모의다. 바이어 항목(CR-04~06)은 E4 바이어 회신으로 반영된다. 회신은 요청 대상 부서만 넣는다(시뮬레이션 세션은 대행).">
-      {rs.length === 0 && <p className="muted small">RFP 접수(E1) 뒤 생성된다.</p>}
-      <table className="grid text">
+      {rs.length === 0 && (
+        <EmptyState compact swan="waiting" title="확인 요청이 아직 없다">
+          RFP 접수(E1) 뒤 엔진이 부서·바이어에 물을 것을 만든다.
+        </EmptyState>
+      )}
+      {rs.length > 0 && <table className="grid text">
         <thead><tr><th>ID</th><th>대상</th><th>질문</th><th>막는 판단</th><th>기한</th><th>상태</th><th /></tr></thead>
         <tbody>
           {rs.map((r) => {
@@ -262,7 +267,7 @@ export function RequestsView({ v, run, dept }: { v: View; run: Run; dept?: Depar
             );
           })}
         </tbody>
-      </table>
+      </table>}
       {open && <ReplyForm r={rs.find((x) => x.request_id === open)!} run={run} done={() => setOpen(null)} />}
     </Section>
   );

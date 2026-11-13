@@ -1444,11 +1444,17 @@ td.picked {
 
 .brand {
   display: flex;
-  flex-direction: column;
-  line-height: 1.25;
+  align-items: center;
+  gap: 8px;
   color: #111111;
   text-decoration: none;
   margin-right: 6px;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
 }
 
 .top-field {
@@ -1680,18 +1686,8 @@ a.btn:focus-visible,
   line-height: 1.2;
 }
 
-.login-wrap {
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: minmax(300px, 380px) minmax(0, 760px);
-  justify-content: center;
-  align-content: center;
-  gap: 20px;
-  padding: 32px 16px;
-}
-
 .login-card {
-  align-self: start;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1737,11 +1733,6 @@ a.btn:focus-visible,
 }
 
 @media (max-width: 900px) {
-  .login-wrap {
-    grid-template-columns: minmax(0, 1fr);
-    align-content: start;
-  }
-
   .top-user {
     padding-left: 0;
     border-left: 0;
@@ -1892,5 +1883,187 @@ a.btn.small-btn {
 
   .flowbar .row {
     margin-left: 0;
+  }
+}
+
+/* ===== 브랜드 층(이슈 #59): 백조 단색 일러스트(이미지 자체가 #111111 한 색·투명 바탕) ===== */
+.swan {
+  display: block;
+  flex: none;
+  object-fit: contain;
+  user-select: none;
+}
+
+.band-swan {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  background: #FFFFFF;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 32px 16px 20px;
+  text-align: center;
+}
+
+.empty-state .empty-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: 440px;
+}
+
+.empty-state.compact {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 0;
+  text-align: left;
+}
+
+.empty-state.compact .empty-text {
+  align-items: flex-start;
+  max-width: none;
+}
+
+.empty-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #111111;
+}
+
+.empty-desc {
+  margin: 0;
+}
+
+.empty-action {
+  margin-top: 6px;
+}
+
+a.btn.ghost-btn {
+  background: #FFFFFF;
+  color: #111111;
+  box-shadow: inset 0 0 0 1px #111111;
+}
+
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: #FFFFFF;
+  box-shadow: inset 3px 0 0 #111111;
+}
+
+.notice-text {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.notice-text p {
+  margin: 0;
+}
+
+.notice-title {
+  font-weight: 700;
+}
+
+.center.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.login-split {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+}
+
+.login-brand-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 32px 44px;
+  background: #FFFFFF;
+}
+
+.login-mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+}
+
+.login-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.login-hero p {
+  margin: 0;
+  max-width: 540px;
+}
+
+.hero-img {
+  width: min(100%, 560px);
+  height: auto;
+  aspect-ratio: 3 / 2;
+}
+
+.login-hero .login-tagline {
+  margin-top: 12px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.login-form-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  padding: 32px 40px;
+}
+
+@media (max-width: 900px) {
+  .login-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .login-brand-panel {
+    padding: 20px 16px;
+    gap: 12px;
+  }
+
+  .hero-img {
+    width: min(100%, 360px);
+  }
+
+  .login-hero .login-tagline {
+    font-size: 1.25rem;
+  }
+
+  .login-form-panel {
+    padding: 16px;
+  }
+
+  .empty-state.compact {
+    align-items: flex-start;
   }
 }

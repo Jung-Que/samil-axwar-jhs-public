@@ -3,8 +3,9 @@ import { api } from "./api";
 import type { Department, SessionInfo, User, View } from "./types";
 import { canFeature, myWork } from "./perm";
 import { Link } from "./router";
+import { BrandMark, Swan } from "./brand";
 
-type Run = (fn: () => Promise<View>) => Promise<void>;
+type Run = (fn: () => Promise<View>) => Promise<unknown>;
 
 // 앱 틀(이슈 #53): 위 막대(세션·업무일·로그인한 사람·사건 입력) + 세션 띠 + 왼쪽 메뉴 + 본문 페이지.
 // 한 페이지에 다 있던 탭 13개와 왼쪽 패널(사건 입력·작업)을 주소가 있는 페이지로 나눴다(SPA 유지, src/router.tsx).
@@ -59,9 +60,12 @@ export function TopBar({ v, run, busy, user, onLogout }: TopProps) {
   const sessions = v.sessions ?? [v.session];
   return (
     <header className="topbar">
-      <Link to="/my" className="brand">
-        <b>W05 수주·약속</b>
-        <span className="muted small">Corevia 영업·생산관리</span>
+      <Link to="/my" className="brand" aria-label="W05 수주·약속 운영 — 내 업무로">
+        <BrandMark size={30} />
+        <span className="brand-text">
+          <b>W05 수주·약속</b>
+          <span className="muted small">Corevia 영업·생산관리</span>
+        </span>
       </Link>
       <div className="top-field">
         <label className="top-label" htmlFor="top-session">세션</label>
@@ -102,6 +106,7 @@ export function ModeBand({ v, run, busy }: { v: View; run: Run; busy: boolean })
   const parent = (v.sessions ?? []).find((s) => s.id === v.session.parent_id);
   return (
     <div className="band band-sim" role="status">
+      <span className="band-swan"><Swan name="simulation" size={26} /></span>
       <b>시뮬레이션 세션 · {v.session.name}</b> · 제출은 [모의] · 다른 부서 대행 입력이 기록된다
       {v.session.parent_id && <span> · 분기: {parent?.name ?? v.session.parent_id} 사건 {v.session.fork_seq}까지</span>}
       <button className="small" disabled={busy} onClick={() => run(() => api.open("main"))}>기준 세션으로</button>

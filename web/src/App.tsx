@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api, auth, onUnauthorized, setSession } from "./api";
 import type { Department, LaneAction, User, View } from "./types";
 import { SessionCompareView, SimulationView } from "./sessionViews";
@@ -12,6 +12,24 @@ import { ClockTools, ModeBand, PageHead, SessionTools, SideNav, TopBar, pageById
 import { Link, navigate, useLocation } from "./router";
 import { AccessPage, LoginPage } from "./login";
 import { FlowBar, FlowPage } from "./flowViews";
+import { BrandMark, EmptyState, Swan, type SwanName } from "./brand";
+
+// 완료 알림(이슈 #59): 같은 세션에서 입찰 상태가 넘어가면 결과 한 줄과 백조를 보인다(위급·오류에는 쓰지 않는다).
+type Notice = { swan: SwanName; title: string; desc: string; to?: string; toLabel?: string };
+
+function noticeFor(prev: View, next: View): Notice | null {
+  if (prev.session.id !== next.session.id) return null;
+  const a = prev.state.bid?.state;
+  const b = next.state.bid?.state;
+  if (!b || a === b) return null;
+  const last = next.state.log?.[next.state.log.length - 1]?.event.seq ?? 0;
+  const made = (next.state.tasks ?? []).filter((t) => t.cause_seq === last && t.state === "열림");
+  const madeText = made.length ? `작업 ${made.length}건이 생겼다: ${made.map((t) => `${t.owner_role} ${t.title.split("(")[0].trim()}`).join(" · ")}` : "새로 생긴 작업은 없다.";
+  if (b === "상신") return { swan: "waiting", title: "상신했다 · CEO/이사회 결정 대기", desc: "결정이 들어오면 시연 흐름과 결정 페이지에 뜬다.", to: "/flow", toLabel: "시연 흐름 보기" };
+  if ((b === "승인" || b === "조건부 승인") && a === "상신") return { swan: "success", title: `결정을 기록했다 · ${b}`, desc: madeText, to: "/tasks", toLabel: "작업 보기" };
+  if (b === "회신 대기" && (a === "승인" || a === "조건부 승인")) return { swan: "success", title: "제안을 제출했다", desc: madeText, to: "/tasks", toLabel: "작업 보기" };
+  return null;
+}
 
 // 로그인 뒤 돌아갈 주소(?next=). 이 앱 안의 경로만 받는다(다른 사이트로 보내지 않게).
 const safeNext = (n: string | null) => (n && n.startsWith("/") && !n.startsWith("//") && !n.startsWith("/login") ? n : null);
@@ -30,6 +48,9 @@ export default function App() {
   const [v, setV] = useState<View | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const vRef = useRef<View | null>(null);
+  vRef.current = v;
   const loc = useLocation();
   // 사건 입력 페이지에서 고를 사건(할 일에서 누른 사건). 주소 ?type=으로도 연다.
   const [focus, setFocus] = useState<{ event: string; n: number } | null>(() => {
@@ -82,27 +103,44 @@ export default function App() {
       .catch((e: Error) => setErr(`API 연결 실패: ${e.message}`));
   }, [user?.login_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const run = useCallback(async (fn: () => Promise<View>) => {
+  // run은 API를 부르고 새 상태로 바꾼다. 성공 여부를 돌려줘 실패하면 페이지를 옮기지 않게 한다(오류 띠가 남도록).
+  const run = useCallback(async (fn: () => Promise<View>): Promise<boolean> => {
     setBusy(true);
     setErr(null);
     try {
       const nv = await fn();
       if (nv?.session?.id) setSession(nv.session.id, nv.session.kind); // 다음 호출부터 이 세션을 쓴다
+      const prev = vRef.current;
+      setNotice(prev ? noticeFor(prev, nv) : null);
       setV(nv);
+      return true;
     } catch (e) {
       if (e instanceof ApiError && e.view) setV(e.view);
       setErr(e instanceof Error ? e.message : String(e));
+      return false;
     } finally {
       setBusy(false);
     }
   }, []);
 
-  // 페이지를 바꾸면 지난 페이지의 오류 띠는 지운다.
-  useEffect(() => setErr(null), [loc.path]);
+  // 페이지를 바꾸면 지난 페이지의 오류 띠·완료 알림은 지운다.
+  useEffect(() => {
+    setErr(null);
+    setNotice(null);
+  }, [loc.path]);
 
-  if (user === undefined) return <main className="center">불러오는 중…</main>;
+  if (user === undefined) return <Loading />;
   if (user === null) return <LoginPage onLogin={(u) => { setErr(null); setUser(u); }} />;
-  if (!v) return <main className="center">{err ?? "불러오는 중…"}</main>;
+  if (!v)
+    return err ? (
+      <main className="center">
+        <EmptyState swan="error" title="서버에 연결하지 못했다" action={<button onClick={() => window.location.reload()}>다시 시도</button>}>
+          {err}
+        </EmptyState>
+      </main>
+    ) : (
+      <Loading />
+    );
   const dept: Department | undefined = deptOf(v, user.role_code);
   const go = (id: PageId) => navigate(pathOf(id));
   const logout = (next = "/login") => {
@@ -122,7 +160,7 @@ export default function App() {
   // 판단·제안의 "시뮬레이션에서 먼저 보기": 기준 세션이면 지금 상태를 분기한 시뮬레이션 세션을 만들고 시뮬레이션 페이지로 간다.
   const trySim = () => {
     if (v.session.kind !== "main") return go("sim");
-    run(() => api.fork(v.state.log?.length ?? 0, `${v.session.name} 시뮬레이션`)).then(() => go("sim"));
+    run(() => api.fork(v.state.log?.length ?? 0, `${v.session.name} 시뮬레이션`)).then((ok) => ok && go("sim"));
   };
 
   // 할 수 있는 일: 상태(서버)와 부서 권한(권한표)을 함께 본다
@@ -166,7 +204,7 @@ export default function App() {
       case "lines":
         return (<><LineBoardView v={v} /><SourceGapView v={v} /></>);
       case "log":
-        return <LogView v={v} onFork={dept ? (seq) => run(() => api.fork(seq)).then(() => go("sim")) : undefined} busy={busy} />;
+        return <LogView v={v} onFork={dept ? (seq) => run(() => api.fork(seq)).then((ok) => { if (ok) go("sim"); }) : undefined} busy={busy} />;
       case "event":
         return (
           <div className="split">
@@ -196,6 +234,19 @@ export default function App() {
         <SideNav v={v} dept={dept} current={page?.id} />
         <main className="page">
           {err && <div className="error" role="alert">{err}</div>}
+          {notice && (
+            <div className="notice" role="status">
+              <Swan name={notice.swan} size={72} />
+              <div className="notice-text">
+                <p className="notice-title">{notice.title}</p>
+                <p className="muted small">{notice.desc}</p>
+              </div>
+              <div className="row">
+                {notice.to && <Link to={notice.to} className="btn small-btn">{notice.toLabel}</Link>}
+                <button className="ghost small" onClick={() => setNotice(null)}>닫기</button>
+              </div>
+            </div>
+          )}
           {page ? (
             <>
               <PageHead page={page} />
@@ -203,8 +254,9 @@ export default function App() {
             </>
           ) : (
             <section className="card">
-              <h1>페이지를 찾을 수 없다</h1>
-              <p className="small muted">주소 {loc.path} · <Link to={pathOf("my")}>내 업무로</Link></p>
+              <EmptyState swan="notfound" title="페이지를 찾을 수 없다" action={<Link to={pathOf("my")} className="btn">내 업무로</Link>}>
+                {loc.path} — 주소가 바뀌었거나 없는 화면이다.
+              </EmptyState>
             </section>
           )}
         </main>
@@ -214,7 +266,7 @@ export default function App() {
 }
 
 // 결정 페이지: 상신된 제안안이 있으면 결정(E2)을 넣고, 지난 결정을 본다. 결정은 CEO/이사회 권한이다.
-function ApprovalsPage({ v, run, dept }: { v: View; run: (fn: () => Promise<View>) => Promise<void>; dept?: Department }) {
+function ApprovalsPage({ v, run, dept }: { v: View; run: (fn: () => Promise<View>) => Promise<unknown>; dept?: Department }) {
   const bid = v.state.bid;
   const waiting = bid?.state === "상신";
   return (
@@ -223,13 +275,22 @@ function ApprovalsPage({ v, run, dept }: { v: View; run: (fn: () => Promise<View
         <EventPanel v={v} run={run} dept={dept} only={["E2_DECISION"]} title={`결정 대기 · C-201 v${bid?.version ?? ""}`} />
       ) : (
         <section className="card">
-          <h2>결정 대기 0</h2>
-          <p className="small muted">
-            입찰 상태 {bid ? `${bid.state} · v${bid.version}` : "접수 전"}. 영업이 제안안을 상신하면(E8) 여기서 결정한다.
-          </p>
+          <EmptyState swan="waiting" title="결정 대기 0 · 상신을 기다리는 중" action={<Link to="/bids/C-201" className="btn ghost-btn">C-201 판단 보기</Link>}>
+            입찰 상태 {bid ? `${bid.state} · v${bid.version}` : "접수 전"}. 영업이 제안안을 상신하면(E8) CEO/이사회가 여기서 결정한다.
+          </EmptyState>
         </section>
       )}
       <DecisionsView v={v} />
     </>
+  );
+}
+
+// 처음 불러오는 동안: 로고와 글자만(장식 그림은 쓰지 않는다)
+function Loading() {
+  return (
+    <main className="center loading" aria-busy="true">
+      <BrandMark size={44} />
+      <span className="muted small">불러오는 중…</span>
+    </main>
   );
 }

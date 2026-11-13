@@ -4,6 +4,7 @@ import type { Account, Department, User, View } from "./types";
 import { Section } from "./panels";
 import { pct } from "./format";
 import { Link } from "./router";
+import { EmptyState } from "./brand";
 
 // 시연 흐름(이슈 #57): 로그인부터 부서 계정을 바꿔 가며 C-201 한 건을 끝까지 따라간다.
 // 사건 입력 → 데이터 확인 → 판단(엔진) → 사람 승인 → 작업·상태 갱신 → 다음 사건이 그 상태를 읽음(A01 이벤트 루프).
@@ -187,7 +188,7 @@ export function FlowPage({ v, user, onSwitch }: Props) {
             {now.roles.length > 0 && !now.roles.includes(user.role_code) && <span className="muted small"> · 지금 로그인: {user.name}({user.dept_label})</span>}
           </p>
         ) : (
-          <p className="flow-now"><b>끝까지 진행했다.</b> 입찰 상태 {v.state.bid?.state}</p>
+          <EmptyState compact swan="success" title="끝까지 진행했다">입찰 상태 {v.state.bid?.state}. 처음부터 다시 보이려면 아래 안내대로 기준 세션을 초기화한다.</EmptyState>
         )}
         <div className="scroll">
           <table className="grid text flow-table">

@@ -3,6 +3,8 @@ import { Kpi, Mode, Section } from "./panels";
 import { EVENT_LABEL, ea, eok, pct } from "./format";
 import { myWork } from "./perm";
 import type { PageId as Tab } from "./frame";
+import { EmptyState } from "./brand";
+import { Link } from "./router";
 
 const FEATURE_LABEL: Record<string, string> = {
   view: "조회",
@@ -131,13 +133,10 @@ function NowCard({ v, dept, actions, onAction }: { v: View; dept: Department; ac
           </div>
         </div>
       ) : (
-        <div className="now-text">
-          <p className="now-title">지금 내 부서 권한으로 넣을 사건은 없다</p>
-          <p className="muted small">
-            {cur?.who ? `입찰은 '${cur.label}' 단계이고 ${cur.who.label} 차례다.` : v.state.bid ? `입찰 상태: ${v.state.bid.state}.` : "입찰 접수 전이다."}
-            {blocked[0] ? ` 막힌 일: ${blocked[0].label} — ${blocked[0].reason}` : ""}
-          </p>
-        </div>
+        <EmptyState compact swan="done" title="지금 내 부서가 넣을 사건은 없다" action={<Link to="/flow" className="btn ghost-btn small-btn">시연 흐름 보기</Link>}>
+          {cur?.who ? `입찰은 '${cur.label}' 단계이고 ${cur.who.label} 차례다.` : v.state.bid ? `입찰 상태: ${v.state.bid.state}.` : "입찰 접수 전이다."}
+          {blocked[0] ? ` 막힌 일: ${blocked[0].label} — ${blocked[0].reason}` : ""}
+        </EmptyState>
       )}
       {dec && conds.length > 0 && (
         <>
