@@ -111,7 +111,7 @@ export default function App() {
         <div className="scenarios">
           <span className="muted small" title={`새 시뮬레이션 세션에서 돌린다 · 기준일 ${v.as_of}`}>시연</span>
           {v.scenarios.map((s) => (
-            <button key={s.id} title={`${s.description} — 새 시뮬레이션 세션에서 돌린다(지금 세션은 그대로)`} disabled={busy || !dept} onClick={() => run(() => api.scenario(s.id, v.as_of))}>{s.title}</button>
+            <button key={s.id} className="ghost" title={`${s.description} — 새 시뮬레이션 세션에서 돌린다(지금 세션은 그대로)`} disabled={busy || !dept} onClick={() => run(() => api.scenario(s.id, v.as_of))}>{s.title}</button>
           ))}
           <button className="ghost" disabled={busy || !canReset} title={canReset ? "지금 세션의 사건을 지우고 기준일부터 다시 시작한다" : "기준 세션 초기화는 운영 관리 부서만"} onClick={() => { if (window.confirm(`세션 "${v.session.name}"의 사건을 모두 지운다`)) run(() => api.reset(v.as_of)); }}>이 세션 초기화</button>
         </div>

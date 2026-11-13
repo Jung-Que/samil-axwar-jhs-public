@@ -1,42 +1,25 @@
+/* 팔레트(사용자 지정 2026-11-13, 이슈 #51): #FFFFFF #F2F2F2 #D7263D #4F4F4F #111111.
+   그 밖의 색은 쓰지 않는다(체크박스·라디오 accent-color만 예외). 의미는 채움·테두리·선 모양으로 구분하고 글자를 늘 함께 쓴다.
+   어두운 화면 모드는 두지 않는다. */
 :root {
-  --bg: #f6f7f9;
-  --card: #ffffff;
-  --fg: #16181d;
-  --muted: #646b78;
-  --line: #e2e5ea;
-  --accent: #1d5fd1;
-  --accent-soft: #e7efff;
-  --ok: #12703a;
-  --ok-soft: #e5f5ea;
-  --warn: #a35d00;
-  --warn-soft: #fff3df;
-  --bad: #b42318;
-  --bad-soft: #fdecea;
-  --gray-soft: #eef0f3;
-  --on-accent: #ffffff;
+  --bg: #F2F2F2;
+  --card: #FFFFFF;
+  --fg: #111111;
+  --muted: #4F4F4F;
+  --line: #F2F2F2;
+  --accent: #D7263D;
+  --accent-soft: #F2F2F2;
+  --ok: #111111;
+  --ok-soft: #F2F2F2;
+  --warn: #4F4F4F;
+  --warn-soft: #FFFFFF;
+  --bad: #D7263D;
+  --bad-soft: #FFFFFF;
+  --gray-soft: #F2F2F2;
+  --on-accent: #FFFFFF;
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111317;
-    --card: #191c22;
-    --fg: #eceef2;
-    --muted: #9aa1ad;
-    --line: #2c313a;
-    --accent: #7aa7ff;
-    --accent-soft: #1d2a44;
-    --ok: #5fcf86;
-    --ok-soft: #16301f;
-    --warn: #f0b45c;
-    --warn-soft: #36290f;
-    --bad: #ff8a80;
-    --bad-soft: #3a1c1a;
-    --gray-soft: #242830;
-    --on-accent: #0b1730;
-    color-scheme: dark;
-  }
-}
 
 * {
   box-sizing: border-box;
@@ -1209,4 +1192,430 @@ td.picked {
 
 .kpis.kpis-5 {
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+/* ===== 팔레트 의미 규칙(이슈 #51) =====
+   위급 = 빨강 채움 · 주의 = 빨강 테두리 · 진행 = 검정 채움 · 완료 = 회색 채움 · 중립 = 회색 테두리.
+   작동 상태: 실제 작동 실선 · 모의 파선 · 설계 단계 점선. #D7263D 글자는 흰 바탕 위에만(#F2F2F2 위 4.45:1). */
+input,
+select,
+textarea {
+  border-color: #4F4F4F;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: #D7263D;
+}
+
+button.ghost {
+  background: #FFFFFF;
+  color: #111111;
+  border-color: #111111;
+}
+
+button.danger {
+  color: #D7263D;
+  border-color: #D7263D;
+}
+
+.chip {
+  background: #FFFFFF;
+  border-color: #4F4F4F;
+  color: #111111;
+}
+
+.chip.strong {
+  background: #F2F2F2;
+  border-color: #111111;
+  color: #111111;
+}
+
+.chip.warn {
+  background: #111111;
+  border-color: #111111;
+  color: #FFFFFF;
+}
+
+.warn-text {
+  color: #4F4F4F;
+  font-weight: 600;
+}
+
+.error,
+.blocked {
+  background: #FFFFFF;
+  color: #D7263D;
+  border: 1px solid #D7263D;
+}
+
+.mode-real {
+  background: #FFFFFF;
+  color: #111111;
+  box-shadow: inset 0 0 0 1px #111111;
+}
+
+.mode-mock {
+  background: #FFFFFF;
+  color: #4F4F4F;
+  outline: 1px dashed #4F4F4F;
+  outline-offset: -1px;
+}
+
+.mode-design {
+  background: #F2F2F2;
+  color: #4F4F4F;
+  outline: 1px dotted #4F4F4F;
+  outline-offset: -1px;
+}
+
+.tab.active {
+  color: #111111;
+  border-bottom-color: #D7263D;
+}
+
+.tabgroup {
+  background: #FFFFFF;
+  color: #111111;
+  border-color: #FFFFFF;
+}
+
+.tabgroup.active {
+  background: #D7263D;
+  color: #FFFFFF;
+  border-color: #D7263D;
+}
+
+.kpi-ok {
+  border-left-color: #111111;
+}
+
+.kpi-warn {
+  border-left-color: #4F4F4F;
+}
+
+.kpi-bad {
+  border-left-color: #D7263D;
+}
+
+/* 플래그: 막힘 = 빨강 테두리, 위험 = 검정 테두리, 미확인 = 회색 채움 */
+.flag-차단 {
+  background: #FFFFFF;
+  box-shadow: inset 0 0 0 1px #D7263D;
+}
+
+.flag-차단 .flag-level {
+  color: #D7263D;
+}
+
+.flag-위험 {
+  background: #FFFFFF;
+  box-shadow: inset 0 0 0 1px #111111;
+}
+
+.flag-미확인 {
+  background: #F2F2F2;
+}
+
+.flag-미확인 .flag-level {
+  color: #4F4F4F;
+}
+
+/* 출처: 원본·회신 반영 = 회색 채움, 가정·합성·모의 가정 = 파선 테두리 */
+.tag,
+.rule,
+.role {
+  background: #F2F2F2;
+  border-color: #F2F2F2;
+  color: #4F4F4F;
+}
+
+.tag-합성,
+.tag-모의-가정,
+.tag-가정 {
+  background: #FFFFFF;
+  color: #4F4F4F;
+  border: 1px dashed #4F4F4F;
+}
+
+.tag-회신-반영,
+.tag-원본 {
+  background: #F2F2F2;
+  color: #111111;
+  border-color: #F2F2F2;
+}
+
+.row-bad td {
+  color: #D7263D;
+}
+
+td.warn {
+  background: #F2F2F2;
+  color: #111111;
+  font-weight: 700;
+}
+
+.sup {
+  background: #F2F2F2;
+  color: #111111;
+}
+
+.sup-cond {
+  background: #FFFFFF;
+  color: #4F4F4F;
+  outline: 1px dashed #4F4F4F;
+  outline-offset: -1px;
+}
+
+/* 상태 알약 */
+.pill {
+  background: #FFFFFF;
+  color: #4F4F4F;
+  box-shadow: inset 0 0 0 1px #4F4F4F;
+}
+
+.pill-미확정,
+.pill-낡음,
+.pill-기한-초과,
+.status-초과,
+.tone-bad,
+.churn-AT_RISK {
+  background: #D7263D;
+  color: #FFFFFF;
+  box-shadow: none;
+}
+
+.pill-잠정,
+.status-포화,
+.tone-warn,
+.churn-WATCH {
+  background: #FFFFFF;
+  color: #D7263D;
+  box-shadow: inset 0 0 0 1px #D7263D;
+}
+
+.pill-요청,
+.pill-진행,
+.status-신규,
+.tone-accent {
+  background: #111111;
+  color: #FFFFFF;
+  box-shadow: none;
+}
+
+.pill-제안됨,
+.pill-최신,
+.pill-반영,
+.pill-출하-완료,
+.status-여유,
+.tone-ok,
+.churn-정상 {
+  background: #F2F2F2;
+  color: #111111;
+  box-shadow: none;
+}
+
+.tone-gray {
+  background: #FFFFFF;
+  color: #4F4F4F;
+  box-shadow: inset 0 0 0 1px #4F4F4F;
+}
+
+.log > li {
+  border-left-color: #4F4F4F;
+}
+
+.lane-blocked {
+  background: #FFFFFF;
+  box-shadow: inset 0 0 0 1px #D7263D;
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.lane-blocked ul {
+  color: #D7263D;
+}
+
+.lb-orders {
+  background: #4F4F4F;
+}
+
+.lb-c201 {
+  background: repeating-linear-gradient(45deg, #111111 0 2px, #FFFFFF 2px 4px);
+}
+
+/* 맥락 막대: 시뮬레이션 세션은 검정 */
+.context.is-sim {
+  border: 2px solid #111111;
+}
+
+.ctx-role {
+  background: #F2F2F2;
+}
+
+.ctx-role.no-role {
+  background: #FFFFFF;
+  box-shadow: inset 0 0 0 2px #D7263D;
+}
+
+.context.is-sim .ctx-session {
+  background: #111111;
+  color: #FFFFFF;
+}
+
+.context.is-sim .ctx-session .ctx-label,
+.context.is-sim .ctx-session .muted,
+.context.is-sim .ctx-session .warn-text,
+.context.is-sim .ctx-session b {
+  color: #FFFFFF;
+}
+
+.context.is-sim .ctx-session button.ghost {
+  background: #FFFFFF;
+  color: #111111;
+  border-color: #FFFFFF;
+}
+
+.context.is-sim .ctx-session button.danger {
+  color: #D7263D;
+}
+
+.ctx-more summary,
+.more-tables > summary {
+  color: #111111;
+  text-decoration: underline;
+}
+
+/* 내 업무 */
+.now-card.has-action {
+  border-color: #111111;
+}
+
+.flow-step {
+  background: #FFFFFF;
+  outline: 1px dashed #4F4F4F;
+  outline-offset: -1px;
+}
+
+.flow-step.is-done {
+  background: #F2F2F2;
+  outline: none;
+}
+
+.flow-step.is-done .flow-title {
+  color: #111111;
+}
+
+.flow-step.is-now {
+  background: #FFFFFF;
+  outline: 2px solid #D7263D;
+  outline-offset: -2px;
+}
+
+.flow-step.is-now .flow-title {
+  color: #D7263D;
+}
+
+.flow-step.is-stop {
+  background: #FFFFFF;
+  outline: none;
+  box-shadow: inset 0 0 0 1px #D7263D;
+}
+
+.flow-step.is-stop .flow-title {
+  color: #D7263D;
+}
+
+/* 판단·제안: 공급 막대. 출처는 채움·줄무늬로, 조건부는 파선으로 구분 */
+.supshort {
+  color: #D7263D;
+}
+
+.supcol.is-changed .supbar {
+  outline-color: #111111;
+}
+
+.supdemand {
+  border-top-color: #111111;
+}
+
+.seg-base {
+  background: #4F4F4F;
+}
+
+.seg-opt02 {
+  background: #111111;
+}
+
+.seg-opt01 {
+  background: repeating-linear-gradient(45deg, #111111 0 3px, #FFFFFF 3px 6px);
+}
+
+.seg-other {
+  background: #F2F2F2;
+  box-shadow: inset 0 0 0 1px #111111;
+}
+
+.seg-base.cond {
+  background: #F2F2F2;
+  outline: 1px dashed #4F4F4F;
+  outline-offset: -1px;
+}
+
+.seg-opt02.cond {
+  background: #FFFFFF;
+  outline: 1px dashed #111111;
+  outline-offset: -1px;
+}
+
+.seg-opt01.cond {
+  background: repeating-linear-gradient(45deg, #F2F2F2 0 4px, #FFFFFF 4px 8px);
+  outline: 1px dashed #111111;
+  outline-offset: -1px;
+}
+
+.seg-other.cond {
+  background: #FFFFFF;
+  box-shadow: none;
+  outline: 1px dashed #4F4F4F;
+  outline-offset: -1px;
+}
+
+.swatch-line {
+  border-top-color: #111111;
+}
+
+.ask {
+  background: #FFFFFF;
+  border-color: #111111;
+  color: #111111;
+}
+
+.ask.is-late {
+  background: #D7263D;
+  border-color: #D7263D;
+  color: #FFFFFF;
+}
+
+/* 시뮬레이션: 세션 목록 */
+.sess-item.is-main {
+  border-color: #111111;
+}
+
+.sess-item.is-current.is-sim {
+  background: #111111;
+  border-color: #111111;
+  color: #FFFFFF;
+}
+
+.sess-item.is-current.is-sim .muted {
+  color: #FFFFFF;
+}
+
+.sess-item.is-current.is-main {
+  background: #F2F2F2;
+}
+
+td.picked {
+  outline-color: #D7263D;
 }

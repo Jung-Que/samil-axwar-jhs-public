@@ -74,11 +74,11 @@ export function TabNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) 
   );
 }
 
-// 입찰 상태 색: 진행 중(강조)·승인 쪽(ok)·되돌림(warn)·실주(bad).
+// 입찰 상태 표시(팔레트, 이슈 #51): 진행 = 검정 채움 · 승인·수주 = 회색 채움 · 조건부·재검토·보류 = 빨강 테두리 · 실주 = 빨강 채움.
 export function bidTone(state?: string): string {
   if (!state || state === "검토중") return "tone-gray";
-  if (state === "승인" || state === "조건부 승인" || state === "수주") return "tone-ok";
-  if (state === "재검토" || state === "보류") return "tone-warn";
+  if (state === "승인" || state === "수주") return "tone-ok";
+  if (state === "조건부 승인" || state === "재검토" || state === "보류") return "tone-warn";
   if (state === "실주") return "tone-bad";
   return "tone-accent";
 }

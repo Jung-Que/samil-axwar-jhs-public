@@ -151,7 +151,14 @@ export function SimulationView({ v, run, busy, dept, goTab }: { v: View; run: Ru
     if (!(hi > lo)) return undefined;
     const t = (val - lo) / (hi - lo);
     const good = GOOD.has(metric) ? t : 1 - t;
-    return { background: `color-mix(in srgb, var(--ok) ${Math.round(good * 40)}%, color-mix(in srgb, var(--bad) ${Math.round((1 - good) * 30)}%, transparent))` };
+    // 팔레트 4단계(이슈 #51): 흰색 → #F2F2F2 → #4F4F4F → #111111. 진할수록 좋음.
+    const step = Math.min(3, Math.floor(good * 4));
+    return [
+      { background: "#FFFFFF", color: "#111111" },
+      { background: "#F2F2F2", color: "#111111" },
+      { background: "#4F4F4F", color: "#FFFFFF" },
+      { background: "#111111", color: "#FFFFFF" },
+    ][step];
   };
   const formRef = useRef<HTMLDivElement>(null);
   const [picked, setPicked] = useState<string | null>(null);
