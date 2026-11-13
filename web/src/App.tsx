@@ -11,6 +11,10 @@ import { canEvent, deptOf } from "./perm";
 import { ClockTools, ModeBand, PageHead, SessionTools, SideNav, TopBar, pageById, pageFor, pathOf, type Page, type PageId } from "./frame";
 import { Link, navigate, useLocation } from "./router";
 import { AccessPage, LoginPage } from "./login";
+import { FlowBar, FlowPage } from "./flowViews";
+
+// 로그인 뒤 돌아갈 주소(?next=). 이 앱 안의 경로만 받는다(다른 사이트로 보내지 않게).
+const safeNext = (n: string | null) => (n && n.startsWith("/") && !n.startsWith("//") && !n.startsWith("/login") ? n : null);
 
 // 바로 기록해도 되는 사건(입력 필드가 필요 없음). 나머지는 사건 입력 페이지로 보낸다.
 const DIRECT: Record<string, { actor: string; payload: unknown }> = {
@@ -47,11 +51,17 @@ export default function App() {
       .catch(() => setUser(null));
   }, []);
 
-  // 로그인 여부에 맞춰 주소를 맞춘다: 로그인 전에는 /login만, 로그인 뒤 /login·/ 이면 내 업무로.
+  // 로그인 여부에 맞춰 주소를 맞춘다: 로그인 전에는 /login만, 로그인 뒤 /login·/ 이면 ?next= 또는 내 업무로.
   useEffect(() => {
     if (user === null && loc.path !== "/login") navigate("/login", true);
-    else if (user && (loc.path === "/login" || loc.path === "/")) navigate(pathOf("my"), true);
-  }, [user, loc.path]);
+    else if (user && (loc.path === "/login" || loc.path === "/")) navigate(safeNext(loc.query.get("next")) ?? pathOf("my"), true);
+  }, [user, loc]);
+
+  // 사건 입력 페이지를 ?type=으로 열면 그 사건을 고른다(시연 흐름·할 일의 링크).
+  useEffect(() => {
+    const t = loc.query.get("type");
+    if (loc.path === pathOf("event") && t) setFocus({ event: t, n: Date.now() });
+  }, [loc]);
 
   useEffect(() => {
     if (!user) return;
@@ -102,8 +112,9 @@ export default function App() {
       navigate(next);
     });
   };
-  // 입찰 흐름의 "다음 차례" 부서 계정으로 다시 로그인(로그인 페이지가 그 부서 계정을 미리 고른다)
-  const switchTo = (roleCode: string) => logout(`/login?role=${encodeURIComponent(roleCode)}`);
+  // "다음 차례" 부서 계정으로 다시 로그인: 로그인 페이지가 그 부서 계정을 미리 고르고, 로그인 뒤 next 페이지로 간다.
+  const switchTo = (roleCode: string, next?: string) =>
+    logout(`/login?role=${encodeURIComponent(roleCode)}${next ? `&next=${encodeURIComponent(next)}` : ""}`);
   const openEvent = (event: string) => {
     setFocus({ event, n: Date.now() });
     navigate(`${pathOf("event")}?type=${encodeURIComponent(event)}`);
@@ -133,7 +144,9 @@ export default function App() {
   const body = (p: Page) => {
     switch (p.id) {
       case "my":
-        return <MyWorkView v={v} dept={dept} onAction={onAction} onChoose={switchTo} onFocus={openEvent} goTab={go} />;
+        return <MyWorkView v={v} dept={dept} onAction={onAction} onChoose={(code) => switchTo(code, pathOf("my"))} onFocus={openEvent} goTab={go} />;
+      case "flow":
+        return <FlowPage v={v} user={user} dept={dept} onSwitch={switchTo} />;
       case "judge":
         return <JudgeView v={v} dept={dept} onAction={onAction} onTrySim={trySim} />;
       case "capacity":
@@ -178,6 +191,7 @@ export default function App() {
     <div className="shell">
       <TopBar v={v} run={run} busy={busy} user={user} onLogout={() => logout()} />
       <ModeBand v={v} run={run} busy={busy} />
+      {page?.id !== "flow" && <FlowBar v={v} user={user} dept={dept} onSwitch={switchTo} />}
       <div className="shell-body">
         <SideNav v={v} dept={dept} current={page?.id} />
         <main className="page">

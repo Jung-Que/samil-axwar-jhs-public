@@ -12,6 +12,7 @@ type Run = (fn: () => Promise<View>) => Promise<void>;
 
 export const PAGES = [
   { id: "my", path: "/my", group: "", label: "내 업무", title: "내 업무", desc: "내 부서가 지금 할 일, 나에게 온 확인 요청과 작업" },
+  { id: "flow", path: "/flow", group: "", label: "시연 흐름", title: "시연 흐름", desc: "로그인부터 부서 계정을 바꿔 가며 C-201 한 건을 끝까지 따라간다(사건 → 판단 → 승인 → 작업·상태 → 다음 사건)" },
   { id: "judge", path: "/bids/C-201", group: "입찰", label: "C-201 판단·제안", title: "C-201 판단·제안", desc: "엔진 계산(능력 스냅샷 기준) · 월별 공급 · 플래그와 물을 곳" },
   { id: "capacity", path: "/bids/C-201/capacity", group: "입찰", label: "여유·증설안", title: "여유·증설안", desc: "라인 여유(R1), 증설·전환안 적격 능력일(R3), OPT-01 비교" },
   { id: "inbox", path: "/intake", group: "입찰", label: "접수함", title: "접수함", desc: "업무일까지 최근 며칠 동안 들어온 주문·신청(원본 기록)" },

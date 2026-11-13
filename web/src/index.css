@@ -1753,3 +1753,144 @@ table.grid.text td.nowrap,
 .login-accounts button {
   white-space: nowrap;
 }
+
+/* ===== 시연 흐름(이슈 #57) ===== */
+.flowbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-height: 38px;
+  padding: 4px 16px;
+  background: #FFFFFF;
+  border-bottom: 1px solid #F2F2F2;
+  font-size: 13px;
+}
+
+.flowbar-title {
+  font-weight: 700;
+  color: #111111;
+}
+
+.flowbar .row {
+  margin-left: auto;
+}
+
+a.btn.small-btn {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.loop-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+  margin: 4px 0 12px;
+  padding: 0;
+  list-style: none;
+  counter-reset: loop;
+}
+
+.loop-strip li {
+  counter-increment: loop;
+  padding: 6px 8px;
+  border: 1px solid #4F4F4F;
+  border-radius: 6px;
+  background: #FFFFFF;
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.loop-strip li::before {
+  content: counter(loop) " ";
+  font-weight: 700;
+}
+
+.loop-strip li.on {
+  background: #111111;
+  border-color: #111111;
+  color: #FFFFFF;
+  font-weight: 700;
+}
+
+.flow-now {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  box-shadow: inset 3px 0 0 #111111;
+  background: #F2F2F2;
+}
+
+.flow-table tr.fs-now td {
+  background: #FFFFFF;
+  box-shadow: inset 0 1px 0 #111111, inset 0 -1px 0 #111111;
+}
+
+.flow-table tr.fs-now td:first-child {
+  box-shadow: inset 3px 0 0 #111111, inset 0 1px 0 #111111, inset 0 -1px 0 #111111;
+}
+
+.flow-table tr.fs-wait td,
+.flow-table tr.fs-skip td {
+  color: #4F4F4F;
+}
+
+.fs-pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid transparent;
+}
+
+.fs-pill-now {
+  background: #111111;
+  color: #FFFFFF;
+}
+
+.fs-pill-done {
+  background: #F2F2F2;
+  color: #111111;
+}
+
+.fs-pill-open {
+  background: #FFFFFF;
+  border-color: #4F4F4F;
+  color: #111111;
+}
+
+.fs-pill-skip {
+  background: #FFFFFF;
+  border: 1px dashed #4F4F4F;
+  color: #4F4F4F;
+}
+
+.fs-pill-wait {
+  color: #4F4F4F;
+}
+
+.flow-order {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
+
+.flow-order li {
+  padding: 2px 0;
+}
+
+.flow-order li.on {
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 #111111;
+  padding-left: 6px;
+}
+
+@media (max-width: 900px) {
+  .loop-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .flowbar .row {
+    margin-left: 0;
+  }
+}

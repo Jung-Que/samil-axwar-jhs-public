@@ -3,6 +3,7 @@ import { ApiError, auth } from "./api";
 import type { AccessTables, Account, User, View } from "./types";
 import { Section } from "./panels";
 import { PermissionTable } from "./roleViews";
+import { FLOW_ORDER } from "./flowViews";
 
 // 로그인 페이지(이슈 #55). 시연용: 부서마다 계정 하나(처음 뜰 때 서버가 넣는다), 회원 가입·비밀번호 변경은 없다.
 // 주소 ?role=production 이면 그 부서 계정을 미리 고른다(입찰 흐름에서 "다음 차례" 부서로 다시 로그인할 때).
@@ -102,6 +103,18 @@ export function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
             </tbody>
           </table>
         </div>
+        <h3>시연 순서</h3>
+        <p className="muted small">C-201 한 건을 부서 계정을 바꿔 가며 따라간다. 로그인한 뒤 "시연 흐름" 페이지가 지금 차례를 알려 준다.</p>
+        <ol className="flow-order small">
+          {FLOW_ORDER.map((f, i) => {
+            const a = accounts.find((x) => x.role_code === f.role);
+            return (
+              <li key={i} className={f.role === wantRole ? "on" : ""}>
+                <b>{a ? `${a.name}(${a.login_id})` : f.role}</b> {a?.dept_label} — {f.what}
+              </li>
+            );
+          })}
+        </ol>
       </section>
     </div>
   );
