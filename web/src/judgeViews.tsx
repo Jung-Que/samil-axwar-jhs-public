@@ -158,7 +158,6 @@ function FlagsCard({ v }: { v: View }) {
   const flags = [...(s.evaluation.flags ?? [])].sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]);
   const open = (s.requests ?? []).filter((r) => r.state !== "반영");
   const askFor = (f: Flag) => open.filter((r) => (r.blocks ?? []).includes(f.rule));
-  const last = s.log?.[s.log.length - 1];
   return (
     <Section title={`미확인·위험·차단 (${flags.length})`} mode={["real"]} note="판단을 막는 항목과, 해당 항목을 확인 요청한 대상(열린 확인 요청)을 함께 표시합니다.">
       <ul className="flags">
@@ -182,22 +181,6 @@ function FlagsCard({ v }: { v: View }) {
           );
         })}
       </ul>
-      {last && (
-        <>
-          <h3>직전 사건의 변화 · {EVENT_LABEL[last.event.type] ?? last.event.type}</h3>
-          <ul className="change-list small">
-            {(last.changes ?? []).slice(0, 3).map((c) => <li key={c}>{c}</li>)}
-          </ul>
-          {(last.changes ?? []).length > 3 && (
-            <details className="table-view">
-              <summary className="small">변경 {(last.changes ?? []).length - 3}개 더 보기</summary>
-              <ul className="change-list small">
-                {(last.changes ?? []).slice(3).map((c) => <li key={c}>{c}</li>)}
-              </ul>
-            </details>
-          )}
-        </>
-      )}
       {s.last_blocks && s.last_blocks.length > 0 && <p className="blocked">제출 차단: {s.last_blocks.join(" / ")}</p>}
     </Section>
   );
@@ -283,6 +266,8 @@ export function JudgeView({ v, dept, onAction, onTrySim }: { v: View; dept?: Dep
   const c = ev.compare_opt01;
   return (
     <>
+      <StaleBanner v={v} dept={dept} />
+      <LastChange v={v} />
       <Section title="판단 요약" mode={["real"]} note={s.bid ? "숫자는 엔진이 원본에서 다시 계산하고, 승인은 권한 부서가 진행합니다. 출처는 '숫자의 출처'에서 확인할 수 있습니다." : "RFP 접수 전 사전 계산입니다. RFP 원본 값과 능력 스냅샷으로 미리 계산했으며, RFP를 접수하면(E1) 확인 요청과 함께 다시 계산합니다."}>
         {!s.bid && <span className="tag pre-calc">접수 전 사전 계산</span>}
         <div className="kpis kpis-5">
@@ -313,5 +298,103 @@ export function JudgeView({ v, dept, onAction, onTrySim }: { v: View; dept?: Dep
         </p>
       )}
     </>
+  );
+}
+
+// ---- 개선 6·7(이슈 #81): 재검토 띠, 직전 사건의 변화, 상신안 요약, 상신안 대 결정 ----
+
+// 직전 사건의 변화: 판단 요약 위에 둔다(무엇이 바뀌었는지 먼저)
+function LastChange({ v }: { v: View }) {
+  const last = v.state.log?.[v.state.log.length - 1];
+  if (!last) return null;
+  const ch = last.changes ?? [];
+  return (
+    <Section title={`직전 사건의 변화 · 사건 #${last.event.seq} ${EVENT_LABEL[last.event.type] ?? last.event.type}`} mode={["real"]}>
+      <ul className="change-list small">
+        {ch.slice(0, 3).map((c) => <li key={c}>{c}</li>)}
+      </ul>
+      {ch.length > 3 && (
+        <details className="table-view">
+          <summary className="small">변경 {ch.length - 3}개 더 보기</summary>
+          <ul className="change-list small">{ch.slice(3).map((c) => <li key={c}>{c}</li>)}</ul>
+        </details>
+      )}
+    </Section>
+  );
+}
+
+// 재검토 띠: 결정이 낡으면 맨 위에 이유와 다음 행동(재상신)
+function StaleBanner({ v, dept }: { v: View; dept?: Department }) {
+  const s = v.state;
+  const stale = [...(s.decisions ?? [])].reverse().find((d) => d.freshness === "낡음");
+  if (s.bid?.state !== "재검토" && !(stale && s.bid?.state !== "상신")) return null;
+  const cause = [...(s.log ?? [])].reverse().find((e) => e.event.type === "E4_BUYER_REPLY" || e.event.type === "E9_SIM_ASSUMPTION" || e.event.type === "E3_REPLY");
+  const blocks = (s.evaluation.flags ?? []).filter((f) => f.level === "차단");
+  const canResubmit = canEvent(v, dept, "E8_SUBMIT_APPROVAL").ok && !canEvent(v, dept, "E8_SUBMIT_APPROVAL").proxy;
+  return (
+    <section className="card stale-banner" role="alert">
+      <div className="stale-text">
+        <p className="stale-title">{stale ? `결정 ${stale.decision_id} 낡음 · ` : ""}재상신이 필요합니다</p>
+        <p className="small">
+          {cause ? <>원인: 사건 #{cause.event.seq} {EVENT_LABEL[cause.event.type] ?? cause.event.type}{(cause.changes ?? []).length ? ` — ${(cause.changes ?? []).slice(0, 2).join(" · ")}` : ""}</> : "승인 뒤 조건이 바뀌었습니다."}
+        </p>
+        {blocks.length > 0 && <p className="small">막힘 {blocks.length}건: {blocks.map((f) => `${f.rule} ${f.message.split(".")[0]}`).join(" · ")}</p>}
+      </div>
+      {canResubmit ? (
+        <Link to="/events/new?type=E8_SUBMIT_APPROVAL" className="btn">재상신(E8) 하러 가기</Link>
+      ) : (
+        <span className="small muted">영업이 바뀐 조건으로 재상신합니다</span>
+      )}
+    </section>
+  );
+}
+
+// 상신안 요약: CEO/이사회가 결정 화면 하나로 무엇을 결정하는지 본다
+export function ProposalSummary({ v }: { v: View }) {
+  const s = v.state;
+  const ev = s.evaluation;
+  const p1 = ev.products["PL-01"];
+  const p2 = ev.products["PL-02"];
+  const l1 = s.lines?.find((l) => l.product_id === "PL-01");
+  const flags = ev.flags ?? [];
+  const n = (lv: string) => flags.filter((f) => f.level === lv).length;
+  const openReq = (s.requests ?? []).filter((r) => r.state !== "반영").length;
+  return (
+    <Section title={`결정할 상신안 · C-201 v${s.bid?.version ?? ""}`} mode={["real"]} note="엔진이 원본으로 계산한 상신안입니다. 막힘·위험·미확인은 C-201 판단·제안에서 자세히 확인할 수 있습니다.">
+      <div className="kpis kpis-5">
+        <Kpi label="PL-02 제안" value={`${ea(p2?.schedule_total)} EA`} sub={`공급률 ${pct(p2?.coverage_pct)}`} tone={p2 && p2.coverage_pct < 100 ? "warn" : "ok"} />
+        <Kpi label="PL-01 기초" value={l1?.qty_status === "미확정" || !l1 ? "수량 미확정" : `${ea(p1?.schedule_total)} EA`} sub={`확인 전 상한 월 ${ea(p1?.months?.[0]?.supply)} EA`} tone="bad" />
+        <Kpi label="지체상금(전량 약속 시)" value={eok((p1?.penalty_backlog_krw ?? 0) + (p2?.penalty_backlog_krw ?? 0))} sub={`계약 총액 기준 ${eok(ev.penalty_contract_krw)}`} tone="bad" />
+        <Kpi label="연 공헌이익(제안 기준)" value={eok((p1?.contrib_schedule_krw ?? 0) + (p2?.contrib_schedule_krw ?? 0), 1)} sub={`단가 인하 ${pct(ev.scenario.price_cut * 100)}`} tone="ok" />
+        <Kpi label="막힘 · 위험 · 미확인" value={`${n("차단")} · ${n("위험")} · ${n("미확인")}`} sub={`열린 확인 요청 ${openReq}건`} tone={n("차단") ? "bad" : "warn"} />
+      </div>
+      <p className="small" style={{ margin: "6px 0 0" }}>
+        증설·전환안: {ev.options.map((o) => `${o.option_id} ${o.type} · ${o.status} · 산입 ${o.start_month}~`).join(" / ")} · <Link to="/bids/C-201">판단·제안 자세히</Link>
+      </p>
+    </Section>
+  );
+}
+
+// 상신안 대 결정: 결정 뒤 무엇을 그대로 받고 무엇을 바꿨는지
+export function DecisionCompare({ v }: { v: View }) {
+  const s = v.state;
+  const d = [...(s.decisions ?? [])].reverse()[0];
+  if (!d) return null;
+  const ev = s.evaluation;
+  const rows: [string, string, string][] = [
+    ["참여", "참여(상신안)", d.participation],
+    ...ev.options.map((o): [string, string, string] => [o.option_id, `${o.type} · ${o.status}`, d.options?.[o.option_id] ?? "언급없음"]),
+    ["조건", "-", (d.conditions ?? []).map((c) => v.condition_codes[c] ?? c).join(" · ") || "없음"],
+    ["인하 하한", "-", d.price_floor === null ? "-" : pct(d.price_floor * 100)],
+  ];
+  return (
+    <Section title={`상신안 대 결정 · ${d.decision_id}(${d.freshness})`} mode={["real"]}>
+      <table className="grid text">
+        <thead><tr><th className="c-fit">항목</th><th className="c-text-s">상신안(엔진)</th><th className="c-text">결정</th></tr></thead>
+        <tbody>
+          {rows.map(([k, a, b]) => <tr key={k}><td className="c-fit">{k}</td><td className="c-text-s">{a}</td><td className="c-text"><b>{b}</b></td></tr>)}
+        </tbody>
+      </table>
+    </Section>
   );
 }

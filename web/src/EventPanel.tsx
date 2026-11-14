@@ -111,7 +111,7 @@ export function EventPanel({ v, run, focus, dept, only, title }: { v: View; run:
 
   return (
     <Section title={title ?? EVENT_LABEL[type] ?? "사건 입력"} mode={["real", "mock"]} note="바이어·이사회 회신은 모의 값이며, 규칙에 맞지 않는 사건은 거부되어 기록되지 않습니다.">
-      <label className="field">
+      {!(only && only.length === 1) && <label className="field">
         <span>사건</span>
         <select value={type} onChange={(e) => setType(e.target.value)}>
           {Object.entries(EVENT_LABEL)
@@ -126,7 +126,7 @@ export function EventPanel({ v, run, focus, dept, only, title }: { v: View; run:
               );
             })}
         </select>
-      </label>
+      </label>}
       {dept && v.session.kind === "main" && (dept.events ?? []).every((e) => e === "E3_REPLY") && (dept.replies ?? []).length > 0 && (
         <p className="small muted">{dept.label} 부서는 확인 요청 회신({(dept.replies ?? []).join("·")})을 입력합니다. 내 업무 또는 확인 요청 페이지에서 입력해 주세요.</p>
       )}
@@ -164,6 +164,7 @@ export function EventPanel({ v, run, focus, dept, only, title }: { v: View; run:
       {type === "E8_SUBMIT_APPROVAL" && (
         <label className="field"><span>상신 메모</span><input value={String(simple.note)} onChange={(e) => setSimple({ ...simple, note: e.target.value })} placeholder="엔진 제안안 상신" /></label>
       )}
+      {type === "E7_SUBMIT_PROPOSAL" && <SubmitChecklist v={v} />}
       {!kind && (
         <button onClick={submit} disabled={!avail[type]}>{EVENT_LABEL[type]} 기록</button>
       )}
@@ -223,7 +224,7 @@ function DecisionForm({ f, set, codes }: { f: Fields; set: (f: Fields) => void; 
       </div>
       <div className="checks">
         {Object.entries(codes).map(([c, t]) => (
-          <label key={c}><input type="checkbox" checked={conds.includes(c)} onChange={() => toggle(c)} /> <code>{c}</code> {t}</label>
+          <label key={c} title={c}><input type="checkbox" checked={conds.includes(c)} onChange={() => toggle(c)} /> {t}</label>
         ))}
       </div>
       <label className="field"><span>요지</span><input value={String(f.note ?? "")} onChange={(e) => set({ ...f, note: e.target.value })} /></label>
@@ -429,6 +430,27 @@ function ReplyForm({ r, run, done }: { r: ConfirmRequest; run: Run; done: () => 
       {r.request_id === "CR-09" && <p className="muted small">회신 권한: 영업 임원(기존 고객 약속 조정). 다른 역할이 입력하면 거절됩니다.</p>}
       {(r.request_id === "CR-10" || r.request_id === "CR-11") && <p className="muted small">회신을 기록하면 후속 작업이 생성됩니다. 엔진 계산 반영(타 라인 공급, 추정 납기 대체)은 설계 단계입니다.</p>}
       <button onClick={send}>회신 기록(E3)</button>
+    </div>
+  );
+}
+
+// 제출 전 점검표(이슈 #81): 최신 결정의 승인 조건과 지금 막힘. 제출하면 엔진이 다시 확인하고, 통과하지 못하면 기록되지 않는다.
+function SubmitChecklist({ v }: { v: View }) {
+  const d = [...(v.state.decisions ?? [])].reverse().find((x) => x.freshness === "최신");
+  const conds = d?.conditions ?? [];
+  const blocks = (v.state.evaluation.flags ?? []).filter((f) => f.level === "차단");
+  return (
+    <div className="checklist">
+      <p className="small"><b>제출 전 점검표</b>{d ? ` · 결정 ${d.decision_id}(${d.participation})` : " · 최신 결정이 없습니다"}</p>
+      <ul className="small">
+        {conds.map((c) => <li key={c} title={c}>{v.condition_codes[c] ?? c}</li>)}
+        {conds.length === 0 && <li>승인 조건 없음</li>}
+      </ul>
+      {blocks.length > 0 ? (
+        <p className="small bad">막힘 {blocks.length}건: {blocks.map((f) => f.rule).join(", ")} — 해소되지 않으면 제출이 거부될 수 있습니다.</p>
+      ) : (
+        <p className="small muted">현재 막힘이 없습니다. 제출하면 엔진이 점검표를 다시 확인합니다.</p>
+      )}
     </div>
   );
 }

@@ -606,7 +606,7 @@ export function DecisionsView({ v }: { v: View }) {
             {d.price_floor !== null && ` · 단가 인하 하한 ${pct(d.price_floor * 100)}`}
           </div>
           <ul className="conds">
-            {(d.conditions ?? []).map((c) => <li key={c}><code>{c}</code> {v.condition_codes[c]}</li>)}
+            {(d.conditions ?? []).map((c) => <li key={c} title={c}>{v.condition_codes[c] ?? c}</li>)}
           </ul>
           {d.note && <div className="muted small">{d.note}</div>}
         </div>

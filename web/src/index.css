@@ -3041,3 +3041,39 @@ li:focus-within .log-fork,
     display: none;
   }
 }
+
+/* ===== 시연 리뷰 개선 6·7(이슈 #81) ===== */
+.stale-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  box-shadow: inset 4px 0 0 #D7263D;
+}
+
+.stale-text p {
+  margin: 0;
+}
+
+.stale-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #D7263D;
+}
+
+.checklist {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #F2F2F2;
+}
+
+.checklist p {
+  margin: 0;
+}
+
+.checklist ul {
+  margin: 4px 0;
+  padding-left: 18px;
+}
