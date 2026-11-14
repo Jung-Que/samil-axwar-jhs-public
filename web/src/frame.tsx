@@ -182,50 +182,49 @@ export function PageHead({ page, children }: { page: Page; children?: ReactNode 
 const PRESETS = ["2024-12-31", "2025-06-30", "2025-12-31", "2026-03-31", "2026-06-30", "2026-07-01"];
 
 export function SessionTools({ v, run, busy, dept }: { v: View; run: Run; busy: boolean; dept?: Department }) {
+  // 새 세션을 만드는 길을 한 카드에 모은다(이슈 #71): 시연 시나리오 실행 · 다른 기준일로 시작. 현재 세션 초기화·삭제는 카드 머리에.
   const [pick, setPick] = useState(v.as_of);
+  const [sc, setSc] = useState(v.scenarios[0]?.id ?? "");
   useEffect(() => setPick(v.as_of), [v.as_of]);
   const cur = v.session;
   const isMain = cur.kind === "main";
   const canReset = isMain ? canFeature(dept, "main.reset") : canFeature(dept, "sim.session");
   const canDrop = canFeature(dept, "session.delete");
+  const noRole = "로그인한 계정의 역할을 찾을 수 없습니다. 다시 로그인해 주세요.";
+  const chosen = v.scenarios.find((x) => x.id === sc);
   return (
-    <div className="cols">
-      <section className="card">
-        <h2>시연 시나리오</h2>
-        <p className="muted small">새 시뮬레이션 세션을 생성해 고정 입력값으로 끝까지 실행합니다(현재 세션은 유지됩니다) · 기준일 {v.as_of}</p>
-        <div className="row">
-          {v.scenarios.map((s) => (
-            <button key={s.id} className="ghost" title={s.description} disabled={busy || !dept} onClick={() => run(() => api.scenario(s.id, v.as_of))}>{s.title}</button>
-          ))}
-        </div>
-        {!dept && <p className="small bad">로그인한 계정의 역할을 권한표에서 찾을 수 없습니다. 다시 로그인해 주세요.</p>}
-        <ul className="tasks small">
-          {v.scenarios.map((s) => <li key={s.id}><b>{s.title}</b> {s.description}</li>)}
-        </ul>
-      </section>
-      <section className="card">
-        <h2>현재 세션 · {cur.name}</h2>
-        <p className="muted small">{isMain ? "기준 세션 초기화는 운영 관리 부서만 할 수 있습니다." : "시뮬레이션 세션은 생성한 부서와 관계없이 초기화할 수 있습니다. 삭제는 운영 관리 부서만 할 수 있습니다."}</p>
-        <div className="row">
-          <button className="ghost" disabled={busy || !canReset} title={canReset ? "현재 세션의 사건을 삭제하고 기준일부터 다시 시작합니다" : "기준 세션 초기화는 운영 관리 부서만 할 수 있습니다"} onClick={() => { if (window.confirm(`세션 "${cur.name}"의 사건을 모두 삭제하시겠습니까?`)) run(() => api.reset(v.as_of)); }}>이 세션 초기화</button>
+    <section className="card session-tools">
+      <header className="card-head">
+        <h2>새 세션 만들기</h2>
+        <span className="row">
+          <button className="ghost small" disabled={busy || !canReset} title={canReset ? `"${cur.name}"의 사건을 삭제하고 기준일부터 다시 시작합니다` : isMain ? "기준 세션 초기화는 운영 관리 부서만 할 수 있습니다" : noRole} onClick={() => { if (window.confirm(`세션 "${cur.name}"의 사건을 모두 삭제하시겠습니까?`)) run(() => api.reset(v.as_of)); }}>현재 세션 초기화</button>
           {!isMain && (
-            <button className="ghost danger" disabled={busy || !canDrop} title={canDrop ? "" : "세션 삭제는 운영 관리 부서만 할 수 있습니다"} onClick={() => { if (window.confirm(`"${cur.name}" 세션을 삭제하시겠습니까?`)) run(() => api.deleteSession(cur.id)); }}>세션 삭제</button>
+            <button className="ghost small danger" disabled={busy || !canDrop} title={canDrop ? `"${cur.name}" 세션을 삭제합니다` : "세션 삭제는 운영 관리 부서만 할 수 있습니다"} onClick={() => { if (window.confirm(`"${cur.name}" 세션을 삭제하시겠습니까?`)) run(() => api.deleteSession(cur.id)); }}>세션 삭제</button>
           )}
+        </span>
+      </header>
+      <div className="tool-rows">
+        <div className="tool-row">
+          <span className="tool-label">시연 시나리오</span>
+          <select aria-label="시연 시나리오" value={sc} onChange={(e) => setSc(e.target.value)}>
+            {v.scenarios.map((x) => <option key={x.id} value={x.id} title={x.description}>{x.title}</option>)}
+          </select>
+          <button className="small" disabled={busy || !dept || !sc} title={dept ? "새 시뮬레이션 세션에서 고정 입력값으로 끝까지 실행합니다(현재 세션은 유지됩니다)" : noRole} onClick={() => run(() => api.scenario(sc, v.as_of))}>실행</button>
+          {chosen && <span className="muted small tool-desc" title={chosen.description}>{chosen.description}</span>}
         </div>
-        <h3>다른 기준일로 새 세션</h3>
-        <p className="muted small">선택한 날짜까지의 기록만 사용하는 새 시뮬레이션 세션을 생성합니다 · 사용 기록 ~{v.cutoff} · 이사회 {v.board_date}</p>
-        <div className="row">
+        <div className="tool-row">
+          <span className="tool-label">다른 기준일</span>
           <input type="date" aria-label="기준일" min={v.as_of_min} max={v.as_of_max} value={pick} onChange={(e) => setPick(e.target.value)} />
-          <button className="small" disabled={busy || !pick || !dept} title={dept ? "" : "로그인한 계정의 역할을 찾을 수 없습니다. 다시 로그인해 주세요."} onClick={() => run(() => api.newSession("", pick))}>시작</button>
+          <select aria-label="자주 쓰는 기준일" value={PRESETS.includes(pick) ? pick : ""} onChange={(e) => e.target.value && setPick(e.target.value)}>
+            <option value="">자주 쓰는 기준일</option>
+            {PRESETS.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+          <button className="small" disabled={busy || !pick || !dept} title={dept ? "선택한 날짜까지의 기록만 사용하는 새 시뮬레이션 세션을 생성합니다" : noRole} onClick={() => run(() => api.newSession("", pick))}>시작</button>
+          <span className="muted small tool-desc">사용 기록 ~{v.cutoff} · 이사회 {v.board_date}</span>
         </div>
-        <div className="row">
-          {PRESETS.map((d) => (
-            <button key={d} className={d === pick ? "ghost small active" : "ghost small"} disabled={busy} onClick={() => setPick(d)}>{d}</button>
-          ))}
-        </div>
-        {v.state.evaluation.future_snapshot && <p className="small warn-text">미래 자료: 능력 스냅샷은 자료 마지막 날({v.data_end}) 기준 하나만 있습니다(T2).</p>}
-      </section>
-    </div>
+      </div>
+      {v.state.evaluation.future_snapshot && <p className="small warn-text" style={{ margin: "6px 0 0" }}>미래 자료: 능력 스냅샷은 자료 마지막 날({v.data_end}) 기준 하나만 있습니다(T2).</p>}
+    </section>
   );
 }
 

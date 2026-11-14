@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { ConfirmRequest, Department, View } from "./types";
 import { Section } from "./panels";
@@ -94,7 +94,7 @@ export function EventPanel({ v, run, focus, dept, only, title = "사건 입력" 
   };
 
   return (
-    <Section title={title} mode={["real", "mock"]} note="정해 둔 고정 값(구조화 필드)으로만 입력합니다. 바이어·이사회 회신은 모의 값입니다. 규칙에 맞지 않는 사건은 거부되며 기록되지 않습니다. 소속 부서 권한 밖의 사건은 입력할 수 없습니다(시뮬레이션 세션에서는 대행 입력 가능).">
+    <Section title={title} mode={["real", "mock"]} note="바이어·이사회 회신은 모의 값이며, 규칙에 맞지 않는 사건은 거부되어 기록되지 않습니다.">
       <label className="field">
         <span>사건</span>
         <select value={type} onChange={(e) => setType(e.target.value)}>
@@ -237,40 +237,96 @@ function BuyerForm({ f, set }: { f: Fields; set: (f: Fields) => void }) {
 }
 
 // 확인 요청: 결정 모델이 무엇을 누구에게 물을지 정한다. 내부 부서 회신(E3)은 여기서 모의 입력한다.
+// 밀집도(이슈 #71): 열린 요청을 기한순으로 먼저 두고, 반영된 요청은 아래 "완료"로 접는다. 회신 폼은 누른 행 바로 아래에 펼친다.
 export function RequestsView({ v, run, dept }: { v: View; run: Run; dept?: Department }) {
   const rs = v.state.requests ?? [];
   const [open, setOpen] = useState<string | null>(null);
+  const due = (r: ConfirmRequest) => r.due_date || "9999-12-31";
+  const pending = rs.filter((r) => r.state !== "반영").sort((a, b) => due(a).localeCompare(due(b)));
+  const done = rs.filter((r) => r.state === "반영");
+  const head = (
+    <thead><tr><th className="c-fit">ID</th><th className="c-fit">대상</th><th className="c-text">질문</th><th className="c-fit">막는 판단</th><th className="c-fit">기한</th><th className="c-fit">상태</th><th className="c-fit"><span className="sr-only">회신</span></th></tr></thead>
+  );
+  const row = (r: ConfirmRequest) => {
+    const p = canEvent(v, dept, "E3_REPLY", r);
+    const mine = !!dept && r.to_role === dept.id;
+    const replyable = r.state !== "반영" && r.to_role !== "바이어";
+    const isOpen = replyable && open === r.request_id;
+    const blocks = (r.blocks ?? []).join(", ");
+    const cls = [mine ? "req-mine" : "", isOpen ? "req-open" : ""].filter(Boolean).join(" ");
+    return (
+      <Fragment key={r.request_id}>
+        <tr className={cls || undefined}>
+          <td className="c-fit">{r.request_id}</td>
+          <td className="c-fit">{r.to_role}{mine && <span className="tag req-mine-tag">내 부서</span>}</td>
+          <td className="c-text"><ClampText text={r.question} /></td>
+          <td className="c-fit small" title={blocks}><span className="clip">{blocks}</span></td>
+          <td className="c-fit">{r.due_date}</td>
+          <td className="c-fit"><span className={`pill pill-${slug(r.state)}`}>{r.state}</span>{r.mock_reply && <span className="muted small"> 모의</span>}</td>
+          <td className="c-fit">
+            {replyable && (
+              <button className="ghost small" disabled={!p.ok} title={p.reason ?? ""} aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : r.request_id)}>
+                {p.proxy ? "대행 회신" : "회신 입력"}
+              </button>
+            )}
+          </td>
+        </tr>
+        {isOpen && (
+          <tr className="req-reply">
+            <td colSpan={7}><ReplyForm r={r} run={run} done={() => setOpen(null)} /></td>
+          </tr>
+        )}
+      </Fragment>
+    );
+  };
   return (
-    <Section title={`확인 요청 (열림 ${rs.filter((r) => r.state !== "반영").length})`} mode={["real", "mock"]} note="요청 생성·기한 초과·재요청은 실제로 작동하며, 회신 내용은 모의입니다. 바이어 항목(CR-04~06)은 E4 바이어 회신으로 반영됩니다. 회신은 요청 대상 부서만 입력할 수 있습니다(시뮬레이션 세션에서는 대행 입력 가능).">
+    <Section title={`확인 요청 (열림 ${pending.length})`} mode={["real", "mock"]} note="요청 생성·기한 초과·재요청은 실제로 작동하며, 회신 내용은 모의입니다. 바이어 항목(CR-04~06)은 E4 바이어 회신으로 반영됩니다. 회신은 요청 대상 부서만 입력할 수 있습니다(시뮬레이션 세션에서는 대행 입력 가능).">
       {rs.length === 0 && (
         <EmptyState compact swan="waiting" title="현재 확인 요청이 없습니다">
           RFP가 접수되면(E1) 부서·바이어에 보낼 확인 요청이 여기에 표시됩니다.
         </EmptyState>
       )}
-      {rs.length > 0 && <table className="grid text">
-        <thead><tr><th className="c-fit">ID</th><th className="c-fit">대상</th><th className="c-text">질문</th><th className="c-fit">막는 판단</th><th className="c-fit">기한</th><th className="c-fit">상태</th><th className="c-fit"><span className="sr-only">회신</span></th></tr></thead>
-        <tbody>
-          {rs.map((r) => {
-            const p = canEvent(v, dept, "E3_REPLY", r);
-            return (
-              <tr key={r.request_id} className={dept && r.to_role === dept.id ? "row-strong" : ""}>
-                <td className="c-fit">{r.request_id}</td><td className="c-fit">{r.to_role}</td><td className="c-text">{r.question}</td>
-                <td className="c-fit small" title={(r.blocks ?? []).join(", ")}><span className="clip">{(r.blocks ?? []).join(", ")}</span></td><td className="c-fit">{r.due_date}</td>
-                <td className="c-fit"><span className={`pill pill-${slug(r.state)}`}>{r.state}</span>{r.mock_reply && <span className="muted small"> 모의</span>}</td>
-                <td className="c-fit">
-                  {r.state !== "반영" && r.to_role !== "바이어" && (
-                    <button className="ghost small" disabled={!p.ok} title={p.reason ?? ""} onClick={() => setOpen(open === r.request_id ? null : r.request_id)}>
-                      {p.proxy ? "대행 회신" : "회신 입력"}
-                    </button>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>}
-      {open && <ReplyForm r={rs.find((x) => x.request_id === open)!} run={run} done={() => setOpen(null)} />}
+      {pending.length > 0 && (
+        <div className="scroll">
+          <table className="grid text req-table">{head}<tbody>{pending.map(row)}</tbody></table>
+        </div>
+      )}
+      {pending.length === 0 && done.length > 0 && <p className="muted small">현재 열린 확인 요청이 없습니다. 반영된 요청은 아래 완료 목록에서 확인할 수 있습니다.</p>}
+      {done.length > 0 && (
+        <details className="req-done">
+          <summary className="muted small">완료 {done.length}건</summary>
+          <div className="scroll">
+            <table className="grid text req-table">{head}<tbody>{done.map(row)}</tbody></table>
+          </div>
+        </details>
+      )}
     </Section>
+  );
+}
+
+// 긴 질문은 두 줄로 줄이고, 넘칠 때만 "펼치기" 단추를 보인다(행마다 따로 펼침).
+function ClampText({ text }: { text: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [over, setOver] = useState(text.length > 70);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || open) return;
+    const check = () => setOver(el.scrollHeight > el.clientHeight + 1);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [text, open]);
+  return (
+    <>
+      <div ref={ref} className={open ? undefined : "req-q-clamp"}>{text}</div>
+      {(over || open) && (
+        <button type="button" className="note-more" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? "접기" : "펼치기"}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -298,7 +354,7 @@ function ReplyForm({ r, run, done }: { r: ConfirmRequest; run: Run; done: () => 
   };
   return (
     <div className="fieldbox">
-      <p className="small"><b>{r.request_id}</b> {r.to_role} 회신 [모의] — {r.question}</p>
+      <p className="small"><b>{r.request_id}</b> {r.to_role} 회신 [모의]</p>
       <div className="row wrap">
         {r.request_id === "CR-01" && (
           <label className="field"><span>기간 단위</span><select value={String(a.capacity_period)} onChange={(e) => setA({ ...a, capacity_period: e.target.value })}><option value="annual">연간</option><option value="monthly">월간</option></select></label>

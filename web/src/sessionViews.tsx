@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "./api";
 import type { Department, ItemDiff, MonthDiff, SessionCompare, SessionInfo, SessionKPI, SweepResult, View } from "./types";
 import { Section } from "./panels";
@@ -22,11 +22,19 @@ export function SessionCompareView({ v }: { v: View }) {
   const [b, setB] = useState(cur.id);
   const [c, setC] = useState<SessionCompare | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [hideSame, setHideSame] = useState(true);
+  const [allMonths, setAllMonths] = useState(false);
   useEffect(() => {
     if (!a || !b) return;
     setErr(null);
     api.compare(a, b).then(setC).catch((e: Error) => setErr(e.message));
   }, [a, b, v]);
+  // 밀집도(이슈 #71): 위에 차이 요약 한 줄, 아래 구역은 접기(지표만 펼침).
+  const kpiDiff = c ? kpiRows(c.a, c.b).filter(([k, x, y]) => k !== "세션" && x !== y).length : 0;
+  const monthDiff = c ? COMPARE_PRODUCTS.reduce((n, p) => n + (c.products[p] ?? []).filter(monthDiffers).length, 0) : 0;
+  const flags = c?.flags ?? [];
+  const reqs = c?.requests ?? [];
+  const tasks = c?.tasks ?? [];
   return (
     <Section title="세션 비교" mode={["real"]} note="두 세션을 같은 표에서 비교합니다. 시뮬레이션 세션의 결과는 모의입니다. 달라진 칸은 강조해 표시합니다.">
       <div className="row wrap">
@@ -40,14 +48,41 @@ export function SessionCompareView({ v }: { v: View }) {
       {err && <p className="bad small">{err}</p>}
       {c && (
         <>
-          <KpiTable a={c.a} b={c.b} />
-          {["PL-02", "PL-01"].map((p) => <MonthTable key={p} product={p} rows={c.products[p] ?? []} />)}
-          <DiffList title="미확인·위험·차단 플래그" rows={c.flags ?? []} />
-          <DiffList title="확인 요청 상태" rows={c.requests ?? []} />
-          <DiffList title="작업 상태" rows={c.tasks ?? []} />
+          <p className="cmp-summary">
+            차이: 지표 <b>{kpiDiff}</b> · 월 <b>{monthDiff}</b> · 플래그 <b>{flags.length}</b> · 확인 요청 <b>{reqs.length}</b> · 작업 <b>{tasks.length}</b>
+          </p>
+          <Fold title="지표" meta={`차이 ${kpiDiff}`} open>
+            <label className="fold-toggle small">
+              <input type="checkbox" checked={hideSame} onChange={(e) => setHideSame(e.target.checked)} /> 같은 값 숨기기
+            </label>
+            <KpiTable a={c.a} b={c.b} hideSame={hideSame} />
+          </Fold>
+          <Fold title="제품×월 공급·제안·부족" meta={`차이 나는 달 ${monthDiff}`}>
+            <label className="fold-toggle small">
+              <input type="checkbox" checked={allMonths} onChange={(e) => setAllMonths(e.target.checked)} /> 모든 달 보기
+            </label>
+            {COMPARE_PRODUCTS.map((p) => <MonthTable key={p} product={p} rows={c.products[p] ?? []} all={allMonths} />)}
+          </Fold>
+          <DiffFold title="미확인·위험·차단 플래그" rows={flags} />
+          <DiffFold title="확인 요청 상태" rows={reqs} />
+          <DiffFold title="작업 상태" rows={tasks} />
         </>
       )}
     </Section>
+  );
+}
+
+const COMPARE_PRODUCTS = ["PL-02", "PL-01"];
+
+// 접는 구역: 제목 + 개수 한 줄(summary), 누르면 내용.
+function Fold({ title, meta, open, children }: { title: string; meta: string; open?: boolean; children: ReactNode }) {
+  return (
+    <details className="fold" open={open}>
+      <summary>
+        <span className="fold-title">{title}</span> <span className="fold-meta">{meta}</span>
+      </summary>
+      <div className="fold-body">{children}</div>
+    </details>
   );
 }
 
@@ -257,47 +292,45 @@ export function SimulationView({ v, run, busy, dept, goTab }: { v: View; run: Ru
               </div>
             )}
           </Section>
-        <ParentCompare v={v} goTab={goTab} />
+        <ParentCompare v={v} goTab={goTab} run={run} busy={busy} dept={dept} />
           <div ref={formRef} />
+          {!sim ? (
+            // 밀집도(이슈 #71): 기준 세션에서는 회색 한 줄 + 분기 버튼(빨간 차단 상자 없이).
+            <OffLine title="모의 가정 (E9)" action={<ForkButton v={v} run={run} busy={busy} dept={dept} name={`${v.session.name} 모의 가정`} />}>
+              시뮬레이션 세션에서만 입력할 수 있습니다.
+            </OffLine>
+          ) : (
           <Section
             title="모의 가정 (E9)"
             mode={["real", "mock"]}
             note="시뮬레이션 세션에서만 입력할 수 있습니다. 원본 제약은 그대로 두고 이 세션의 평가만 바꿉니다(A05 §6 대안 시나리오). 빈 칸은 변경하지 않습니다. 증설안 결정은 실제 이사회 결정이 아닙니다."
           >
-            {!sim ? (
-              <p className="blocked">
-                현재 기준 세션입니다. 모의 가정은 시뮬레이션 세션에서만 입력할 수 있습니다.{" "}
-                <button className="ghost small" disabled={busy || !dept} onClick={() => run(() => api.fork(v.state.log?.length ?? 0, `${v.session.name} 모의 가정`))}>지금 상태에서 분기해 시작</button>
-              </p>
-            ) : (
-              <>
-                <div className="row wrap">
-                  <label className="field"><span>납품 개시월 (지금 {sc.delivery_start})</span><input placeholder="YYYY-MM" value={f.delivery_start ?? ""} onChange={(e) => set("delivery_start", e.target.value)} /></label>
-                  <label className="field"><span>계약 기간 (지금 {sc.contract_months}개월)</span><input type="number" value={f.contract_months ?? ""} onChange={(e) => set("contract_months", e.target.value)} /></label>
-                  <label className="field"><span>단가 인하 % (지금 {pct(sc.price_cut * 100)})</span><input type="number" placeholder="-7" value={f.price_cut_pct ?? ""} onChange={(e) => set("price_cut_pct", e.target.value)} /></label>
-                  <label className="field"><span>환율 충격 원 (지금 {sc.fx_shift ?? 0})</span><input type="number" placeholder="-100" value={f.fx_shift ?? ""} onChange={(e) => set("fx_shift", e.target.value)} /></label>
-                  <label className="field"><span>능력 단위 (지금 {sc.capacity_period})</span>
-                    <select value={f.capacity_period ?? ""} onChange={(e) => set("capacity_period", e.target.value)}><option value="">그대로</option><option value="annual">연간</option><option value="monthly">월간</option></select>
-                  </label>
-                  <label className="field"><span>Masil 가동률 포함 (지금 {sc.masil_in_util ? "포함" : "미포함"})</span>
-                    <select value={f.masil_in_util ?? ""} onChange={(e) => set("masil_in_util", e.target.value)}><option value="">그대로</option><option value="false">미포함(먼저 뺌)</option><option value="true">포함</option></select>
-                  </label>
-                  <label className="field"><span>OPT-01 적격 주수</span><input type="number" value={f.vw01 ?? ""} onChange={(e) => set("vw01", e.target.value)} /></label>
-                  <label className="field"><span>OPT-02 적격 주수</span><input type="number" value={f.vw02 ?? ""} onChange={(e) => set("vw02", e.target.value)} /></label>
-                  <label className="field"><span>기준일 뒤 신규 수주 (지금 {sc.hist_basis === "gross" ? "총량" : "순증분"})</span>
-                    <select value={f.new_order_basis ?? ""} onChange={(e) => set("new_order_basis", e.target.value)}><option value="">그대로</option><option value="net">순증분(기본)</option><option value="gross">총량(가동률 이중 차감 주의)</option></select>
-                  </label>
-                  {(["op01", "op02"] as const).map((k) => (
-                    <label key={k} className="field"><span>{k === "op01" ? "OPT-01" : "OPT-02"} 결정(모의)</span>
-                      <select value={f[k] ?? ""} onChange={(e) => set(k, e.target.value)}><option value="">그대로</option>{["제안", "승인", "보류", "거절"].map((s) => <option key={s} value={s}>{s}</option>)}</select>
-                    </label>
-                  ))}
-                </div>
-                <div className="row"><button disabled={busy || !dept || Object.values(f).every((x) => !x)} title={dept ? "" : "로그인한 계정의 역할을 찾을 수 없습니다. 다시 로그인해 주세요."} onClick={submit}>모의 가정 넣기(E9)</button>{picked && <span className="small warn-text">격자 칸의 값을 채웠습니다. 값을 확인한 뒤 입력해 주세요.</span>}{Object.values(f).some((x) => x) && <button className="ghost small" onClick={() => { setF({}); setPicked(null); }}>입력 비우기</button>}</div>
-              </>
-            )}
+            <div className="row wrap">
+              <label className="field"><span>납품 개시월 (지금 {sc.delivery_start})</span><input placeholder="YYYY-MM" value={f.delivery_start ?? ""} onChange={(e) => set("delivery_start", e.target.value)} /></label>
+              <label className="field"><span>계약 기간 (지금 {sc.contract_months}개월)</span><input type="number" value={f.contract_months ?? ""} onChange={(e) => set("contract_months", e.target.value)} /></label>
+              <label className="field"><span>단가 인하 % (지금 {pct(sc.price_cut * 100)})</span><input type="number" placeholder="-7" value={f.price_cut_pct ?? ""} onChange={(e) => set("price_cut_pct", e.target.value)} /></label>
+              <label className="field"><span>환율 충격 원 (지금 {sc.fx_shift ?? 0})</span><input type="number" placeholder="-100" value={f.fx_shift ?? ""} onChange={(e) => set("fx_shift", e.target.value)} /></label>
+              <label className="field"><span>능력 단위 (지금 {sc.capacity_period})</span>
+                <select value={f.capacity_period ?? ""} onChange={(e) => set("capacity_period", e.target.value)}><option value="">그대로</option><option value="annual">연간</option><option value="monthly">월간</option></select>
+              </label>
+              <label className="field"><span>Masil 가동률 포함 (지금 {sc.masil_in_util ? "포함" : "미포함"})</span>
+                <select value={f.masil_in_util ?? ""} onChange={(e) => set("masil_in_util", e.target.value)}><option value="">그대로</option><option value="false">미포함(먼저 뺌)</option><option value="true">포함</option></select>
+              </label>
+              <label className="field"><span>OPT-01 적격 주수</span><input type="number" value={f.vw01 ?? ""} onChange={(e) => set("vw01", e.target.value)} /></label>
+              <label className="field"><span>OPT-02 적격 주수</span><input type="number" value={f.vw02 ?? ""} onChange={(e) => set("vw02", e.target.value)} /></label>
+              <label className="field"><span>기준일 뒤 신규 수주 (지금 {sc.hist_basis === "gross" ? "총량" : "순증분"})</span>
+                <select value={f.new_order_basis ?? ""} onChange={(e) => set("new_order_basis", e.target.value)}><option value="">그대로</option><option value="net">순증분(기본)</option><option value="gross">총량(가동률 이중 차감 주의)</option></select>
+              </label>
+              {(["op01", "op02"] as const).map((k) => (
+                <label key={k} className="field"><span>{k === "op01" ? "OPT-01" : "OPT-02"} 결정(모의)</span>
+                  <select value={f[k] ?? ""} onChange={(e) => set(k, e.target.value)}><option value="">그대로</option>{["제안", "승인", "보류", "거절"].map((s) => <option key={s} value={s}>{s}</option>)}</select>
+                </label>
+              ))}
+            </div>
+            <div className="row"><button disabled={busy || !dept || Object.values(f).every((x) => !x)} title={dept ? "" : "로그인한 계정의 역할을 찾을 수 없습니다. 다시 로그인해 주세요."} onClick={submit}>모의 가정 넣기(E9)</button>{picked && <span className="small warn-text">격자 칸의 값을 채웠습니다. 값을 확인한 뒤 입력해 주세요.</span>}{Object.values(f).some((x) => x) && <button className="ghost small" onClick={() => { setF({}); setPicked(null); }}>입력 비우기</button>}</div>
             <p className="muted small" style={{ marginBottom: 0 }}>현재 적용된 모의 가정은 옆 열 "이 세션에서 바꾼 것"에서 확인할 수 있습니다.</p>
           </Section>
+          )}
 
       </div>
       <div className="split-side">
@@ -318,8 +351,8 @@ const DEFAULT_METRICS = [
   { key: "contrib_schedule_krw", label: "제안 기준 공헌이익", unit: "원" },
 ];
 
-function KpiTable({ a, b }: { a: SessionKPI; b: SessionKPI }) {
-  const rows: [string, string, string][] = [
+function kpiRows(a: SessionKPI, b: SessionKPI): [string, string, string][] {
+  return [
     ["세션", `${a.session.name} (${kindLabel(a.session)})`, `${b.session.name} (${kindLabel(b.session)})`],
     ["기준일 / 업무일", `${a.as_of} / ${a.sim_date}`, `${b.as_of} / ${b.sim_date}`],
     ["입찰 상태", `${a.bid_state}${a.bid_version ? ` · v${a.bid_version}` : ""}`, `${b.bid_state}${b.bid_version ? ` · v${b.bid_version}` : ""}`],
@@ -332,63 +365,94 @@ function KpiTable({ a, b }: { a: SessionKPI; b: SessionKPI }) {
     ["증설·전환안", (a.options ?? []).join(" | "), (b.options ?? []).join(" | ")],
     ["열린 확인 요청 / 작업 / 가예약", `${a.open_requests} / ${a.open_tasks} / ${a.reservations}`, `${b.open_requests} / ${b.open_tasks} / ${b.reservations}`],
   ];
+}
+
+// hideSame이면 A와 B가 같은 줄을 숨긴다('세션' 줄은 늘 보인다).
+function KpiTable({ a, b, hideSame = false }: { a: SessionKPI; b: SessionKPI; hideSame?: boolean }) {
+  const all = kpiRows(a, b);
+  const rows = hideSame ? all.filter(([k, x, y]) => k === "세션" || x !== y) : all;
+  const hidden = all.length - rows.length;
   return (
-    <table className="grid text">
-      <thead><tr><th className="c-fit">항목</th><th className="c-text-s">A</th><th className="c-text-s">B</th></tr></thead>
-      <tbody>
-        {rows.map(([k, x, y]) => (
-          <tr key={k}><td className="c-fit">{k}</td><td className="c-text-s">{x}</td><td className={`c-text-s ${x !== y && k !== "세션" ? "warn" : ""}`}>{y}</td></tr>
-        ))}
-      </tbody>
-    </table>
+    <>
+      <table className="grid text">
+        <thead><tr><th className="c-fit">항목</th><th className="c-text-s">A</th><th className="c-text-s">B</th></tr></thead>
+        <tbody>
+          {rows.map(([k, x, y]) => (
+            <tr key={k}><td className="c-fit">{k}</td><td className="c-text-s">{x}</td><td className={`c-text-s ${x !== y && k !== "세션" ? "warn" : ""}`}>{y}</td></tr>
+          ))}
+        </tbody>
+      </table>
+      {hidden > 0 && <p className="muted small fold-note">{rows.length <= 1 ? "모든 지표가 같습니다. " : ""}같은 값 {hidden}개를 숨겼습니다.</p>}
+    </>
   );
 }
 
-function MonthTable({ product, rows }: { product: string; rows: MonthDiff[] }) {
+// 한 달이라도 A·B가 다른가(한쪽에만 있는 달 포함).
+const monthDiffers = (m: MonthDiff) =>
+  m.a_has !== m.b_has || m.a_supply !== m.b_supply || m.a_schedule !== m.b_schedule || m.a_short !== m.b_short;
+
+// 제품×월(밀집도, 이슈 #71): 달을 행으로, 열은 공급·제안·부족의 A·B. 기본은 차이 나는 달만.
+function MonthTable({ product, rows, all }: { product: string; rows: MonthDiff[]; all: boolean }) {
   if (rows.length === 0) return null;
-  // 계약 기간 밖의 달은 "-"(0과 구분). 한쪽에만 있는 달도 강조한다.
+  const label = PRODUCT_LABEL[product] ?? product;
+  const shown = all ? rows : rows.filter(monthDiffers);
+  if (shown.length === 0) return <p className="muted small">{label}: 차이 나는 달이 없습니다(전체 {rows.length}개월).</p>;
+  // 계약 기간 밖의 달은 "-"(0과 구분). 한쪽에만 있는 달도 강조한다(B 칸).
   const val = (has: boolean, x: number) => (has ? ea(x) : "-");
-  const cell = (m: MonthDiff, x: number, y: number) => (m.a_has !== m.b_has || x !== y ? "warn" : "");
-  const row = (label: string, cls: string, pick: (m: MonthDiff) => [number, number]) => (
-    <tr className={cls}>
-      <td>{label}</td>
-      {rows.map((m) => {
-        const [x, y] = pick(m);
-        return <td key={m.month} className={cell(m, x, y)}>{val(m.a_has, x)} / {val(m.b_has, y)}</td>;
-      })}
-    </tr>
+  const pair = (m: MonthDiff, x: number, y: number, cls: (has: boolean, n: number) => string = () => "") => (
+    <>
+      <td className={cls(m.a_has, x)}>{val(m.a_has, x)}</td>
+      <td className={m.a_has !== m.b_has || x !== y ? "warn" : cls(m.b_has, y)}>{val(m.b_has, y)}</td>
+    </>
   );
+  const sched = () => "cmp-sched";
+  const short = (has: boolean, n: number) => (has && n > 0 ? "bad" : "");
   return (
     <div className="scroll">
-      <table className="grid">
+      <table className="grid cmp-month">
         <thead>
-          <tr><th>{PRODUCT_LABEL[product] ?? product} 월</th>{rows.map((m) => <th key={m.month}>{m.month.slice(2)}</th>)}</tr>
+          <tr><th className="c-fit">{label} 월</th><th>공급 A</th><th>공급 B</th><th>제안 A</th><th>제안 B</th><th>부족 A</th><th>부족 B</th></tr>
         </thead>
         <tbody>
-          {row("공급 A / B", "", (m) => [m.a_supply, m.b_supply])}
-          {row("제안 A / B", "row-strong", (m) => [m.a_schedule, m.b_schedule])}
-          {row("부족 A / B", "row-bad", (m) => [m.a_short, m.b_short])}
+          {shown.map((m) => (
+            <tr key={m.month}>
+              <td className="c-fit">{m.month}</td>
+              {pair(m, m.a_supply, m.b_supply)}
+              {pair(m, m.a_schedule, m.b_schedule, sched)}
+              {pair(m, m.a_short, m.b_short, short)}
+            </tr>
+          ))}
         </tbody>
       </table>
+      {!all && shown.length < rows.length && <p className="muted small fold-note">같은 달 {rows.length - shown.length}개를 숨겼습니다.</p>}
     </div>
   );
 }
 
-function DiffList({ title, rows }: { title: string; rows: ItemDiff[] }) {
+// 플래그·확인 요청·작업 차이: 접힌 한 줄(개수), 차이가 없으면 펼칠 것 없이 회색 한 줄.
+function DiffFold({ title, rows }: { title: string; rows: ItemDiff[] }) {
+  if (rows.length === 0) {
+    return (
+      <p className="fold fold-empty">
+        <span className="fold-title">{title}</span> <span className="fold-meta">차이 0 · 두 세션 사이에 차이가 없습니다.</span>
+      </p>
+    );
+  }
   return (
-    <>
-      <h3>{title} 차이 ({rows.length})</h3>
-      {rows.length === 0 ? (
-        <p className="muted small">두 세션 사이에 차이가 없습니다.</p>
-      ) : (
-        <table className="grid text">
-          <thead><tr><th className="c-text">항목</th><th className="c-fit">A</th><th className="c-fit">B</th></tr></thead>
-          <tbody>
-            {rows.map((r) => <tr key={r.key}><td className="c-text small">{r.text}</td><td className="c-fit">{r.a || "없음"}</td><td className="c-fit">{r.b || "없음"}</td></tr>)}
-          </tbody>
-        </table>
-      )}
-    </>
+    <Fold title={title} meta={`차이 ${rows.length}`}>
+      <table className="grid text">
+        <thead><tr><th className="c-left">항목</th><th className="c-fit">A</th><th className="c-fit">B</th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.key}>
+              <td className="c-line small" title={r.text}><span>{r.text}</span></td>
+              <td className="c-fit">{r.a || "없음"}</td>
+              <td className="c-fit">{r.b || "없음"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Fold>
   );
 }
 
@@ -475,8 +539,32 @@ function ChangedCard({ v }: { v: View }) {
   );
 }
 
+// 쓸 수 없는 카드를 회색 한 줄로 접은 꼴(밀집도, 이슈 #71): 제목 · 한 문장 · 버튼.
+function OffLine({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+  return (
+    <section className="card card-off" aria-label={title}>
+      <span className="off-title">{title}</span>
+      <span className="off-text">{children}</span>
+      {action}
+    </section>
+  );
+}
+
+function ForkButton({ v, run, busy, dept, name = "" }: { v: View; run: Run; busy: boolean; dept?: Department; name?: string }) {
+  return (
+    <button
+      className="ghost small"
+      disabled={busy || !dept}
+      title={dept ? "현재 상태(사건 전체)를 복사한 시뮬레이션 세션을 생성합니다" : "로그인한 계정의 역할을 찾을 수 없습니다. 다시 로그인해 주세요."}
+      onClick={() => run(() => api.fork(v.state.log?.length ?? 0, name))}
+    >
+      현재 상태에서 분기해 시작
+    </button>
+  );
+}
+
 // 부모 세션과의 비교 요약(분기한 세션일 때). 자세한 월별·플래그 차이는 세션 비교 페이지.
-function ParentCompare({ v, goTab }: { v: View; goTab: (t: Tab) => void }) {
+function ParentCompare({ v, goTab, run, busy, dept }: { v: View; goTab: (t: Tab) => void; run: Run; busy: boolean; dept?: Department }) {
   const list = v.sessions ?? [];
   const pid = v.session.parent_id && list.some((s) => s.id === v.session.parent_id) ? v.session.parent_id : undefined;
   const [c, setC] = useState<SessionCompare | null>(null);
@@ -488,12 +576,15 @@ function ParentCompare({ v, goTab }: { v: View; goTab: (t: Tab) => void }) {
     api.compare(pid, v.session.id).then(setC).catch((e: Error) => setErr(e.message));
   }, [pid, v]);
   if (!pid) {
-    return (
-      <Section title="세션 비교" mode={["real"]} note="분기한 시뮬레이션 세션에서는 여기서 부모 세션과 바로 비교할 수 있습니다.">
-        <p className="small">
-          현재 세션은 분기 세션이 아닙니다. <button className="ghost small" disabled={list.length < 2} onClick={() => goTab("sessions")}>세션 비교에서 두 세션 고르기</button>
-        </p>
-      </Section>
+    // 기준 세션: 회색 한 줄 + 분기 버튼. 분기하지 않은 시뮬레이션 세션: 회색 한 줄 + 세션 비교 페이지로.
+    return v.session.kind === "main" ? (
+      <OffLine title="세션 비교" action={<ForkButton v={v} run={run} busy={busy} dept={dept} />}>
+        분기한 시뮬레이션 세션에서 부모 세션과 바로 비교할 수 있습니다.
+      </OffLine>
+    ) : (
+      <OffLine title="세션 비교" action={<button className="ghost small" disabled={list.length < 2} onClick={() => goTab("sessions")}>세션 비교에서 두 세션 고르기</button>}>
+        현재 세션은 분기 세션이 아닙니다.
+      </OffLine>
     );
   }
   return (

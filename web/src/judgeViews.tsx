@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Department, Flag, LaneAction, OptCompare, ProductEval, View } from "./types";
-import { CompareView, Kpi, Mode, ScheduleView, Section, snapSource } from "./panels";
+import { Kpi, ScheduleView, Section } from "./panels";
+import { Link } from "./router";
 import { BASIS_LABEL, EVENT_LABEL, ea, eok, pct } from "./format";
 import { canEvent } from "./perm";
 import { BASE, EChart, INK, INK2, LINE, PAPER, RED, axis } from "./chart";
@@ -131,7 +132,7 @@ function SupplyChart({ v }: { v: View }) {
     <Section
       title="PL-02 월별 공급과 부족"
       mode={["real"]}
-      note={`단위 EA/월 · 요구 월 ${ea(pe.monthly_demand)} EA(검정 파선) · 계약 ${ev.scenario.contract_months}개월. 공급을 출처별로 쌓고 맨 위에 부족(빨강 테두리)을 표시합니다. 증설·전환 능력은 적격일 다음 달부터 반영됩니다(R3).${anyCond ? " 흰 바탕에 파선 테두리는 조건부(승인·선행 회신 전) 공급입니다." : ""} 막대에 마우스를 올리면 해당 월 수치가 표시됩니다. 출처: ${snapSource(v)}.`}
+      note={`단위 EA/월 · 요구 월 ${ea(pe.monthly_demand)} EA(검정 파선) · 계약 ${ev.scenario.contract_months}개월. 공급을 출처별로 쌓고 맨 위에 부족(빨강 테두리)을 표시합니다. 증설·전환 능력은 적격일 다음 달부터 반영됩니다(R3).${anyCond ? " 흰 바탕에 파선 테두리는 조건부(승인·선행 회신 전) 공급입니다." : ""} 막대에 마우스를 올리면 해당 월 수치가 표시됩니다.`}
     >
       {c && (
         <div className="row" role="group" aria-label="OPT-01 적격 기간 시나리오">
@@ -183,10 +184,18 @@ function FlagsCard({ v }: { v: View }) {
       </ul>
       {last && (
         <>
-          <h3>직전 사건의 변화</h3>
-          <p className="small">
-            <b>{EVENT_LABEL[last.event.type] ?? last.event.type}</b> — {(last.changes ?? []).join(" · ")}
-          </p>
+          <h3>직전 사건의 변화 · {EVENT_LABEL[last.event.type] ?? last.event.type}</h3>
+          <ul className="change-list small">
+            {(last.changes ?? []).slice(0, 3).map((c) => <li key={c}>{c}</li>)}
+          </ul>
+          {(last.changes ?? []).length > 3 && (
+            <details className="table-view">
+              <summary className="small">변경 {(last.changes ?? []).length - 3}개 더 보기</summary>
+              <ul className="change-list small">
+                {(last.changes ?? []).slice(3).map((c) => <li key={c}>{c}</li>)}
+              </ul>
+            </details>
+          )}
         </>
       )}
       {s.last_blocks && s.last_blocks.length > 0 && <p className="blocked">제출 차단: {s.last_blocks.join(" / ")}</p>}
@@ -208,7 +217,6 @@ function MyTurn({ v, dept, onAction, onTrySim }: { v: View; dept?: Department; o
     <section className={`card ${first ? "now-card has-action" : ""}`}>
       <header className="card-head">
         <h2>내가 할 일</h2>
-        <span className="modes"><Mode kind="real" /></span>
       </header>
       {!dept ? (
         <p className="small">로그인한 계정의 역할을 권한표에서 찾지 못해 현재 할 일을 표시할 수 없습니다. 부서 계정으로 다시 로그인해 주세요.</p>
@@ -223,11 +231,10 @@ function MyTurn({ v, dept, onAction, onTrySim }: { v: View; dept?: Department; o
       )}
       <div className="row">
         {first && <button onClick={() => onAction(first)}>{first.label}</button>}
-        <button className="ghost" disabled={!dept} title={dept ? "" : "로그인한 계정의 역할을 찾을 수 없습니다. 다시 로그인해 주세요."} onClick={onTrySim}>
+        <button className="ghost" disabled={!dept} title={dept ? (v.session.kind === "main" ? "현재 상태를 분기한 시뮬레이션 세션을 생성하고 이동합니다. 기준 세션은 변경되지 않습니다." : "") : "로그인한 계정의 역할을 찾을 수 없습니다. 다시 로그인해 주세요."} onClick={onTrySim}>
           {v.session.kind === "sim" ? "시뮬레이션 페이지로" : "시뮬레이션에서 먼저 보기"}
         </button>
       </div>
-      {v.session.kind === "main" && <p className="muted small" style={{ marginBottom: 0 }}>'시뮬레이션에서 먼저 보기'를 누르면 현재 상태를 분기한 시뮬레이션 세션이 생성되고 해당 세션으로 이동합니다. 기준 세션은 변경되지 않습니다.</p>}
     </section>
   );
 }
@@ -276,32 +283,34 @@ export function JudgeView({ v, dept, onAction, onTrySim }: { v: View; dept?: Dep
   const c = ev.compare_opt01;
   return (
     <>
-      <Section title="판단 요약" mode={["real"]} note={`숫자는 결정 모델(엔진)이 원본에서 다시 계산하며, 승인은 권한 부서가 진행합니다. 입력은 고정 필드만 사용합니다(LLM 현재 제외). 여유·공급 출처: ${snapSource(v)}. 생산 라인 보드의 배치 실적과는 규모가 다릅니다(여유·증설안 페이지 참고).`}>
+      <Section title="판단 요약" mode={["real"]} note="숫자는 엔진이 원본에서 다시 계산하고, 승인은 권한 부서가 진행합니다. 출처는 '숫자의 출처'에서 확인할 수 있습니다.">
         <div className="kpis kpis-5">
-          <Kpi label="PL-02 더마 제안 가능" value={`${ea(p2?.schedule_total)} EA`} sub={`요구 ${ea((p2?.monthly_demand ?? 0) * ev.scenario.contract_months)} 중 ${pct(p2?.coverage_pct)} · ${l2?.qty_status ?? "접수 전"}`} tone={p2 && p2.coverage_pct < 100 ? "warn" : "ok"} />
+          <Kpi label="PL-02 제안 가능" value={`${ea(p2?.schedule_total)} EA`} sub={`요구 ${ea((p2?.monthly_demand ?? 0) * ev.scenario.contract_months)} 중 ${pct(p2?.coverage_pct)} · ${l2?.qty_status ?? "접수 전"}`} tone={p2 && p2.coverage_pct < 100 ? "warn" : "ok"} />
           <Kpi label="PL-01 기초" value={l1?.qty_status === "미확정" || !l1 ? "수량 미확정" : `${ea(p1?.schedule_total)} EA`} sub={`확인 전 상한 월 ${ea(p1?.months?.[0]?.supply)} EA · 요구 월 ${ea(p1?.monthly_demand)}`} tone="bad" />
-          <Kpi label="전량 약속 시 지체상금(지연분)" value={eok((p1?.penalty_backlog_krw ?? 0) + (p2?.penalty_backlog_krw ?? 0))} sub={`계약 총액 기준 ${eok(ev.penalty_contract_krw)} (월 ${eok(ev.penalty_contract_monthly_krw)})`} tone="bad" />
-          <Kpi label="연 공헌이익(요구 전량, 원료비 기준)" value={eok((p1?.contrib_request_krw ?? 0) + (p2?.contrib_request_krw ?? 0), 1)} sub={`제안 기준 ${eok((p1?.contrib_schedule_krw ?? 0) + (p2?.contrib_schedule_krw ?? 0), 1)} · 단가 인하 ${pct(ev.scenario.price_cut * 100)}`} tone="ok" />
-          {c && <Kpi label="OPT-01 최초 반영 월" value={c.base.first_supply_month || "없음"} sub={`설치 ${c.base.install_date} + 적격 ${c.base.validation_weeks}주 · 원본 문구면 ${c.alt.first_supply_month || "없음"}`} tone={c.base.usable ? "ok" : "warn"} />}
+          <Kpi label="지체상금(전량 약속 시)" value={eok((p1?.penalty_backlog_krw ?? 0) + (p2?.penalty_backlog_krw ?? 0))} sub={`계약 총액 기준 ${eok(ev.penalty_contract_krw)} (월 ${eok(ev.penalty_contract_monthly_krw)})`} tone="bad" />
+          <Kpi label="연 공헌이익(요구 전량)" value={eok((p1?.contrib_request_krw ?? 0) + (p2?.contrib_request_krw ?? 0), 1)} sub={`제안 기준 ${eok((p1?.contrib_schedule_krw ?? 0) + (p2?.contrib_schedule_krw ?? 0), 1)} · 단가 인하 ${pct(ev.scenario.price_cut * 100)}`} tone="ok" />
+          {c && <Kpi label="OPT-01 최초 반영" value={c.base.first_supply_month || "없음"} sub={`설치 ${c.base.install_date} + 적격 ${c.base.validation_weeks}주 · 원본 문구면 ${c.alt.first_supply_month || "없음"}`} tone={c.base.usable ? "ok" : "warn"} />}
         </div>
       </Section>
-      <div className="split">
+      <div className="split judge-split">
         <div className="split-main">
           <SupplyChart v={v} />
           <FlagsCard v={v} />
-          <details className="more-tables">
-            <summary>월별 표 전체 보기: 제안 일정(PL-02·PL-01)과 OPT-01 비교 표</summary>
-            <div className="split-main">
-              <ScheduleView v={v} />
-              <CompareView v={v} />
-            </div>
-          </details>
         </div>
         <div className="split-side">
           <MyTurn v={v} dept={dept} onAction={onAction} onTrySim={onTrySim} />
           <SourcesCard v={v} />
         </div>
       </div>
+      <details className="more-tables">
+        <summary>월별 표 전체 보기: 제안 일정(PL-02·PL-01)</summary>
+        <ScheduleView v={v} />
+      </details>
+      {c && (
+        <p className="small muted">
+          OPT-01 적격 기간 비교(기본 {c.base.validation_weeks}주 대 원본 "재검증 불필요")는 <Link to="/bids/C-201/capacity">여유·증설안</Link>에서 확인할 수 있습니다.
+        </p>
+      )}
     </>
   );
 }

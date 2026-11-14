@@ -71,7 +71,7 @@ export function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
               const a = accounts.find((x) => x.role_code === f.role);
               const on = i === FLOW_ORDER.findIndex((x) => x.role === wantRole); // 같은 부서가 두 번 나오면 첫 차례만
               return (
-                <li key={i} className={on ? "on" : ""}>
+                <li key={i} value={f.n} className={on ? "on" : ""}>
                   <b>{a?.name ?? f.role}</b> <span className="muted">{a?.dept_label}</span> · {f.what}
                   {on && <span className="pill tiny tone-accent"> 다음 차례</span>}
                 </li>
@@ -142,16 +142,15 @@ export function AccessPage({ v, user }: { v: View; user: User }) {
         <div className="scroll">
           <table className="grid text">
             <thead>
-              <tr><th className="c-fit">아이디</th><th className="c-fit">이름</th><th className="c-fit">역할(부서)</th><th className="c-text">담당 업무</th><th className="c-fit">생성일</th></tr>
+              <tr><th className="c-fit">아이디</th><th className="c-fit">이름</th><th className="c-fit">역할(부서)</th><th>담당 업무</th></tr>
             </thead>
             <tbody>
               {(t?.users ?? []).map((u) => (
                 <tr key={u.login_id} className={u.login_id === user.login_id ? "row-strong" : ""}>
-                  <td className="c-fit"><code>{u.login_id}</code>{u.login_id === user.login_id && <span className="muted small"> · 현재 로그인</span>}</td>
+                  <td className="c-fit"><code>{u.login_id}</code>{u.login_id === user.login_id && <span className="tag" title="현재 로그인한 계정"> 나</span>}</td>
                   <td className="c-fit">{u.name}</td>
                   <td className="c-fit">{u.dept_label} <span className="muted small">{u.role_code}</span></td>
-                  <td className="c-text small">{duty(u.role_code)}</td>
-                  <td className="c-fit small">{u.created_at?.slice(0, 10) ?? ""}</td>
+                  <td className="small" title={duty(u.role_code)}><span className="clip wide">{duty(u.role_code)}</span></td>
                 </tr>
               ))}
             </tbody>

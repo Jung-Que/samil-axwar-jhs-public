@@ -1,8 +1,8 @@
 import type { Department, LaneAction, View } from "./types";
-import { Kpi, Mode, Section } from "./panels";
-import { EVENT_LABEL, ea, eok, pct } from "./format";
+import { Kpi, Section } from "./panels";
+import { EVENT_LABEL, ea, pct } from "./format";
 import { myWork } from "./perm";
-import type { PageId as Tab } from "./frame";
+import { pathOf, type PageId as Tab } from "./frame";
 import { EmptyState } from "./brand";
 import { Link } from "./router";
 
@@ -57,11 +57,12 @@ function BidFlow({ v, dept, onChoose }: { v: View; dept?: Department; onChoose: 
   const { steps, now } = flowSteps(v);
   const cur = now >= 0 ? steps[now] : undefined;
   const turn = cur?.who && cur.who.code !== dept?.code ? cur.who : undefined;
+  // 밀집도(이슈 #71): 5단계를 한 줄로 작게 보인다. 칸이 좁아 잘린 설명은 title로 전체를 보인다.
   return (
-    <Section title="입찰 흐름" mode={["real"]} note="단계는 입찰 상태를 기준으로 표시합니다. 각 단계는 해당 부서 권한으로 입력합니다(시뮬레이션 세션에서는 대행 입력을 기록하며 허용).">
-      <ol className="flow">
+    <Section title="입찰 흐름" mode={["real"]}>
+      <ol className="flow flow-compact">
         {steps.map((s, i) => (
-          <li key={s.type} className={`flow-step is-${s.state}`} aria-current={s.state === "now" ? "step" : undefined}>
+          <li key={s.type} className={`flow-step is-${s.state}`} aria-current={s.state === "now" ? "step" : undefined} title={`${i + 1} ${s.label} · ${s.note}`}>
             <span className="flow-title">
               {i + 1} {s.label}
             </span>
@@ -117,7 +118,6 @@ function NowCard({ v, dept, actions, onAction }: { v: View; dept: Department; ac
     <section className={`card now-card ${first ? "has-action" : ""}`}>
       <header className="card-head">
         <h2>지금 할 일</h2>
-        <span className="modes"><Mode kind="real" /></span>
       </header>
       {first ? (
         <div className="now-main">
@@ -159,20 +159,29 @@ function NowCard({ v, dept, actions, onAction }: { v: View; dept: Department; ac
 
 // ---- 판단 요약과 다른 부서가 답할 것 ----
 
+// 밀집도(이슈 #71): 가장 중요한 지표 하나만 보이고, PL-01·지체상금은 판단·제안 페이지에서 확인한다.
 function JudgeSummary({ v, goTab }: { v: View; goTab: (t: Tab) => void }) {
   const ev = v.state.evaluation;
-  const p1 = ev.products["PL-01"];
   const p2 = ev.products["PL-02"];
-  const l1 = v.state.lines?.find((l) => l.product_id === "PL-01");
   return (
-    <Section title="판단 요약" mode={["real"]} note="엔진 계산값입니다(능력 스냅샷 기준). 근거와 플래그는 C-201 판단·제안 페이지에서 확인할 수 있습니다.">
+    <Section title="판단 요약" mode={["real"]} note="엔진 계산값입니다(능력 스냅샷 기준).">
       <div className="kpis one-col">
         <Kpi label="PL-02 더마 제안 가능" value={`${ea(p2?.schedule_total)} EA`} sub={`요구 ${ea((p2?.monthly_demand ?? 0) * ev.scenario.contract_months)} 중 ${pct(p2?.coverage_pct)}`} tone={p2 && p2.coverage_pct < 100 ? "warn" : "ok"} />
-        <Kpi label="PL-01 기초" value={l1?.qty_status === "미확정" || !l1 ? "수량 미확정" : `${ea(p1?.schedule_total)} EA`} sub={`확인 전 상한 월 ${ea(p1?.months?.[0]?.supply)} EA`} tone="bad" />
-        <Kpi label="전량 약속 시 지체상금(지연분)" value={eok((p1?.penalty_backlog_krw ?? 0) + (p2?.penalty_backlog_krw ?? 0))} sub={`계약 총액 기준 ${eok(ev.penalty_contract_krw)}`} tone="bad" />
       </div>
       <button className="ghost small" onClick={() => goTab("judge")}>판단·제안 보기</button>
     </Section>
+  );
+}
+
+// 내 권한 한 줄: 기준 세션에서 입력할 수 있는 사건(번호 뺀 이름)과 회신할 확인 요청. 전체 표는 사용자·권한 페이지에 있다.
+function MyPermLine({ dept }: { dept: Department }) {
+  const evs = (dept.events ?? []).filter((e) => e !== "E3_REPLY").map((e) => (EVENT_LABEL[e] ?? e).replace(/^E\d+\s+/, ""));
+  const reps = dept.replies ?? [];
+  const text = [evs.join(", "), reps.length ? `회신 ${reps.join(", ")}` : ""].filter(Boolean).join(" · ") || "조회";
+  return (
+    <p className="card my-perm small">
+      <b>내 권한:</b> {text} · <Link to={pathOf("access")} className="my-link">사용자·권한에서 보기</Link>
+    </p>
   );
 }
 
@@ -197,7 +206,7 @@ function OthersOwe({ v, dept }: { v: View; dept?: Department }) {
   );
 }
 
-// ---- 내 업무(이슈 #43 → #47): 지금 할 일·입찰 흐름·나에게 온 확인 요청·내 작업·다른 부서·판단 요약·권한표 ----
+// ---- 내 업무(이슈 #43 → #47 → #71): 지금 할 일·입찰 흐름·나에게 온 확인 요청·내 작업·판단 요약·다른 부서·내 권한 한 줄 ----
 
 type MyWorkProps = {
   v: View;
@@ -213,11 +222,13 @@ export function MyWorkView({ v, dept, onAction, onChoose, onFocus, goTab }: MyWo
     return (
       <div className="split">
         <div className="split-main">
-          <Section title="내 업무" mode={["real"]} note="로그인한 계정의 역할을 기준으로 현재 할 일과 권한을 표시합니다. 시연할 때는 입찰 흐름 순서에 따라 해당 부서 계정으로 다시 로그인해 입력합니다.">
-            <p className="small">로그인한 계정의 역할을 권한표에서 찾을 수 없습니다. 아래 입찰 흐름에서 현재 차례인 부서 계정으로 다시 로그인해 주세요.</p>
+          <Section title="내 업무" mode={["real"]}>
+            <p className="small">
+              로그인한 계정의 역할을 권한표에서 찾을 수 없습니다. 아래 입찰 흐름에서 현재 차례인 부서 계정으로 다시 로그인해 주세요.{" "}
+              <Link to={pathOf("access")} className="my-link">사용자·권한에서 권한표 보기</Link>
+            </p>
           </Section>
           <BidFlow v={v} onChoose={onChoose} />
-          <PermissionSection v={v} open />
         </div>
       </div>
     );
@@ -225,15 +236,15 @@ export function MyWorkView({ v, dept, onAction, onChoose, onFocus, goTab }: MyWo
   const { reqs, tasks, actions } = myWork(v, dept);
   const buyer = (v.state.requests ?? []).filter((r) => r.to_role === "바이어" && r.state !== "반영");
   const handlesBuyer = (dept.events ?? []).includes("E4_BUYER_REPLY");
-  const mine = [...(v.state.log ?? [])].reverse().filter((e) => e.event.actor_role === dept.id || e.event.by === dept.id).slice(0, 8);
-  const sim = v.session.kind === "sim";
+  const mineAll = [...(v.state.log ?? [])].reverse().filter((e) => e.event.actor_role === dept.id || e.event.by === dept.id);
+  const mine = mineAll.slice(0, 8);
   return (
     <div className="split">
       <div className="split-main">
         <NowCard v={v} dept={dept} actions={actions} onAction={onAction} />
         <BidFlow v={v} dept={dept} onChoose={onChoose} />
         <div className="cols">
-          <Section title={`나에게 온 확인 요청 (${reqs.length})`} mode={["real", "mock"]} note={sim ? "시뮬레이션 세션에서는 다른 부서 요청도 확인 요청 페이지에서 대행 회신할 수 있습니다." : "기준 세션에서는 소속 부서로 온 요청에만 회신할 수 있습니다."}>
+          <Section title={`나에게 온 확인 요청 (${reqs.length})`} mode={["real", "mock"]}>
             {reqs.length === 0 ? (
               <p className="muted small">현재 받은 확인 요청이 없습니다. 요청이 오면 여기에 표시됩니다.</p>
             ) : (
@@ -267,7 +278,7 @@ export function MyWorkView({ v, dept, onAction, onChoose, onFocus, goTab }: MyWo
               </>
             )}
           </Section>
-          <Section title={`내 작업 (${tasks.length})`} mode={["real"]} note="사건으로 생성된 작업이며, 사건 번호로 원인을 추적할 수 있습니다.">
+          <Section title={`내 작업 (${tasks.length})`} mode={["real"]}>
             {tasks.length === 0 ? (
               <p className="muted small">현재 열린 작업이 없습니다. 사건으로 작업이 생성되면 여기에 표시됩니다.</p>
             ) : (
@@ -279,68 +290,72 @@ export function MyWorkView({ v, dept, onAction, onChoose, onFocus, goTab }: MyWo
                 ))}
               </ul>
             )}
-            <h3>내 부서 입력 이력 ({mine.length})</h3>
-            {mine.length === 0 ? (
-              <p className="muted small">현재 입력 이력이 없습니다.</p>
-            ) : (
-              <ul className="tasks">
-                {mine.map((e) => (
-                  <li key={e.event.seq}>
-                    #{e.event.seq} {EVENT_LABEL[e.event.type] ?? e.event.type}{" "}
-                    <span className="muted small">
-                      권한 {e.event.actor_role}
-                      {e.event.by && e.event.by !== e.event.actor_role ? ` · 대행 입력 ${e.event.by}` : ""} · 업무일 {e.event.sim_date}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <details className="my-history">
+              <summary className="muted small">
+                내 부서 입력 이력 {mineAll.length}건{mineAll.length > mine.length ? ` · 최근 ${mine.length}건 표시` : ""}
+              </summary>
+              {mine.length === 0 ? (
+                <p className="muted small">현재 입력 이력이 없습니다.</p>
+              ) : (
+                <ul className="tasks">
+                  {mine.map((e) => (
+                    <li key={e.event.seq}>
+                      #{e.event.seq} {EVENT_LABEL[e.event.type] ?? e.event.type}{" "}
+                      <span className="muted small">
+                        권한 {e.event.actor_role}
+                        {e.event.by && e.event.by !== e.event.actor_role ? ` · 대행 입력 ${e.event.by}` : ""} · 업무일 {e.event.sim_date}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </details>
           </Section>
         </div>
       </div>
       <div className="split-side">
         <JudgeSummary v={v} goTab={goTab} />
         <OthersOwe v={v} dept={dept} />
-        <PermissionSection v={v} current={dept.code} />
+        <MyPermLine dept={dept} />
       </div>
     </div>
   );
 }
 
-function PermissionSection({ v, current, open }: { v: View; current?: string; open?: boolean }) {
-  return (
-    <Section title="부서별 권한표" mode={["real"]} note="서버는 이 권한표로 판단합니다. 관리 › 사용자·권한에서도 확인할 수 있습니다.">
-      <details open={open}>
-        <summary className="small">표 펼치기</summary>
-        <PermissionTable v={v} current={current} />
-      </details>
-    </Section>
-  );
-}
-
+// 역할별 권한표(관리 › 사용자·권한). 모든 역할에 같은 기능은 표 위 한 줄로 한 번만 보이고, 열에는 다른 점만 둔다(이슈 #71).
 export function PermissionTable({ v, current }: { v: View; current?: string }) {
+  const ds = v.departments ?? [];
+  const common = ds.length ? ds[0].features.filter((f) => ds.every((d) => d.features.includes(f))) : [];
+  const label = (fs: string[]) => fs.map((f) => FEATURE_LABEL[f] ?? f).join(", ");
   return (
-    <div className="scroll">
-      <table className="grid text">
-        <thead>
-          <tr>
-            <th className="c-fit">권한</th>
-            <th className="c-text-s">기준 세션 입력 사건</th>
-            <th className="c-text-s">회신</th>
-            <th className="c-text">기능</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(v.departments ?? []).map((d) => (
-            <tr key={d.code} className={d.code === current ? "row-strong" : ""}>
-              <td className="c-fit">{d.dept === d.label ? d.label : `${d.dept} · ${d.label}`}</td>
-              <td className="c-text-s small">{(d.events ?? []).filter((e) => e !== "E3_REPLY").map((e) => EVENT_LABEL[e] ?? e).join(" · ") || "-"}</td>
-              <td className="c-text-s small">{(d.replies ?? []).join(" · ") || "-"}</td>
-              <td className="c-text small">{d.features.map((f) => FEATURE_LABEL[f] ?? f).join(" · ")}</td>
+    <>
+      {common.length > 0 && (
+        <p className="small perm-common">
+          <span className="muted">모든 역할 공통 기능:</span> {label(common)}
+        </p>
+      )}
+      <div className="scroll">
+        <table className="grid text">
+          <thead>
+            <tr>
+              <th className="c-fit">권한</th>
+              <th className="c-text-s">기준 세션 입력 사건</th>
+              <th className="c-text-s">회신</th>
+              <th className="c-text-s">{common.length > 0 ? "추가 기능" : "기능"}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {ds.map((d) => (
+              <tr key={d.code} className={d.code === current ? "row-strong" : ""}>
+                <td className="c-fit">{d.dept === d.label ? d.label : `${d.dept} · ${d.label}`}</td>
+                <td className="c-text-s small">{(d.events ?? []).filter((e) => e !== "E3_REPLY").map((e) => EVENT_LABEL[e] ?? e).join(" · ") || "-"}</td>
+                <td className="c-text-s small">{(d.replies ?? []).join(" · ") || "-"}</td>
+                <td className="c-text-s small">{label(d.features.filter((f) => !common.includes(f))) || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

@@ -168,6 +168,12 @@ function who(s: FlowStep, accounts: Account[]): string {
   }).join(" · ");
 }
 
+// 표의 '누가' 칸은 부서만(이름·아이디는 툴팁) — 밀집도(이슈 #71)
+function whoDept(s: FlowStep, accounts: Account[]): string {
+  if (s.roles.length === 0) return s.n === 4 ? "해당 부서" : "엔진(자동)";
+  return s.roles.map((r) => accounts.find((x) => x.role_code === r)?.dept_label ?? r).join(" · ");
+}
+
 // 시연 흐름 페이지
 export function FlowPage({ v, user, onSwitch }: Props) {
   const accounts = useAccounts();
@@ -199,8 +205,8 @@ export function FlowPage({ v, user, onSwitch }: Props) {
               {steps.map((s) => (
                 <tr key={s.n} className={`fs-${s.status}`} aria-current={s.status === "now" ? "step" : undefined}>
                   <td className="c-fit">{s.n}</td>
-                  <td className="c-text-s small">{who(s, accounts)}</td>
-                  <td className="c-text"><b>{s.title}</b><div className="muted small">{s.desc}</div></td>
+                  <td className="c-text-s small" title={who(s, accounts)}>{whoDept(s, accounts)}</td>
+                  <td className="c-text" title={s.status === "now" || s.status === "open" ? undefined : s.desc}><b>{s.title}</b>{(s.status === "now" || s.status === "open") && <div className="muted small">{s.desc}</div>}</td>
                   <td className="c-fit"><span className={`fs-pill fs-pill-${s.status}`}>{STATUS_LABEL[s.status]}</span></td>
                   <td className="c-text-s small">{s.evidence ?? ""}</td>
                   <td className="c-fit"><StepAction s={s} user={user} accounts={accounts} onSwitch={onSwitch} /></td>
@@ -210,13 +216,13 @@ export function FlowPage({ v, user, onSwitch }: Props) {
           </table>
         </div>
       </Section>
-      <section className="card">
-        <h2>처음부터 다시 하려면</h2>
+      <details className="card restart-help">
+        <summary><b>처음부터 다시 하려면</b></summary>
         <p className="small">
           기준 세션의 입력은 실제로 기록됩니다. 처음부터 다시 시연하려면 운영 관리 계정(admin01)으로 로그인한 뒤 <Link to="/sim">시뮬레이션</Link>에서 "이 세션 초기화"를 눌러 주세요.
           기준 세션을 그대로 두고 연습하려면 시뮬레이션 세션을 생성해 같은 순서로 진행하세요(대행 입력이 기록됩니다).
         </p>
-      </section>
+      </details>
     </>
   );
 }
@@ -241,12 +247,13 @@ export function FlowBar({ v, user, onSwitch }: Props) {
 }
 
 // 로그인 화면의 시연 순서(상태 없이 계정 차례만)
-export const FLOW_ORDER: { role: string; what: string }[] = [
-  { role: "sales", what: "RFP 접수" },
-  { role: "production", what: "확인 요청 회신" },
-  { role: "sales", what: "엔진 제안안 상신" },
-  { role: "board", what: "참여·대안 결정" },
-  { role: "sales", what: "제안 제출 → 작업 생성" },
-  { role: "production", what: "생성된 작업 확인" },
-  { role: "sales", what: "바이어 회신 → 재판단" },
+// n은 시연 흐름 페이지의 단계 번호(2 엔진 자동, 4 다른 부서 회신은 로그인 차례가 아니라 빠진다)
+export const FLOW_ORDER: { n: number; role: string; what: string }[] = [
+  { n: 1, role: "sales", what: "RFP 접수" },
+  { n: 3, role: "production", what: "확인 요청 회신" },
+  { n: 5, role: "sales", what: "엔진 제안안 상신" },
+  { n: 6, role: "board", what: "참여·대안 결정" },
+  { n: 7, role: "sales", what: "제안 제출 → 작업 생성" },
+  { n: 8, role: "production", what: "생성된 작업 확인" },
+  { n: 9, role: "sales", what: "바이어 회신 → 재판단" },
 ];

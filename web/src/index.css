@@ -2040,3 +2040,669 @@ button.note-more {
   white-space: nowrap;
   vertical-align: top;
 }
+
+/* ===== 밀집도 2단계 D(이슈 #71) — 판단·제안·시연 흐름·세션 도구 ===== */
+@media (max-width: 1100px) {
+  /* 좁은 화면: '내가 할 일'을 차트보다 먼저 */
+  .judge-split > .split-side {
+    order: -1;
+  }
+}
+
+.change-list {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.change-list li {
+  margin: 1px 0;
+}
+
+details.restart-help > summary {
+  cursor: pointer;
+}
+
+details.restart-help[open] > summary {
+  margin-bottom: 6px;
+}
+
+.session-tools .tool-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tool-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.tool-row select,
+.tool-row input[type="date"] {
+  width: auto;
+}
+
+.tool-label {
+  min-width: 6.5em;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #4F4F4F;
+}
+
+.tool-desc {
+  flex: 1 1 240px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== 밀집도 2단계 A(이슈 #71) ===== */
+/* 확인 요청: 내 부서 행은 첫 칸 왼쪽 막대 + '내 부서' 꼬리표(행 전체 굵게 대신), 질문 두 줄 + 펼치기, 회신 폼은 누른 행 바로 아래 */
+table.grid.req-table th:first-child,
+table.grid.req-table td:first-child {
+  padding-left: 10px;
+}
+
+table.grid tr.req-mine > td:first-child {
+  box-shadow: inset 3px 0 0 #111111;
+}
+
+.tag.req-mine-tag {
+  margin: 0 0 0 4px;
+  background: #FFFFFF;
+  color: #111111;
+  border: 1px solid #111111;
+}
+
+.req-q-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+table.grid tr.req-open > td,
+table.grid tr.req-reply > td {
+  background: #F2F2F2;
+}
+
+table.grid tr.req-reply > td {
+  padding: 0 10px 10px;
+  text-align: left;
+  white-space: normal;
+}
+
+tr.req-reply .fieldbox {
+  margin: 0;
+  background: #FFFFFF;
+  border-color: #FFFFFF;
+}
+
+.req-done {
+  margin-top: 8px;
+}
+
+.req-done > summary,
+.my-history > summary {
+  cursor: pointer;
+}
+
+/* 내 업무: 입찰 흐름 5단계를 한 줄로 작게, 내 권한 한 줄, 입력 이력 접기 */
+.flow.flow-compact {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  margin: 0;
+}
+
+.flow-compact .flow-step {
+  gap: 0;
+  min-width: 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.flow-compact .flow-title,
+.flow-compact .flow-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-compact .flow-title {
+  font-size: 0.8rem;
+}
+
+.flow-compact .flow-sub {
+  font-size: 0.72rem;
+}
+
+.flow-compact + .flow-next {
+  margin-top: 6px;
+}
+
+p.card.my-perm {
+  margin: 0;
+  padding: 10px 14px;
+}
+
+a.my-link {
+  color: #111111;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.my-history {
+  margin-top: 10px;
+}
+
+/* 사용자·권한: 공통 기능은 표 위 한 줄, 담당 업무는 한 줄 말줄임(전체는 title) */
+.perm-common {
+  margin: 0 0 4px;
+}
+
+.clip.wide {
+  max-width: min(28em, 40vw);
+}
+
+/* ===== 밀집도 2단계 B(이슈 #71) ===== */
+/* 여유·증설안·약속 원장·가정·작업·사건 로그(panels.tsx) */
+details.dfold {
+  margin: 4px 0 6px;
+}
+
+details.dfold > summary,
+details.churn-fold > summary {
+  cursor: pointer;
+}
+
+details.dfold > summary {
+  padding: 2px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4F4F4F;
+}
+
+details.dfold[open] > summary {
+  margin-bottom: 4px;
+}
+
+table.grid.dfold-table,
+table.grid.cmp-table,
+table.grid.churn-table {
+  width: auto;
+}
+
+.dfold-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #4F4F4F;
+}
+
+.dfold-list li {
+  margin: 2px 0;
+}
+
+p.cap-line {
+  margin: 0 0 2px;
+}
+
+/* 넓은 월별 표: 첫 열(행 이름)을 고정해 가로로 넘겨도 읽히게 */
+table.grid.sticky-first th:first-child,
+table.grid.sticky-first td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #FFFFFF;
+  box-shadow: inset -1px 0 0 #F2F2F2;
+}
+
+/* OPT-01 비교 요약: 지표 × 시나리오. 기본(제출 기준) 열을 굵게 */
+table.grid.cmp-table td.cmp-base {
+  font-weight: 600;
+}
+
+/* 원본 간 규모 차이: 한 줄 경고 + 자세히 */
+details.gap-fold > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #111111;
+}
+
+details.gap-fold .gap-line {
+  margin-right: 6px;
+}
+
+.gap-more {
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+details.gap-fold[open] .gap-more {
+  display: none;
+}
+
+details.gap-fold[open] > summary {
+  margin-bottom: 6px;
+}
+
+/* 가예약 표: 칸 아래 공급 출처 */
+.res-basis {
+  display: block;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #4F4F4F;
+}
+
+/* 이탈 신호: 월 열 같은 좁은 폭, 정상 고객은 머리 줄만 */
+table.grid.churn-table th:not(:first-child),
+table.grid.churn-table td:not(:first-child) {
+  width: 5.5em;
+  min-width: 5.5em;
+}
+
+details.churn-fold > summary {
+  padding: 2px 0;
+}
+
+/* 가정: 성격 필터, 값 2줄(전체는 title) */
+.assume-filter {
+  margin: 0 0 6px;
+}
+
+.cell-clamp2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 작업: 완료 표는 회색 글자 */
+table.grid.task-table.is-done td {
+  color: #4F4F4F;
+}
+
+/* 사건 로그: 업무일 머리글, 변경 2줄 + 더 보기, 분기 버튼은 작게 오른쪽 */
+.log-day + .log-day {
+  margin-top: 8px;
+}
+
+h3.log-date {
+  margin: 6px 0 4px;
+  font-size: 0.85rem;
+  color: #111111;
+}
+
+.log-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.log-head button.log-fork {
+  margin-left: auto;
+  padding: 0 6px;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+button.note-more.log-more {
+  margin: 1px 0 0 14px;
+}
+
+/* ===== 밀집도 2단계 C(이슈 #71) ===== */
+/* 업무 레인: 세로로 쌓은 접기 레인. 머리 줄 = 이름·개수, 펼치면 네 칸을 가로로. 항목은 두 줄 + 자세히 */
+.lane-tools {
+  justify-content: flex-end;
+  margin: 0 0 6px;
+}
+
+.lane-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lane.lane-fold {
+  padding: 0;
+}
+
+.lane-fold .lane-h {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+button.lane-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #111111;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.lane-head:focus-visible {
+  outline: 2px solid #111111;
+  outline-offset: -2px;
+}
+
+.lane-caret {
+  width: 1em;
+  color: #4F4F4F;
+}
+
+.lane-mine {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #FFFFFF;
+  color: #111111;
+  box-shadow: inset 0 0 0 1px #111111;
+}
+
+.lane-counts {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  color: #4F4F4F;
+}
+
+.lane-fold.is-open > .lane-h > button.lane-head {
+  border-bottom: 1px solid #FFFFFF;
+  border-radius: 8px 8px 0 0;
+}
+
+.lane-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: start;
+  gap: 8px 12px;
+  padding: 6px 10px 8px;
+}
+
+.lane-body .lane-box {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.lane-body > p {
+  margin: 0;
+}
+
+.lane-text.clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.lane-text.is-more {
+  cursor: pointer;
+}
+
+.lane-text.is-more:hover {
+  text-decoration: underline dotted #4F4F4F;
+  text-underline-offset: 3px;
+}
+
+.lane-text.is-more:focus-visible {
+  outline: 2px solid #111111;
+  outline-offset: 1px;
+}
+
+li.lane-group {
+  list-style: none;
+  margin-left: -14px;
+}
+
+.lane-group > details > summary {
+  cursor: pointer;
+}
+
+.lane-group > details > ul {
+  margin: 2px 0 0;
+  padding-left: 14px;
+}
+
+/* 접수함: Masil 발주 한 줄 요약 + 펼침, 처음 20건 + 더 보기 */
+details.fold-line {
+  margin: 4px 0;
+}
+
+details.fold-line > summary {
+  cursor: pointer;
+}
+
+details.fold-line[open] > summary {
+  margin-bottom: 4px;
+}
+
+table.grid.grid-auto {
+  width: auto;
+}
+
+.more-row {
+  justify-content: center;
+  margin: 4px 0 0;
+}
+
+/* 생산 라인: 라인 칸 펼침 단추와 펼친 줄(배치·보류·Masil 보호) */
+button.row-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin: 0 4px 0 0;
+  padding: 0;
+  border: 1px solid #4F4F4F;
+  border-radius: 4px;
+  background: #FFFFFF;
+  color: #111111;
+  font-size: 10px;
+  line-height: 1;
+  vertical-align: 1px;
+}
+
+button.row-toggle[aria-expanded="true"] {
+  border-color: #111111;
+}
+
+/* 좁은 폭: 작업·상태·월 생산·진행 주문 칸만 두 줄 허용(덩어리는 .nowrap), 넓은 폭에서는 한 줄 그대로 */
+table.grid.line-board th.lb-wrap,
+table.grid.line-board td.lb-wrap {
+  white-space: normal;
+}
+
+table.grid tr.line-detail > td {
+  padding: 2px 6px 8px 28px;
+  text-align: left;
+  white-space: normal;
+}
+
+.kv-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 18px;
+  margin: 0;
+}
+
+.kv-line > div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.kv-line dt {
+  font-size: 12px;
+  color: #4F4F4F;
+}
+
+.kv-line dt[title] {
+  text-decoration: underline dotted #4F4F4F;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+.kv-line dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* 세션 비교: 차이 요약 한 줄 + 접는 구역(지표만 펼침), 같은 값·같은 달 숨기기 */
+p.cmp-summary {
+  margin: 6px 0 8px;
+  font-size: 0.9rem;
+}
+
+details.fold,
+p.fold {
+  margin: 0;
+  padding: 6px 0;
+  border-top: 1px solid #F2F2F2;
+}
+
+details.fold > summary {
+  cursor: pointer;
+}
+
+.fold-title {
+  font-weight: 700;
+  color: #111111;
+}
+
+.fold-meta {
+  margin-left: 6px;
+  font-size: 12px;
+  color: #4F4F4F;
+}
+
+p.fold.fold-empty .fold-title {
+  font-weight: 600;
+  color: #4F4F4F;
+}
+
+.fold-body {
+  padding-top: 4px;
+}
+
+label.fold-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0;
+  cursor: pointer;
+}
+
+label.fold-toggle input {
+  width: auto;
+  margin: 0;
+  padding: 0;
+}
+
+p.fold-note {
+  margin: 0 0 6px;
+}
+
+table.grid.cmp-month td.cmp-sched {
+  font-weight: 700;
+}
+
+/* 한 줄 말줄임 글 열: 남는 폭을 모두 쓰고 넘치면 …(전체는 칸의 title) */
+table.grid td.c-line {
+  max-width: 0;
+  width: 100%;
+  text-align: left;
+}
+
+table.grid td.c-line > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 시뮬레이션: 기준 세션에서 쓸 수 없는 카드는 회색 한 줄 + 버튼 */
+.card.card-off {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 16px;
+  background: #F2F2F2;
+  border: 1px solid #FFFFFF;
+  color: #4F4F4F;
+  font-size: 13px;
+}
+
+.card-off .off-title {
+  font-weight: 700;
+}
+
+.card-off .off-text {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.card-off > button {
+  flex: none;
+}
+
+/* ===== 밀집도 2단계 B(이슈 #71) ===== */
+/* (이어서) 증설·전환안 표: 칸 안 둘째 줄(유형·가정 표시)과 코드 세로 나열로 가로 폭을 줄인다 */
+table.grid .cell-sub {
+  display: block;
+  font-size: 11px;
+  line-height: 1.25;
+  color: #4F4F4F;
+  font-weight: 400;
+}
+
+table.grid .cell-line {
+  display: block;
+}
+
+table.grid.opt-table th,
+table.grid.opt-table td {
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+/* ===== 밀집도 2단계 B(이슈 #71) ===== */
+/* (마무리) 증설·전환안 표 칸 여백 4px(715px 카드에 맞춤), 단계 칸만 줄바꿈 허용, B2B 표 여백, 칸 둘째 줄 경고색 */
+table.grid.opt-table th,
+table.grid.opt-table td {
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+table.grid.opt-table td.opt-phase {
+  white-space: normal;
+  min-width: 3.5em;
+}
+
+table.grid.b2b-table th,
+table.grid.b2b-table td {
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+table.grid .cell-sub.bad {
+  color: #D7263D;
+}

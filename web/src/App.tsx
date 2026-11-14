@@ -200,9 +200,9 @@ export default function App() {
       case "ledger":
         return (<><LedgerView v={v} /><ChurnView v={v} /></>);
       case "lanes":
-        return <LanesView v={v} onAction={onAction} />;
+        return <LanesView v={v} onAction={onAction} dept={dept} />;
       case "lines":
-        return (<><LineBoardView v={v} /><SourceGapView v={v} /></>);
+        return <LineBoardView v={v} />;
       case "log":
         return <LogView v={v} onFork={dept ? (seq) => run(() => api.fork(seq)).then((ok) => { if (ok) go("sim"); }) : undefined} busy={busy} />;
       case "event":
@@ -275,7 +275,7 @@ function ApprovalsPage({ v, run, dept }: { v: View; run: (fn: () => Promise<View
         <EventPanel v={v} run={run} dept={dept} only={["E2_DECISION"]} title={`결정 대기 · C-201 v${bid?.version ?? ""}`} />
       ) : (
         <section className="card">
-          <EmptyState swan="waiting" title="결정 대기 0 · 상신을 기다리는 중" action={<Link to="/bids/C-201" className="btn ghost-btn">C-201 판단 보기</Link>}>
+          <EmptyState compact swan="waiting" title="결정 대기 0 · 상신을 기다리는 중" action={<Link to="/bids/C-201" className="btn ghost-btn">C-201 판단 보기</Link>}>
             현재 결정할 제안안이 없습니다(입찰 상태 {bid ? `${bid.state} · v${bid.version}` : "접수 전"}). 영업이 제안안을 상신하면(E8) 여기에 표시되며 CEO/이사회가 결정합니다.
           </EmptyState>
         </section>

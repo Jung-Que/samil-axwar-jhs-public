@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import type { View, ProductEval, LineEval, OptionEval, LogEntry } from "./types";
+import type { View, ProductEval, LineEval, OptionEval, LogEntry, Reservation, ChurnSignal, Task } from "./types";
 import { BASIS_LABEL, EVENT_LABEL, PRODUCT_LABEL, ea, eok, pct, slug, won } from "./format";
 import { EmptyState } from "./brand";
 
@@ -79,47 +79,50 @@ export function batchSource(v: View): string {
 // 원본 간 규모 차이: 배치 실적과 능력 스냅샷은 연간·월간 어느 해석으로도 함께 맞지 않는다(표시만, 계산은 그대로).
 export function SourceGapView({ v }: { v: View }) {
   const b = v.data_basis;
+  // 밀집도 2단계(이슈 #71): 한 줄 경고 + "자세히"로 펼치는 설명·표
   return (
-    <Section
-      title="원본 간 규모 차이"
-      mode={["real"]}
-      note={
-        <>
-          <span className="tag tag-가정">원본 간 불일치</span> 엔진의 여유·C-201 가용·제안 일정은 <b>{snapSource(v)}</b>를 사용합니다(D6). 생산 라인 보드의 월 생산·부하·상태는 <b>{batchSource(v)}</b>와 진행 주문 기록({b.order_file}, 기록 ~{b.cutoff})을 사용합니다. 두 원본은 capacity_qty를 연간·월간 어느 쪽으로 읽어도 실적과 스냅샷 가동률이 함께 맞지 않습니다. A05 알려진 한계 목록에 없는 불일치이므로, 판단은 스냅샷 기준으로 하고 배치 실적은 라인 보드의 비율(부하 ÷ 실적)에만 사용합니다.
-        </>
-      }
-    >
-      <div className="scroll">
-        <table className="grid">
-          <thead>
-            <tr>
-              <th>라인</th><th>제품군</th>
-              <ColHead main="월 생산" sub={`배치 실적 · EA/월 · ${b.t12_from}~${b.t12_to} 평균`} />
-              <ColHead main="capacity_qty" sub={`능력 스냅샷 ${b.snapshot_date} · 단위 미기재`} />
-              <ColHead main="스냅샷 가동률" sub="능력 스냅샷" />
-              <ColHead main="연간으로 읽으면: 월 능력" sub="capacity ÷ 12 · EA/월" />
-              <ColHead main="실적 ÷ 월 능력" sub="연간 해석(엔진 기본, D6)" />
-              <ColHead main="월간으로 읽으면: 실적 ÷ capacity" sub="월간 해석(CR-01 대안)" />
-            </tr>
-          </thead>
-          <tbody>
-            {(b.gaps ?? []).map((g) => (
-              <tr key={g.line_id}>
-                <td>{g.line_id} <span className="muted small">{g.plant_id}</span></td>
-                <td>{PRODUCT_LABEL[g.product_id] ?? g.product_id}</td>
-                <td>{ea(g.t12_monthly)}</td>
-                <td>{ea(g.capacity_qty)}</td>
-                <td>{pct(g.utilization_pct, 0)}</td>
-                <td>{ea(Math.floor(g.annual_monthly_cap))}</td>
-                <td className={g.ratio_annual_pct > 100 ? "bad" : ""}>{pct(g.ratio_annual_pct, 0)}</td>
-                <td className={Math.abs(g.ratio_monthly_pct - g.utilization_pct) > 10 ? "bad" : ""}>{pct(g.ratio_monthly_pct, 1)}</td>
+    <Section title="원본 간 규모 차이" mode={["real"]}>
+      <details className="gap-fold">
+        <summary>
+          <span className="tag tag-가정">원본 간 불일치</span>
+          <span className="gap-line">능력 스냅샷과 배치 실적의 규모가 맞지 않습니다. 판단은 스냅샷 기준(D6)으로 합니다.</span>
+          <span className="gap-more">자세히</span>
+        </summary>
+        <p className="muted small">
+          엔진의 여유·C-201 가용·제안 일정은 <b>{snapSource(v)}</b>를 사용합니다(D6). 생산 라인 보드의 월 생산·부하·상태는 <b>{batchSource(v)}</b>와 진행 주문 기록({b.order_file}, 기록 ~{b.cutoff})을 사용합니다. 두 원본은 capacity_qty를 연간·월간 어느 쪽으로 읽어도 실적과 스냅샷 가동률이 함께 맞지 않습니다. A05 알려진 한계 목록에 없는 불일치이므로, 판단은 스냅샷 기준으로 하고 배치 실적은 라인 보드의 비율(부하 ÷ 실적)에만 사용합니다.
+        </p>
+        <div className="scroll">
+          <table className="grid">
+            <thead>
+              <tr>
+                <th>라인</th><th>제품군</th>
+                <ColHead main="월 생산" sub={`배치 실적 · EA/월 · ${b.t12_from}~${b.t12_to} 평균`} />
+                <ColHead main="capacity_qty" sub={`능력 스냅샷 ${b.snapshot_date} · 단위 미기재`} />
+                <ColHead main="스냅샷 가동률" sub="능력 스냅샷" />
+                <ColHead main="월 능력(연간)" sub="연간으로 읽으면: capacity ÷ 12 · EA/월" />
+                <ColHead main="실적 ÷ 월 능력" sub="연간 해석(엔진 기본, D6)" />
+                <ColHead main="실적 ÷ capacity(월간)" sub="월간으로 읽으면: 실적 ÷ capacity · 월간 해석(CR-01 대안)" />
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <TableSrc>월 생산 = {batchSource(v)} · capacity_qty·가동률 = 능력 스냅샷 {b.snapshot_date}(단위 미기재) · 연간 해석 = 엔진 기본(D6), 월간 해석 = CR-01 대안</TableSrc>
-      <p className="muted small">빨간 칸은 연간 해석에서 실적이 능력을 넘거나(100% 초과), 월간 해석에서 실적 비율이 스냅샷 가동률과 10%p 넘게 차이 나는 경우입니다. 단위는 생산관리 확인 요청(CR-01)으로 확인합니다.</p>
+            </thead>
+            <tbody>
+              {(b.gaps ?? []).map((g) => (
+                <tr key={g.line_id}>
+                  <td>{g.line_id} <span className="muted small">{g.plant_id}</span></td>
+                  <td>{PRODUCT_LABEL[g.product_id] ?? g.product_id}</td>
+                  <td>{ea(g.t12_monthly)}</td>
+                  <td>{ea(g.capacity_qty)}</td>
+                  <td>{pct(g.utilization_pct, 0)}</td>
+                  <td>{ea(Math.floor(g.annual_monthly_cap))}</td>
+                  <td className={g.ratio_annual_pct > 100 ? "bad" : ""}>{pct(g.ratio_annual_pct, 0)}</td>
+                  <td className={Math.abs(g.ratio_monthly_pct - g.utilization_pct) > 10 ? "bad" : ""}>{pct(g.ratio_monthly_pct, 1)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <TableSrc>월 생산 = {batchSource(v)} · capacity_qty·가동률 = 능력 스냅샷 {b.snapshot_date}(단위 미기재) · 연간 해석 = 엔진 기본(D6), 월간 해석 = CR-01 대안</TableSrc>
+        <p className="muted small">빨간 칸은 연간 해석에서 실적이 능력을 넘거나(100% 초과), 월간 해석에서 실적 비율이 스냅샷 가동률과 10%p 넘게 차이 나는 경우입니다. 단위는 생산관리 확인 요청(CR-01)으로 확인합니다.</p>
+      </details>
     </Section>
   );
 }
@@ -160,7 +163,7 @@ function ProductTable({ pe, status, conds }: { pe: ProductEval; status?: string;
         {status && <span className={`pill pill-${slug(status)}`}>{status}</span>}
       </div>
       <div className="scroll">
-        <table className="grid">
+        <table className="grid sticky-first">
           <thead>
             <tr>
               <th>월</th>
@@ -223,9 +226,29 @@ function ProductTable({ pe, status, conds }: { pe: ProductEval; status?: string;
 export function CompareView({ v }: { v: View }) {
   const c = v.state.evaluation.compare_opt01;
   if (!c) return null;
-  const sides = [c.base, c.alt];
+  const { base: b, alt: a } = c;
   const months = c.months ?? [];
-  const diff = (a: number, b: number) => (b - a === 0 ? "-" : `${b - a > 0 ? "+" : ""}${ea(b - a)}`);
+  const sign = (n: number) => (n > 0 ? "+" : "");
+  const diff = (x: number, y: number) => (y - x === 0 ? "-" : `${sign(y - x)}${ea(y - x)}`);
+  const monthNo = (m: string) => Number(m.slice(0, 4)) * 12 + Number(m.slice(5, 7));
+  const monthDiff = (x: string, y: string) => (!x || !y ? (x === y ? "-" : "다름") : monthNo(y) - monthNo(x) === 0 ? "-" : `${sign(monthNo(y) - monthNo(x))}${monthNo(y) - monthNo(x)}개월`);
+  const same = (x: string, y: string) => (x === y ? "-" : "다름");
+  const status = (s: typeof b) => `${s.status}${s.conditional && s.usable ? " (조건부)" : ""}`;
+  // 요약은 지표를 행으로, 두 시나리오를 열로 둔다(밀집도 2단계, 이슈 #71). 차이 = 비교 − 기본.
+  const rows: { k: string; b: string; a: string; d: string }[] = [
+    { k: "OPT-01 결정", b: status(b), a: status(a), d: same(status(b), status(a)) },
+    { k: "설치 완료", b: b.install_date, a: a.install_date, d: same(b.install_date, a.install_date) },
+    { k: "적격(재검증)", b: `${b.qualified_date} (${b.validation_weeks}주)`, a: `${a.qualified_date} (${a.validation_weeks}주)`, d: a.validation_weeks === b.validation_weeks ? "-" : `${sign(a.validation_weeks - b.validation_weeks)}${a.validation_weeks - b.validation_weeks}주` },
+    { k: "산입 시작", b: b.usable ? `${b.start_month}~` : "반영 안 함", a: a.usable ? `${a.start_month}~` : "반영 안 함", d: b.usable && a.usable ? monthDiff(b.start_month, a.start_month) : same(String(b.usable), String(a.usable)) },
+    { k: "최초 반영 월(계약 안)", b: b.first_supply_month || "없음", a: a.first_supply_month || "없음", d: monthDiff(b.first_supply_month, a.first_supply_month) },
+    { k: "OPT-01 공급 합", b: ea(b.opt_qty_total), a: ea(a.opt_qty_total), d: diff(b.opt_qty_total, a.opt_qty_total) },
+    { k: "PL-02 제안 합", b: ea(b.schedule_total), a: ea(a.schedule_total), d: diff(b.schedule_total, a.schedule_total) },
+    { k: "부족 합", b: ea(b.short_total), a: ea(a.short_total), d: diff(b.short_total, a.short_total) },
+    { k: "공급률", b: pct(b.coverage_pct), a: pct(a.coverage_pct), d: a.coverage_pct === b.coverage_pct ? "-" : `${sign(a.coverage_pct - b.coverage_pct)}${(a.coverage_pct - b.coverage_pct).toFixed(1)}%p` },
+    { k: "지연분 노출", b: eok(b.penalty_backlog_krw), a: eok(a.penalty_backlog_krw), d: a.penalty_backlog_krw === b.penalty_backlog_krw ? "-" : `${sign(a.penalty_backlog_krw - b.penalty_backlog_krw)}${eok(a.penalty_backlog_krw - b.penalty_backlog_krw)}` },
+    { k: "계약 총액 기준", b: eok(b.penalty_contract_krw), a: eok(a.penalty_contract_krw), d: a.penalty_contract_krw === b.penalty_contract_krw ? "-" : `${sign(a.penalty_contract_krw - b.penalty_contract_krw)}${eok(a.penalty_contract_krw - b.penalty_contract_krw)}` },
+  ];
+  const head = (label: string) => label.split(":")[0];
   return (
     <Section
       title="OPT-01 비교 시나리오: 적격 기간 가정 대 원본 '재검증 불필요'"
@@ -237,35 +260,29 @@ export function CompareView({ v }: { v: View }) {
       }
     >
       <div className="scroll">
-        <table className="grid">
+        <table className="grid cmp-table">
           <thead>
             <tr>
-              <th>시나리오</th><th>OPT-01 결정</th><th>설치 완료</th><th>적격(재검증)</th><th>산입 시작</th><th>최초 반영 월(계약 안)</th>
-              <th>OPT-01 공급 합</th><th>PL-02 제안 합</th><th>부족 합</th><th>공급률</th><th>지연분 노출</th><th>계약 총액 기준</th>
+              <th>항목</th>
+              <ColHead main={head(b.label)} sub={b.label} />
+              <ColHead main={head(a.label)} sub={a.label} />
+              <th>차이(비교 − 기본)</th>
             </tr>
           </thead>
           <tbody>
-            {sides.map((s, i) => (
-              <tr key={s.label} className={i === 0 ? "row-strong" : ""}>
-                <td>{s.label}</td>
-                <td>{s.status}{s.conditional && s.usable ? " (조건부)" : ""}</td>
-                <td>{s.install_date}</td>
-                <td>{s.qualified_date} ({s.validation_weeks}주)</td>
-                <td>{s.usable ? `${s.start_month}~` : "반영 안 함"}</td>
-                <td>{s.first_supply_month || "없음"}</td>
-                <td>{ea(s.opt_qty_total)}</td>
-                <td>{ea(s.schedule_total)}</td>
-                <td>{ea(s.short_total)}</td>
-                <td>{pct(s.coverage_pct)}</td>
-                <td>{eok(s.penalty_backlog_krw)}</td>
-                <td>{eok(s.penalty_contract_krw)}</td>
+            {rows.map((r) => (
+              <tr key={r.k}>
+                <td>{r.k}</td>
+                <td className="cmp-base">{r.b}</td>
+                <td className={r.d !== "-" ? "warn" : ""}>{r.a}</td>
+                <td className={r.d === "-" ? "muted" : ""}>{r.d}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <div className="scroll">
-        <table className="grid">
+        <table className="grid sticky-first">
           <thead>
             <tr>
               <th>PL-02 월</th>
@@ -276,22 +293,43 @@ export function CompareView({ v }: { v: View }) {
             <tr><td>요구</td>{months.map((m) => <td key={m.month}>{ea(m.demand)}</td>)}</tr>
             <tr><td>OPT-01 공급 · 기본</td>{months.map((m) => <td key={m.month}>{m.base_opt01 ? ea(m.base_opt01) : "-"}</td>)}</tr>
             <tr><td>OPT-01 공급 · 비교</td>{months.map((m) => <td key={m.month} className={m.alt_opt01 !== m.base_opt01 ? "warn" : ""}>{m.alt_opt01 ? ea(m.alt_opt01) : "-"}</td>)}</tr>
-            <tr><td>전체 공급 · 기본</td>{months.map((m) => <td key={m.month}>{ea(m.base_supply)}</td>)}</tr>
-            <tr><td>전체 공급 · 비교</td>{months.map((m) => <td key={m.month}>{ea(m.alt_supply)}</td>)}</tr>
-            <tr className="row-strong"><td>제안 · 기본</td>{months.map((m) => <td key={m.month}>{ea(m.base_schedule)}</td>)}</tr>
-            <tr className="row-strong"><td>제안 · 비교</td>{months.map((m) => <td key={m.month}>{ea(m.alt_schedule)}</td>)}</tr>
-            <tr><td>제안 차이(비교 − 기본)</td>{months.map((m) => <td key={m.month} className={m.alt_schedule !== m.base_schedule ? "warn" : "muted"}>{diff(m.base_schedule, m.alt_schedule)}</td>)}</tr>
-            <tr className="row-bad"><td>부족 · 기본 / 비교</td>{months.map((m) => <td key={m.month}>{m.base_short || m.alt_short ? `${ea(m.base_short)} / ${ea(m.alt_short)}` : "-"}</td>)}</tr>
+            <tr className="row-strong">
+              <td title="비교 − 기본">제안 차이</td>
+              {months.map((m) => (
+                <td key={m.month} className={m.alt_schedule !== m.base_schedule ? "warn" : "muted"}
+                  title={`제안 기본 ${ea(m.base_schedule)} / 비교 ${ea(m.alt_schedule)} · 전체 공급 기본 ${ea(m.base_supply)} / 비교 ${ea(m.alt_supply)}`}>
+                  {diff(m.base_schedule, m.alt_schedule)}
+                </td>
+              ))}
+            </tr>
+            <tr className="row-bad">
+              <td title="두 값이 같으면 하나만 표시합니다">부족 · 기본 / 비교</td>
+              {months.map((m) => (
+                <td key={m.month} title={`기본 ${ea(m.base_short)} / 비교 ${ea(m.alt_short)}`}>
+                  {!m.base_short && !m.alt_short ? "-" : m.base_short === m.alt_short ? ea(m.base_short) : `${ea(m.base_short)} / ${ea(m.alt_short)}`}
+                </td>
+              ))}
+            </tr>
           </tbody>
         </table>
       </div>
+      <TableSrc>계산 · PL-02 · EA/월 · 제안·전체 공급(기본/비교) 수량은 차이 칸의 툴팁에 표시됩니다</TableSrc>
     </Section>
   );
 }
 
 // 라인 여유(R1)와 증설·전환안 적격 능력일(R3)
+// 밀집도 2단계(이슈 #71): 답(C-201 가용·월)을 라인 바로 옆에 두고, C-201 대상이 아닌 라인은 접는다.
+// 신규 수주 두 열이 모두 0이면 열을 빼고 한 줄로 알린다. 증설·전환안은 설치·적격·산입을 '일정' 한 열로 모은다.
+const isC201 = (l: LineEval) => l.product_id === "PL-01" || l.product_id === "PL-02";
+const md = (d: string) => (d ? d.slice(5) : "-");
+
 export function CapacityView({ v }: { v: View }) {
   const ev = v.state.evaluation;
+  const targets = ev.lines.filter(isC201);
+  const others = ev.lines.filter((l) => !isC201(l));
+  const showOrders = targets.some((l) => l.new_orders !== 0 || l.hist_orders !== 0);
+  const histSub = `원본 시계 · ${v.state.scenario.hist_basis === "gross" ? "총량(모의)" : "순증분"} · EA`;
   return (
     <Section title="라인 여유와 증설·전환안" mode={["real"]} note={`이 표는 엔진 판단 기준입니다. 출처: ${snapSource(v)}(단위 ${v.state.scenario.unit_confirmed ? "확인됨" : "미확인"}). 여유 = 능력 × (1 − 가동률). F1 가동률 가중 ${pct(ev.f1_weighted_util, 2)} / 단순 ${pct(ev.f1_simple_util, 2)}. 생산 라인 보드의 월 생산(배치 실적)과는 규모가 다릅니다. 아래 '원본 간 규모 차이'를 확인해 주세요.`}>
       <div className="scroll">
@@ -299,52 +337,90 @@ export function CapacityView({ v }: { v: View }) {
           <thead>
             <tr>
               <th>라인</th><th className="c-left">공장</th><th className="c-left">제품군</th>
+              <ColHead main="C-201 가용" sub="계산 · EA/년" />
+              <ColHead main="월" sub="÷ 12 · EA/월" />
               <ColHead main="능력" sub={`스냅샷 ${v.data_basis.snapshot_date} · EA/년(D6)`} />
               <ColHead main="가동률" sub="스냅샷" />
               <ColHead main="기본 여유" sub="계산 · EA/년" />
               <ColHead main="Masil 보호" sub={`발주 ~${v.data_basis.cutoff} · EA`} />
-              <ColHead main="신규 수주" sub="E5 · EA/년" />
-              <ColHead main="기준일 뒤 신규 수주" sub={`원본 시계 · ${v.state.scenario.hist_basis === "gross" ? "총량(모의)" : "순증분"} · EA`} />
-              <ColHead main="C-201 가용" sub="계산 · EA/년" />
-              <ColHead main="월" sub="÷ 12 · EA/월" />
+              {showOrders && <ColHead main="신규 수주" sub="E5 · EA/년" />}
+              {showOrders && <ColHead main="기준일 뒤 수주" sub={`기준일 뒤 신규 수주 · ${histSub}`} />}
             </tr>
           </thead>
           <tbody>
-            {ev.lines.map((l: LineEval) => {
-              const c201 = l.product_id === "PL-01" || l.product_id === "PL-02";
+            {targets.map((l) => (
+              <tr key={l.line_id}>
+                <td>{l.line_id}</td><td className="c-left">{l.plant_id}</td><td className="c-left">{l.product_id}{l.dedicated && <span className="cell-sub">F1 전용</span>}</td>
+                <td><b>{ea(l.base_avail_annual)}</b></td><td>{ea(l.base_monthly)}</td>
+                <td>{ea(l.capacity_qty)}</td><td>{pct(l.utilization_pct, 0)}</td><td>{ea(l.spare_annual)}</td>
+                <td>{ea(l.masil_protected)}{l.masil_deficit > 0 && <span className="cell-sub bad">부족 {ea(l.masil_deficit)}</span>}</td>
+                {showOrders && <td>{ea(l.new_orders)}</td>}
+                {showOrders && <td className={l.hist_orders ? "warn" : ""}>{ea(l.hist_orders)}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!showOrders && <p className="muted small cap-line">신규 수주 없음(E5·원본 시계)</p>}
+      <TableSrc>C-201 가용·월·기본 여유 = 계산 · 능력·가동률 = 능력 스냅샷 {v.data_basis.snapshot_date}(EA/년, D6) · Masil 보호 = 발주 ~{v.data_basis.cutoff}{showOrders ? " · 신규 수주 = E5 · 기준일 뒤 수주 = 원본 시계" : ""}</TableSrc>
+      {others.length > 0 && (
+        <details className="dfold">
+          <summary>다른 라인 {others.length}개 · C-201 대상 아님</summary>
+          <div className="scroll">
+            <table className="grid dfold-table">
+              <thead>
+                <tr>
+                  <th>라인</th><th className="c-left">공장</th><th className="c-left">제품군</th>
+                  <ColHead main="능력" sub={`스냅샷 ${v.data_basis.snapshot_date} · EA/년(D6)`} />
+                  <ColHead main="가동률" sub="스냅샷" />
+                  <ColHead main="기본 여유" sub="계산 · EA/년" />
+                </tr>
+              </thead>
+              <tbody>
+                {others.map((l) => (
+                  <tr key={l.line_id}>
+                    <td>{l.line_id}</td><td className="c-left">{l.plant_id}</td><td className="c-left">{l.product_id}{l.dedicated ? " (F1 전용)" : ""}</td>
+                    <td>{ea(l.capacity_qty)}</td><td>{pct(l.utilization_pct, 0)}</td><td>{ea(l.spare_annual)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+      <div className="scroll">
+        <table className="grid opt-table">
+          <thead>
+            <tr>
+              <th>안</th><th className="c-left">대상</th>
+              <th>투자</th><th>추가(연)</th><th className="c-left">결정</th><th>결정일</th>
+              <ColHead main="일정" sub="설치 → 적격(재검증) → 산입 시작월(R3)" />
+              <th className="c-left">선행조건</th><th className="c-left">단계</th><th>회수</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ev.options.map((o: OptionEval) => {
+              // 단계가 '결정(…)' 꼴이면 결정 열과 겹치는 앞부분을 빼고 괄호 안만 보인다(전체는 title).
+              const phase = o.phase.startsWith(`${o.status}(`) && o.phase.endsWith(")") ? o.phase.slice(o.status.length + 1, -1) : o.phase;
               return (
-                <tr key={l.line_id} className={c201 ? "" : "muted"}>
-                  <td>{l.line_id}</td><td className="c-left">{l.plant_id}</td><td className="c-left">{l.product_id}{l.dedicated ? " (F1 전용)" : ""}</td>
-                  <td>{ea(l.capacity_qty)}</td><td>{pct(l.utilization_pct, 0)}</td><td>{ea(l.spare_annual)}</td>
-                  <td>{c201 ? ea(l.masil_protected) : ""}{l.masil_deficit > 0 && <span className="bad"> (부족 {ea(l.masil_deficit)})</span>}</td>
-                  <td>{c201 ? ea(l.new_orders) : ""}</td><td className={l.hist_orders ? "warn" : ""}>{c201 ? ea(l.hist_orders) : ""}</td><td>{c201 ? ea(l.base_avail_annual) : "C-201 대상 아님"}</td><td>{c201 ? ea(l.base_monthly) : ""}</td>
+                <tr key={o.option_id} className={o.usable ? "" : "muted"}>
+                  <td>{o.option_id}<span className="cell-sub">{o.type}</span></td>
+                  <td className="c-left" title={`${o.target_line_text} → ${o.line_id}(합성 매핑, A-10)`}>{o.line_id}</td>
+                  <td>{eok(o.capex_krw, 0)}</td><td>{ea(o.added_annual_qty)}</td><td className="c-left">{o.status}</td>
+                  <td>{o.decision_date}{o.decision_date_assumed && <span className="cell-sub" title="OPT 승인일 가정(A-09)">가정(A-09)</span>}</td>
+                  <td title={`설치 ${o.install_date} → 적격 ${o.qualified_date}(재검증 ${o.validation_weeks}주) → 산입 ${o.start_month}~`}>
+                    {md(o.install_date)} → {md(o.qualified_date)} → {o.start_month}~
+                  </td>
+                  <td className="c-left">{(o.pending_requests ?? []).length ? (o.pending_requests ?? []).map((r) => <span key={r} className="cell-line">{r}</span>) : "-"}</td>
+                  <td className="c-left opt-phase" title={o.phase}>{phase}</td>
+                  <td>{o.payback_months.toFixed(1)}개월</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-      <TableSrc>능력·가동률 = 능력 스냅샷 {v.data_basis.snapshot_date}(EA/년, D6) · 기본 여유·C-201 가용·월 = 계산 · Masil 보호 = 발주 ~{v.data_basis.cutoff} · 신규 수주 = E5 · 기준일 뒤 신규 수주 = 원본 시계</TableSrc>
-      <div className="scroll">
-        <table className="grid">
-          <thead>
-            <tr>
-              <th>안</th><th className="c-left">대상(매핑)</th><th>투자</th><th>추가(연)</th><th className="c-left">결정</th><th>결정일</th><th>설치</th><th>적격(재검증 {ev.options[0]?.validation_weeks}주)</th><th>산입</th><th className="c-left">선행조건</th><th className="c-left">단계</th><th>회수</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ev.options.map((o: OptionEval) => (
-              <tr key={o.option_id} className={o.usable ? "" : "muted"}>
-                <td>{o.option_id} {o.type}</td><td className="c-left" title={o.target_line_text}>{o.line_id} <span className="tag">합성 매핑</span></td>
-                <td>{eok(o.capex_krw, 0)}</td><td>{ea(o.added_annual_qty)}</td><td className="c-left">{o.status}</td>
-                <td>{o.decision_date}{o.decision_date_assumed ? " (가정)" : ""}</td><td>{o.install_date}</td><td>{o.qualified_date}</td>
-                <td>{o.start_month}~{o.option_id === "OPT-01" && ev.compare_opt01 && <div className="muted small">비교(재검증 0주): {ev.compare_opt01.alt.start_month}~</div>}</td>
-                <td className="c-left">{(o.pending_requests ?? []).join(", ") || "-"}</td><td className="c-left">{o.phase}</td><td>{o.payback_months.toFixed(1)}개월</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <TableSrc>일정 = 설치 → 적격(재검증 {ev.options.map((o) => `${o.option_id} ${o.validation_weeks}주`).join(" · ")}, A-08) → 산입 시작월(R3) · 대상 = 증설 계획 원본의 target_line <span className="tag tag-합성">합성 매핑</span>(A-10)</TableSrc>
     </Section>
   );
 }
@@ -359,8 +435,8 @@ export function LedgerView({ v }: { v: View }) {
         <div>
           <h3>진행 중 B2B 주문 (원본, 가동률 포함 가정 A-06)</h3>
           <div className="scroll">
-          <table className="grid">
-            <thead><tr><th>제품군</th><th>건수</th><th>수량</th><th>7월 추정 납품</th><th>8월 추정 납품</th><ColHead main="월 생산" sub={batchSource(v)} /></tr></thead>
+          <table className="grid b2b-table">
+            <thead><tr><th>제품군</th><th>건수</th><th>수량</th><ColHead main="7월 추정" sub="7월 추정 납품 · 주문일 + 조건부 리드타임 중앙값(A-14)" /><ColHead main="8월 추정" sub="8월 추정 납품 · 주문일 + 조건부 리드타임 중앙값(A-14)" /><ColHead main="월 생산" sub={batchSource(v)} /></tr></thead>
             <tbody>
               {["PL-01", "PL-02"].map((p) => (
                 <tr key={p}>
@@ -392,11 +468,55 @@ export function LedgerView({ v }: { v: View }) {
       {res.length === 0 ? (
         <p className="muted small">현재 가예약이 없습니다. 제안을 제출하면(E7) 여기에 표시됩니다.</p>
       ) : (
-        <div className="chips">
-          {res.map((r) => <span key={r.product_id + r.month} className="chip">{r.product_id} {r.month} {ea(r.qty)} ({r.basis})</span>)}
-        </div>
+        <ReservationTable res={res} />
       )}
     </Section>
+  );
+}
+
+// 가예약(R2): 제품군 행 × 월 열. 칸 = 수량, 아래 작은 글씨 = 공급 출처(전체 이름·상태는 title). 밀집도 2단계(이슈 #71)
+const basisShort = (b: string) => b.split("+").map((x) => (x === "base" ? "기존" : x)).join("+");
+const basisLong = (b: string) => b.split("+").map((x) => BASIS_LABEL[x] ?? x).join(" + ");
+
+function ReservationTable({ res }: { res: Reservation[] }) {
+  const months = [...new Set(res.map((r) => r.month))].sort();
+  const prods = [...new Set(res.map((r) => r.product_id))].sort();
+  const at = new Map(res.map((r) => [`${r.product_id}|${r.month}`, r]));
+  const bases = [...new Set(res.flatMap((r) => r.basis.split("+")))];
+  return (
+    <>
+      <div className="scroll">
+        <table className="grid sticky-first res-table">
+          <thead>
+            <tr>
+              <th>제품군</th>
+              {months.map((m) => <th key={m}>{m.slice(2)}</th>)}
+              <th>합계</th>
+            </tr>
+          </thead>
+          <tbody>
+            {prods.map((p) => (
+              <tr key={p}>
+                <td>{PRODUCT_LABEL[p] ?? p}</td>
+                {months.map((m) => {
+                  const r = at.get(`${p}|${m}`);
+                  return r ? (
+                    <td key={m} title={`${p} ${m} · ${ea(r.qty)} EA · ${basisLong(r.basis)} · ${r.state}`}>
+                      {ea(r.qty)}
+                      <span className="res-basis">{basisShort(r.basis)}</span>
+                    </td>
+                  ) : (
+                    <td key={m} className="muted">-</td>
+                  );
+                })}
+                <td>{ea(res.filter((r) => r.product_id === p).reduce((s, r) => s + r.qty, 0))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <TableSrc>계산 · EA/월 · 칸 아래 = 공급 출처({bases.map((x) => `${basisShort(x)} = ${BASIS_LABEL[x] ?? x}`).join(", ")})</TableSrc>
+    </>
   );
 }
 
@@ -404,7 +524,6 @@ export function LedgerView({ v }: { v: View }) {
 export function ChurnView({ v }: { v: View }) {
   const sigs = v.state.evaluation.churn ?? [];
   const sc = v.state.scenario;
-  const ratio = (x: number) => (x ? x.toFixed(3) : "-");
   return (
     <Section
       title="기존 고객 이탈 신호 (R12) · 능력 반환 금지 (R13)"
@@ -417,33 +536,56 @@ export function ChurnView({ v }: { v: View }) {
         </>
       }
     >
-      {sigs.map((s) => (
-        <div key={s.customer_id} className="product">
-          <div className="product-head">
-            <b>{s.customer_id}</b>
-            <span className="muted small">매출 비중 {s.revenue_share_pct}% · 진행 주문 {ea(s.open_orders)}건(PL-01 {ea(s.open_qty?.["PL-01"])} · PL-02 {ea(s.open_qty?.["PL-02"])} EA){s.status === "AT_RISK" ? " → 검토(R13), 보호 유지" : ""}</span>
-            <span className={`pill churn-${s.status}`}>{s.status}{s.since ? ` (${s.since}~)` : ""}</span>
+      {sigs.map((s) =>
+        s.status === "AT_RISK" || s.status === "WATCH" ? (
+          <div key={s.customer_id} className="product">
+            <div className="product-head"><ChurnHead s={s} /></div>
+            <ChurnTable s={s} />
           </div>
-          <div className="scroll">
-            <table className="grid">
-              <thead>
-                <tr><th>월</th>{(s.history ?? []).map((h) => <th key={h.month}>{h.month.slice(2)}</th>)}</tr>
-              </thead>
-              <tbody>
-                <tr><td title="order_date · 억">수주</td>{(s.history ?? []).map((h) => <td key={h.month}>{eok(h.booking_krw, 1)}</td>)}</tr>
-                <tr><td title="ship_date · 억">출하</td>{(s.history ?? []).map((h) => <td key={h.month}>{eok(h.shipment_krw, 1)}</td>)}</tr>
-                <tr><td title="WATCH: 0.85 미만 2개월">단월 수주/출하</td>{(s.history ?? []).map((h) => <td key={h.month} className={h.single_ratio && h.single_ratio < 0.85 ? "bad" : ""}>{ratio(h.single_ratio)}</td>)}</tr>
-                <tr><td title="AT_RISK: 0.8 미만">3개월 수주/출하</td>{(s.history ?? []).map((h) => <td key={h.month} className={h.rolling_ratio && h.rolling_ratio < 0.8 ? "bad" : ""}>{ratio(h.rolling_ratio)}</td>)}</tr>
-                <tr><td title="AT_RISK: −15% 미만">3개월 수주 YoY</td>{(s.history ?? []).map((h) => <td key={h.month} className={h.has_yoy && h.yoy_pct < -15 ? "bad" : ""}>{h.has_yoy ? pct(h.yoy_pct) : "기록 부족"}</td>)}</tr>
-                <tr className="row-strong"><td>상태</td>{(s.history ?? []).map((h) => <td key={h.month}><span className={`pill churn-${h.status}`}>{h.status}</span></td>)}</tr>
-              </tbody>
-            </table>
-          </div>
-          <TableSrc>단위 억 · 수주 = order_date, 출하 = ship_date · WATCH = 단월 수주/출하 0.85 미만 2개월 · AT_RISK = 3개월 수주/출하 0.8 미만 또는 YoY −15% 미만(A-23)</TableSrc>
-        </div>
-      ))}
+        ) : (
+          // 정상 고객은 머리 줄만 보이고 월별 표는 접는다(밀집도 2단계, 이슈 #71)
+          <details key={s.customer_id} className="product churn-fold">
+            <summary><ChurnHead s={s} /></summary>
+            <ChurnTable s={s} />
+          </details>
+        ),
+      )}
+      {sigs.length > 0 && <TableSrc>단위 억 · 수주 = order_date, 출하 = ship_date · WATCH = 단월 수주/출하 0.85 미만 2개월 · AT_RISK = 3개월 수주/출하 0.8 미만 또는 YoY −15% 미만(A-23)</TableSrc>}
       {sigs.length === 0 && <p className="muted small">현재 매출 비중 10% 이상인 대상 고객이 없습니다.</p>}
     </Section>
+  );
+}
+
+function ChurnHead({ s }: { s: ChurnSignal }) {
+  return (
+    <>
+      <b>{s.customer_id}</b>{" "}
+      <span className="muted small">매출 비중 {s.revenue_share_pct}% · 진행 주문 {ea(s.open_orders)}건(PL-01 {ea(s.open_qty?.["PL-01"])} · PL-02 {ea(s.open_qty?.["PL-02"])} EA){s.status === "AT_RISK" ? " → 검토(R13), 보호 유지" : ""}</span>{" "}
+      <span className={`pill churn-${s.status}`}>{s.status}{s.since ? ` (${s.since}~)` : ""}</span>
+    </>
+  );
+}
+
+// 월 열은 같은 좁은 폭으로 고정하고 표는 내용 폭만 쓴다(.churn-table)
+function ChurnTable({ s }: { s: ChurnSignal }) {
+  const hs = s.history ?? [];
+  const ratio = (x: number) => (x ? x.toFixed(3) : "-");
+  return (
+    <div className="scroll">
+      <table className="grid sticky-first churn-table">
+        <thead>
+          <tr><th>월</th>{hs.map((h) => <th key={h.month}>{h.month.slice(2)}</th>)}</tr>
+        </thead>
+        <tbody>
+          <tr><td title="order_date · 억">수주</td>{hs.map((h) => <td key={h.month}>{eok(h.booking_krw, 1)}</td>)}</tr>
+          <tr><td title="ship_date · 억">출하</td>{hs.map((h) => <td key={h.month}>{eok(h.shipment_krw, 1)}</td>)}</tr>
+          <tr><td title="WATCH: 0.85 미만 2개월">단월 수주/출하</td>{hs.map((h) => <td key={h.month} className={h.single_ratio && h.single_ratio < 0.85 ? "bad" : ""}>{ratio(h.single_ratio)}</td>)}</tr>
+          <tr><td title="AT_RISK: 0.8 미만">3개월 수주/출하</td>{hs.map((h) => <td key={h.month} className={h.rolling_ratio && h.rolling_ratio < 0.8 ? "bad" : ""}>{ratio(h.rolling_ratio)}</td>)}</tr>
+          <tr><td title="AT_RISK: −15% 미만">3개월 수주 YoY</td>{hs.map((h) => <td key={h.month} className={h.has_yoy && h.yoy_pct < -15 ? "bad" : ""}>{h.has_yoy ? pct(h.yoy_pct) : "기록 부족"}</td>)}</tr>
+          <tr className="row-strong"><td>상태</td>{hs.map((h) => <td key={h.month}><span className={`pill churn-${h.status}`}>{h.status}</span></td>)}</tr>
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -483,57 +625,142 @@ export function TasksView({ v }: { v: View }) {
           결정·제출 같은 사건이 처리되면 작업이 생성되어 여기에 표시됩니다. 원인 사건 번호와 담당 부서가 함께 기록됩니다.
         </EmptyState>
       )}
-      <ul className="tasks">
-        {open.map((t) => (
-          <li key={t.task_id}><span className="role">{t.owner_role}</span> {t.title} <span className="muted small">{t.due_date ? `~${t.due_date}` : ""} · 사건 #{t.cause_seq}</span></li>
-        ))}
-      </ul>
+      {open.length > 0 && <TaskTable ts={open} />}
       {done.length > 0 && (
-        <details>
-          <summary className="muted small">완료 {done.length}건</summary>
-          <ul className="tasks done">{done.map((t) => <li key={t.task_id}><span className="role">{t.owner_role}</span> {t.title}</li>)}</ul>
+        <details className="dfold">
+          <summary>완료 {done.length}건</summary>
+          <TaskTable ts={done} done />
         </details>
       )}
     </Section>
   );
 }
 
+// 작업 4열 표: 담당 | 작업 | 기한 | 원인 사건(밀집도 2단계, 이슈 #71)
+function TaskTable({ ts, done }: { ts: Task[]; done?: boolean }) {
+  return (
+    <table className={`grid text task-table${done ? " is-done" : ""}`}>
+      <thead>
+        <tr><th className="c-fit">담당</th><th className="c-text">작업</th><th className="c-fit">기한</th><th className="c-fit">원인 사건</th></tr>
+      </thead>
+      <tbody>
+        {ts.map((t) => (
+          <tr key={t.task_id} title={done ? `${t.task_id} · ${t.state}` : t.task_id}>
+            <td className="c-fit"><span className="role">{t.owner_role}</span></td>
+            <td className="c-text">{t.title}</td>
+            <td className="c-fit">{t.due_date || "-"}</td>
+            <td className="c-fit">사건 #{t.cause_seq}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 export function LogView({ v, onFork, busy }: { v: View; onFork?: (seq: number) => void; busy?: boolean }) {
   const log = [...(v.state.log ?? [])].reverse();
+  // 이어지는 같은 업무일 사건을 한 머리글 아래로 묶는다(밀집도 2단계, 이슈 #71)
+  const days: { date: string; entries: LogEntry[] }[] = [];
+  for (const e of log) {
+    const last = days[days.length - 1];
+    if (last && last.date === e.event.sim_date) last.entries.push(e);
+    else days.push({ date: e.event.sim_date, entries: [e] });
+  }
   return (
     <Section title={`사건 로그 (${log.length}) · ${v.session.name}`} mode={["real"]} note="상태는 이 로그를 처음부터 다시 적용해 생성합니다. 규칙에 맞지 않는 사건은 기록되지 않습니다. '여기서 분기'를 누르면 해당 사건까지 복사한 시뮬레이션 세션이 생성됩니다(현재 세션은 변경되지 않음).">
       {log.length === 0 && <p className="muted small">현재 기록된 사건이 없습니다. 왼쪽에서 사건을 입력하거나 위의 시연 버튼을 눌러 주세요.</p>}
-      <ol className="log">
-        {log.map((e: LogEntry) => (
-          <li key={e.event.seq}>
-            <div>
-              <b>#{e.event.seq} {EVENT_LABEL[e.event.type] ?? e.event.type}</b>{" "}
-              <span className="muted small">
-                권한 {e.event.actor_role}{e.event.by && e.event.by !== e.event.actor_role ? ` · 대행 입력 ${e.event.by}` : e.event.by ? "" : " · 내부 실행"} · 업무일 {e.event.sim_date}
-              </span>
-              {onFork && <button className="ghost small" disabled={busy} onClick={() => onFork(e.event.seq)}>여기서 분기</button>}
-            </div>
-            <ul className="changes">{(e.changes ?? []).map((c, i) => <li key={i}>{c}</li>)}</ul>
-          </li>
-        ))}
-      </ol>
+      {days.map((d) => (
+        <section key={`${d.date}-${d.entries[0].event.seq}`} className="log-day">
+          <h3 className="log-date">업무일 {d.date} <span className="muted small">사건 {d.entries.length}건</span></h3>
+          <ol className="log">
+            {d.entries.map((e: LogEntry) => (
+              <li key={e.event.seq}>
+                <div className="log-head">
+                  <b>#{e.event.seq} {EVENT_LABEL[e.event.type] ?? e.event.type}</b>
+                  <span className="muted small">
+                    권한 {e.event.actor_role}{e.event.by && e.event.by !== e.event.actor_role ? ` · 대행 입력 ${e.event.by}` : e.event.by ? "" : " · 내부 실행"}
+                  </span>
+                  {onFork && <button className="ghost small log-fork" disabled={busy} onClick={() => onFork(e.event.seq)}>여기서 분기</button>}
+                </div>
+                <LogChanges changes={e.changes ?? []} />
+              </li>
+            ))}
+          </ol>
+        </section>
+      ))}
     </Section>
   );
 }
 
+// 변경은 2줄까지 보이고 나머지는 "변경 N개 더 보기"로 펼친다.
+function LogChanges({ changes }: { changes: string[] }) {
+  const [open, setOpen] = useState(false);
+  const shown = open ? changes : changes.slice(0, 2);
+  const rest = changes.length - 2;
+  if (changes.length === 0) return null;
+  return (
+    <>
+      <ul className="changes">{shown.map((c, i) => <li key={i}>{c}</li>)}</ul>
+      {rest > 0 && (
+        <button type="button" className="note-more log-more" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? "접기" : `변경 ${rest}개 더 보기`}
+        </button>
+      )}
+    </>
+  );
+}
+
+// 설계 단계·보류 목록(이전 안내 문단을 항목으로 나눔)
+const DESIGN_ITEMS = [
+  "LLM으로 자유 문장(RFP·회신) 필드화(현재 제외, 결합 지점은 추후 결정)",
+  "W01 Masil 수요 변경(E6) 연결",
+  "손실부담·변동대가·리콜 노출(R10·R11·R17)",
+  "기존 고객 납기 변경 승인(영업 임원) 흐름",
+  "CR-10·CR-11 회신의 계산 반영(PL-01 타 라인 공급, 확정 납기로 추정 납기 대체)",
+];
+const HOLD_ITEMS = [
+  "M-B 원료 제약(PL-02 → M-B → V-205 독점 공급, C-201 더마 증량분의 원료 가용성)",
+  "Masil 과거 수요 추정(재고 보충 규칙 4주 커버로 2026-06-22 전 기준일의 Masil 보호량 추정)",
+];
+
+// 가정과 출처: 성격별 필터(화면 안 상태), 값은 2줄까지(전체는 title), 설계·보류 목록은 접는다(밀집도 2단계, 이슈 #71)
 export function AssumptionsView({ v }: { v: View }) {
+  const [pick, setPick] = useState("전체");
+  const labels = [...new Set(v.assumptions.map((a) => a.label))];
+  const cur = labels.includes(pick) ? pick : "전체";
+  const rows = cur === "전체" ? v.assumptions : v.assumptions.filter((a) => a.label === cur);
+  const count = (l: string) => (l === "전체" ? v.assumptions.length : v.assumptions.filter((a) => a.label === l).length);
   return (
     <Section title="가정과 출처" mode={["real"]} note="원본 제약(능력·계약·승인권한)은 가정으로 없애지 않습니다. 회신이 오면 '회신 반영'으로 바뀝니다.">
+      <div className="chips assume-filter" role="group" aria-label="성격 필터">
+        {["전체", ...labels].map((l) => (
+          <button key={l} type="button" className={`chip${cur === l ? " strong" : ""}`} aria-pressed={cur === l} onClick={() => setPick(l)}>
+            {l} {count(l)}
+          </button>
+        ))}
+      </div>
       <table className="grid text">
         <thead><tr><th className="c-fit">ID</th><th className="c-fit">성격</th><th className="c-text-s">항목</th><th className="c-text">지금 쓰는 값</th><th className="c-text-s">영향(쓰는 곳)</th></tr></thead>
         <tbody>
-          {v.assumptions.map((a) => (
-            <tr key={a.id}><td className="c-fit">{a.id}</td><td className="c-fit"><span className={`tag tag-${slug(a.label)}`}>{a.label}</span></td><td className="c-text-s">{a.text}</td><td className="c-text">{a.value}</td><td className="c-text-s small">{a.affects}</td></tr>
+          {rows.map((a) => (
+            <tr key={a.id}>
+              <td className="c-fit">{a.id}</td>
+              <td className="c-fit"><span className={`tag tag-${slug(a.label)}`}>{a.label}</span></td>
+              <td className="c-text-s">{a.text}</td>
+              <td className="c-text" title={a.value}><div className="cell-clamp2">{a.value}</div></td>
+              <td className="c-text-s small">{a.affects}</td>
+            </tr>
           ))}
         </tbody>
       </table>
-      <p className="muted small">설계 단계(구현 안 함): LLM으로 자유 문장(RFP·회신) 필드화(현재 제외, 결합 지점은 추후 결정), W01 Masil 수요 변경(E6) 연결, 손실부담·변동대가·리콜 노출(R10·R11·R17), 기존 고객 납기 변경 승인(영업 임원) 흐름, CR-10·CR-11 회신의 계산 반영(PL-01 타 라인 공급, 확정 납기로 추정 납기 대체).</p>
-      <p className="muted small">보류(이번 마감 범위 밖, 11/13 결정): M-B 원료 제약(PL-02 → M-B → V-205 독점 공급, C-201 더마 증량분의 원료 가용성), Masil 과거 수요 추정(재고 보충 규칙 4주 커버로 2026-06-22 전 기준일의 Masil 보호량 추정).</p>
+      <details className="dfold">
+        <summary>설계 단계(구현 안 함) {DESIGN_ITEMS.length}건</summary>
+        <ul className="dfold-list">{DESIGN_ITEMS.map((t) => <li key={t}>{t}</li>)}</ul>
+      </details>
+      <details className="dfold">
+        <summary>보류(이번 마감 범위 밖, 11/13 결정) {HOLD_ITEMS.length}건</summary>
+        <ul className="dfold-list">{HOLD_ITEMS.map((t) => <li key={t}>{t}</li>)}</ul>
+      </details>
     </Section>
   );
 }
