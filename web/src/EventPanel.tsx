@@ -48,6 +48,8 @@ function presets(v: View, type: string): { label: string; payload: Fields }[] {
 export function EventPanel({ v, run, focus, dept, only, title }: { v: View; run: Run; focus?: { event: string; n: number } | null; dept?: Department; only?: string[]; title?: string }) {
   // 기록 뒤에는 입력 칸을 잠그고 "기록됨"을 보인다(이슈 #75: 차례가 아닌 사건·같은 사건을 바로 다시 누르지 않게)
   const [recorded, setRecorded] = useState<{ type: string; seq: number } | null>(null);
+  // 다른 사건으로 이동하면(주소 ?type= 변경 → focus) 잠금을 푼다
+  useEffect(() => setRecorded(null), [focus?.n]);
   // 부서별 권한(이슈 #43): 상태로 가능한 사건 중 내 부서가 넣을 수 있는 것만(시뮬레이션 세션은 대행 포함)
   const all = available(v);
   const state: Record<string, boolean> = only ? Object.fromEntries(Object.entries(all).filter(([k]) => only.includes(k))) : all;
@@ -99,7 +101,7 @@ export function EventPanel({ v, run, focus, dept, only, title }: { v: View; run:
   if (recorded) {
     return (
       <Section title={title ?? `${EVENT_LABEL[recorded.type] ?? recorded.type} 기록됨`} mode={["real"]}>
-        <p className="small">사건 #{recorded.seq} <b>{EVENT_LABEL[recorded.type] ?? recorded.type}</b>을(를) 기록했습니다. 바뀐 내용은 위 알림과 사건 로그에서 확인할 수 있습니다.</p>
+        <p className="small">사건 #{recorded.seq} · <b>{EVENT_LABEL[recorded.type] ?? recorded.type}</b> — 기록을 마쳤습니다. 바뀐 내용은 위 알림과 사건 로그에서 확인할 수 있습니다.</p>
         <div className="row">
           <button className="ghost small" onClick={() => setRecorded(null)}>다른 사건 입력</button>
         </div>

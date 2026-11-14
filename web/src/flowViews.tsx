@@ -276,3 +276,38 @@ export const FLOW_ORDER: { n: number; role: string; what: string }[] = [
   { n: 8, role: "production", what: "생성된 작업 확인" },
   { n: 9, role: "sales", what: "바이어 회신 → 재판단" },
 ];
+
+// 다음 차례(이슈 #79): 결과 알림·도착 줄의 주 버튼. 지금 단계가 내 차례면 '가기', 다른 부서면 그 계정으로 다시 로그인.
+export function NextStep({ v, user, onSwitch }: { v: View; user: User; onSwitch: Props["onSwitch"] }) {
+  const accounts = useAccounts();
+  const { now } = flowOf(v);
+  if (!now) return null;
+  return (
+    <span className="next-step">
+      <span className="next-label" title={`${now.n}. ${now.title} · ${who(now, accounts)}`}>다음 <b>{now.n}. {now.title}</b> · {whoDept(now, accounts)}</span>
+      <StepAction s={now} user={user} accounts={accounts} onSwitch={onSwitch} />
+    </span>
+  );
+}
+
+// 9단계 단계 표시(이슈 #79): 맥락 줄·시연 흐름·내 업무·로그인이 같은 9단계 번호를 쓴다.
+const SHORT: Record<number, string> = { 1: "RFP 접수", 2: "엔진 판단", 3: "생산관리 회신", 4: "다른 부서 회신", 5: "상신", 6: "결정", 7: "제출", 8: "작업 확인", 9: "바이어 회신" };
+const STEP_MARK: Record<FlowStatus, string> = { done: "완료", now: "지금", open: "할 수 있음", skip: "건너뜀", wait: "대기" };
+
+export function FlowStepper({ v }: { v: View }) {
+  const accounts = useAccounts();
+  const { steps, cycle, doneCount } = flowOf(v);
+  return (
+    <div className="stepper-wrap">
+      <ol className="stepper" aria-label={`시연 흐름 ${cycle > 1 ? `${cycle}회차 ` : ""}${doneCount}/${steps.length}`}>
+        {steps.map((s) => (
+          <li key={s.n} className={`st-${s.status}`} aria-current={s.status === "now" ? "step" : undefined} title={`${s.n}. ${s.title} · ${who(s, accounts)} · ${s.n === 8 && s.status === "skip" ? "확인 안 함" : STEP_MARK[s.status]}${s.evidence ? ` · ${s.evidence}` : ""}`}>
+            <span className="st-dot">{s.n}</span>
+            <span className="st-label">{SHORT[s.n]}</span>
+          </li>
+        ))}
+      </ol>
+      <Link to="/flow" className="small stepper-more">{cycle > 1 ? `${cycle}회차 · ` : ""}{doneCount}/{steps.length} · 시연 흐름 자세히</Link>
+    </div>
+  );
+}

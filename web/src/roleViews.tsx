@@ -2,6 +2,7 @@ import type { Department, LaneAction, View } from "./types";
 import { Kpi, Section } from "./panels";
 import { EVENT_LABEL, ea, pct } from "./format";
 import { myWork } from "./perm";
+import { FlowStepper } from "./flowViews";
 import { pathOf, type PageId as Tab } from "./frame";
 import { EmptyState } from "./brand";
 import { Link } from "./router";
@@ -61,16 +62,7 @@ function BidFlow({ v, dept, onChoose }: { v: View; dept?: Department; onChoose: 
   // 밀집도(이슈 #71): 5단계를 한 줄로 작게 보인다. 칸이 좁아 잘린 설명은 title로 전체를 보인다.
   return (
     <Section title="입찰 흐름" mode={["real"]}>
-      <ol className="flow flow-compact">
-        {steps.map((s) => (
-          <li key={s.type} className={`flow-step is-${s.state}`} aria-current={s.state === "now" ? "step" : undefined} title={`${s.n}. ${s.label} · ${s.note}`}>
-            <span className="flow-title">
-              {s.n} {s.label}
-            </span>
-            <span className="flow-sub">{s.note}</span>
-          </li>
-        ))}
-      </ol>
+      <FlowStepper v={v} />
       {turn && (
         <p className="flow-next small">
           다음은 <b>{turn.label}</b> 차례입니다. {v.session.kind === "sim" ? "시뮬레이션 세션에서는 현재 부서로 대행 입력할 수 있습니다." : "기준 세션에서는 해당 부서만 입력할 수 있습니다."}{" "}

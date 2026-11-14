@@ -11,7 +11,7 @@ import { canEvent, deptOf } from "./perm";
 import { ClockTools, ModeBand, PageHead, SessionTools, SideNav, TopBar, pageById, pageFor, pathOf, type Page, type PageId } from "./frame";
 import { Link, navigate, useLocation } from "./router";
 import { AccessPage, LoginPage } from "./login";
-import { FlowBar, FlowPage } from "./flowViews";
+import { FlowBar, FlowPage, NextStep } from "./flowViews";
 import { EVENT_LABEL } from "./format";
 import { BrandMark, EmptyState, Swan, type SwanName } from "./brand";
 
@@ -78,6 +78,7 @@ export default function App() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [arrived, setArrived] = useState(false); // 방금 로그인했으면 상태를 받은 뒤 도착 줄을 한 번 보인다
   const vRef = useRef<View | null>(null);
   vRef.current = v;
   const loc = useLocation();
@@ -152,14 +153,33 @@ export default function App() {
     }
   }, []);
 
+  // 도착 줄(이슈 #79): 다시 로그인한 사람에게 직전에 다른 부서가 무엇을 남겼는지 한 번 보인다.
+  useEffect(() => {
+    if (!arrived || !v || !user) return;
+    setArrived(false);
+    const last = v.state.log?.[v.state.log.length - 1];
+    if (!last) return;
+    const me = (v.departments ?? []).find((d) => d.code === user.role_code)?.id;
+    const by = last.event.by || last.event.actor_role;
+    if (by === me) return;
+    const byLabel = (v.departments ?? []).find((d) => d.id === by)?.label ?? by;
+    setNotice({
+      kind: "info",
+      title: `도착 · 최근 사건 #${last.event.seq} ${EVENT_LABEL[last.event.type] ?? last.event.type} (${byLabel})`,
+      desc: `업무일 ${last.event.sim_date}${v.state.bid ? ` · 입찰 ${v.state.bid.state}` : ""}`,
+      lines: (last.changes ?? []).slice(0, 2),
+      seq: last.event.seq,
+    });
+  }, [arrived, v, user]);
+
   // 페이지를 바꾸면 지난 페이지의 오류 띠·완료 알림은 지운다.
   useEffect(() => {
     setErr(null);
     setNotice(null);
-  }, [loc.path]);
+  }, [loc]); // 같은 페이지에서 ?type=만 바뀌어도 지난 알림은 지운다
 
   if (user === undefined) return <Loading />;
-  if (user === null) return <LoginPage onLogin={(u) => { setErr(null); setUser(u); }} />;
+  if (user === null) return <LoginPage onLogin={(u) => { setErr(null); setArrived(true); setUser(u); }} />;
   if (!v)
     return err ? (
       <main className="center">
@@ -274,10 +294,13 @@ export default function App() {
                   </ul>
                 )}
               </div>
-              <div className="row">
-                {notice.to && <Link to={notice.to} className="btn small-btn">{notice.toLabel}</Link>}
-                <Link to="/log" className="btn ghost-btn small-btn">사건 로그</Link>
-                <button className="ghost small" onClick={() => setNotice(null)}>닫기</button>
+              <div className="notice-actions">
+                <div className="notice-next"><NextStep v={v} user={user} onSwitch={switchTo} /></div>
+                <div className="row">
+                  {notice.to && <Link to={notice.to} className="btn ghost-btn small-btn">{notice.toLabel}</Link>}
+                  <Link to="/log" className="btn ghost-btn small-btn">사건 로그</Link>
+                  <button className="ghost small" onClick={() => setNotice(null)}>닫기</button>
+                </div>
               </div>
             </div>
           )}

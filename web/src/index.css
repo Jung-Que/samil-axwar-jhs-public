@@ -2913,3 +2913,131 @@ li:focus-within .log-fork,
 .flow-order li.auto {
   font-size: 12.5px;
 }
+
+/* ===== 시연 리뷰 개선 2·5(이슈 #79) ===== */
+/* 알림: 주 버튼 = 다음 차례(검정), 페이지 링크는 보조 */
+.notice-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.notice-next .next-step {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 8px;
+  font-size: 13px;
+}
+
+.notice-next .next-label {
+  max-width: 26em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notice-next button.ghost,
+.notice-next a.btn {
+  background: #111111;
+  color: #FFFFFF;
+  border-color: #111111;
+}
+
+/* 9단계 단계 표시 */
+.stepper-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stepper {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stepper li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: #4F4F4F;
+}
+
+.stepper li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 11px;
+  left: calc(50% + 13px);
+  right: calc(-50% + 13px);
+  height: 2px;
+  background: #F2F2F2;
+}
+
+.stepper li.st-done:not(:last-child)::after {
+  background: #111111;
+}
+
+.st-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid #F2F2F2;
+  background: #FFFFFF;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #4F4F4F;
+}
+
+.st-done .st-dot {
+  background: #111111;
+  border-color: #111111;
+  color: #FFFFFF;
+}
+
+.st-now .st-dot {
+  border: 2px solid #111111;
+  color: #111111;
+}
+
+.st-now .st-label {
+  color: #111111;
+  font-weight: 700;
+}
+
+.st-open .st-dot {
+  border-color: #4F4F4F;
+}
+
+.st-skip .st-dot {
+  border-style: dashed;
+  border-color: #4F4F4F;
+}
+
+.st-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stepper-more {
+  align-self: flex-end;
+  color: #111111;
+}
+
+@media (max-width: 900px) {
+  .st-label {
+    display: none;
+  }
+}
