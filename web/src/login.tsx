@@ -69,7 +69,8 @@ export function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
           <ol className="flow-order">
             {FLOW_ORDER.map((f, i) => {
               const a = accounts.find((x) => x.role_code === f.role);
-              const on = i === FLOW_ORDER.findIndex((x) => x.role === wantRole); // 같은 부서가 두 번 나오면 첫 차례만
+              const on = !!wantRole && i === FLOW_ORDER.findIndex((x) => x.role === wantRole); // 같은 부서가 두 번 나오면 첫 차례만
+              if (!f.role) return <li key={i} value={f.n} className="auto muted">{f.what}</li>;
               return (
                 <li key={i} value={f.n} className={on ? "on" : ""}>
                   <b>{a?.name ?? f.role}</b> <span className="muted">{a?.dept_label}</span> · {f.what}

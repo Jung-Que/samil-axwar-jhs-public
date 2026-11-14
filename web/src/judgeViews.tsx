@@ -283,7 +283,8 @@ export function JudgeView({ v, dept, onAction, onTrySim }: { v: View; dept?: Dep
   const c = ev.compare_opt01;
   return (
     <>
-      <Section title="판단 요약" mode={["real"]} note="숫자는 엔진이 원본에서 다시 계산하고, 승인은 권한 부서가 진행합니다. 출처는 '숫자의 출처'에서 확인할 수 있습니다.">
+      <Section title="판단 요약" mode={["real"]} note={s.bid ? "숫자는 엔진이 원본에서 다시 계산하고, 승인은 권한 부서가 진행합니다. 출처는 '숫자의 출처'에서 확인할 수 있습니다." : "RFP 접수 전 사전 계산입니다. RFP 원본 값과 능력 스냅샷으로 미리 계산했으며, RFP를 접수하면(E1) 확인 요청과 함께 다시 계산합니다."}>
+        {!s.bid && <span className="tag pre-calc">접수 전 사전 계산</span>}
         <div className="kpis kpis-5">
           <Kpi label="PL-02 제안 가능" value={`${ea(p2?.schedule_total)} EA`} sub={`요구 ${ea((p2?.monthly_demand ?? 0) * ev.scenario.contract_months)} 중 ${pct(p2?.coverage_pct)} · ${l2?.qty_status ?? "접수 전"}`} tone={p2 && p2.coverage_pct < 100 ? "warn" : "ok"} />
           <Kpi label="PL-01 기초" value={l1?.qty_status === "미확정" || !l1 ? "수량 미확정" : `${ea(p1?.schedule_total)} EA`} sub={`확인 전 상한 월 ${ea(p1?.months?.[0]?.supply)} EA · 요구 월 ${ea(p1?.monthly_demand)}`} tone="bad" />

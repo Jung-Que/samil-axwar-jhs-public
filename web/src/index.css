@@ -2870,3 +2870,46 @@ li:focus-within .log-fork,
   display: block;
   margin-top: 2px;
 }
+
+/* ===== 시연 리뷰 개선 9(이슈 #77) — 진행 표시 일관성 ===== */
+/* 이벤트 루프 6칸: 버튼처럼 보이지 않게 칸 테두리 대신 밑줄·화살표 */
+.loop-strip li {
+  position: relative;
+  padding: 4px 6px 6px;
+  border: 0;
+  border-bottom: 2px solid #F2F2F2;
+  border-radius: 0;
+  background: transparent;
+  color: #4F4F4F;
+}
+
+.loop-strip li:not(:last-child)::after {
+  content: "›";
+  position: absolute;
+  right: -6px;
+  top: 3px;
+  color: #4F4F4F;
+}
+
+.loop-strip li.on {
+  background: transparent;
+  color: #111111;
+  border-color: #111111;
+}
+
+.flow-cycle {
+  margin: 0 0 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  box-shadow: inset 3px 0 0 #D7263D;
+  background: #FFFFFF;
+}
+
+.tag.pre-calc {
+  display: inline-block;
+  margin: 0 0 6px;
+}
+
+.flow-order li.auto {
+  font-size: 12.5px;
+}

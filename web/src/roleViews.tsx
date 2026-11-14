@@ -18,16 +18,17 @@ const FEATURE_LABEL: Record<string, string> = {
 
 // ---- 입찰 흐름(이슈 #47): 사건 → 판단 → 사람 승인 → 작업·상태. 단계는 입찰 상태(서버 state.go Bid*)에서 읽는다. ----
 
+// n은 시연 흐름 페이지의 단계 번호(이슈 #77: 화면마다 같은 번호). 2·3·4·8단계(엔진·회신·작업 확인)는 입찰 상태 단계가 아니라 여기 없다.
 const FLOW = [
-  { type: "E1_RFP", label: "RFP 접수" },
-  { type: "E8_SUBMIT_APPROVAL", label: "상신" },
-  { type: "E2_DECISION", label: "승인 결정" },
-  { type: "E7_SUBMIT_PROPOSAL", label: "제안 제출" },
-  { type: "E4_BUYER_REPLY", label: "바이어 회신" },
+  { n: 1, type: "E1_RFP", label: "RFP 접수" },
+  { n: 5, type: "E8_SUBMIT_APPROVAL", label: "상신" },
+  { n: 6, type: "E2_DECISION", label: "승인 결정" },
+  { n: 7, type: "E7_SUBMIT_PROPOSAL", label: "제안 제출" },
+  { n: 9, type: "E4_BUYER_REPLY", label: "바이어 회신" },
 ];
 
 type StepState = "done" | "now" | "todo" | "stop";
-type FlowStep = { type: string; label: string; state: StepState; who?: Department; note: string };
+type FlowStep = { n: number; type: string; label: string; state: StepState; who?: Department; note: string };
 
 function flowSteps(v: View): { steps: FlowStep[]; now: number } {
   const st = v.state.bid?.state;
@@ -61,10 +62,10 @@ function BidFlow({ v, dept, onChoose }: { v: View; dept?: Department; onChoose: 
   return (
     <Section title="입찰 흐름" mode={["real"]}>
       <ol className="flow flow-compact">
-        {steps.map((s, i) => (
-          <li key={s.type} className={`flow-step is-${s.state}`} aria-current={s.state === "now" ? "step" : undefined} title={`${i + 1} ${s.label} · ${s.note}`}>
+        {steps.map((s) => (
+          <li key={s.type} className={`flow-step is-${s.state}`} aria-current={s.state === "now" ? "step" : undefined} title={`${s.n}. ${s.label} · ${s.note}`}>
             <span className="flow-title">
-              {i + 1} {s.label}
+              {s.n} {s.label}
             </span>
             <span className="flow-sub">{s.note}</span>
           </li>
@@ -104,7 +105,7 @@ function why(a: LaneAction, v: View): string {
   }
 }
 
-function NowCard({ v, dept, actions, onAction }: { v: View; dept: Department; actions: LaneAction[]; onAction: (a: LaneAction) => void }) {
+function NowCard({ v, dept, actions, onAction, openTasks }: { v: View; dept: Department; actions: LaneAction[]; onAction: (a: LaneAction) => void; openTasks: number }) {
   const enabled = actions.filter((a) => a.enabled);
   const first = enabled[0];
   const blocked = actions.filter((a) => !a.enabled && a.reason);
@@ -133,7 +134,7 @@ function NowCard({ v, dept, actions, onAction }: { v: View; dept: Department; ac
           </div>
         </div>
       ) : (
-        <EmptyState compact swan="done" title="현재 부서에서 처리할 업무가 없습니다" action={<Link to="/flow" className="btn ghost-btn small-btn">시연 흐름 보기</Link>}>
+        <EmptyState compact swan="done" title={openTasks ? `지금 입력할 사건은 없고, 열린 작업이 ${openTasks}건 있습니다` : "현재 부서에서 처리할 업무가 없습니다"} action={openTasks ? <Link to="/tasks" className="btn ghost-btn small-btn">작업 보기</Link> : <Link to="/flow" className="btn ghost-btn small-btn">시연 흐름 보기</Link>}>
           {cur?.who ? `현재 입찰은 '${cur.label}' 단계이며 ${cur.who.label} 차례입니다. 소속 부서 차례가 오면 여기에 표시됩니다.` : v.state.bid ? `입찰 상태: ${v.state.bid.state}.` : "아직 접수된 입찰이 없습니다."}
           {blocked[0] ? ` 막힌 일: ${blocked[0].label} — ${blocked[0].reason}` : ""}
         </EmptyState>
@@ -164,7 +165,8 @@ function JudgeSummary({ v, goTab }: { v: View; goTab: (t: Tab) => void }) {
   const ev = v.state.evaluation;
   const p2 = ev.products["PL-02"];
   return (
-    <Section title="판단 요약" mode={["real"]} note="엔진 계산값입니다(능력 스냅샷 기준).">
+    <Section title="판단 요약" mode={["real"]} note={v.state.bid ? "엔진 계산값입니다(능력 스냅샷 기준)." : "RFP 접수 전 사전 계산입니다. RFP 원본 값과 능력 스냅샷으로 미리 계산했습니다."}>
+      {!v.state.bid && <span className="tag pre-calc">접수 전 사전 계산</span>}
       <div className="kpis one-col">
         <Kpi label="PL-02 더마 제안 가능" value={`${ea(p2?.schedule_total)} EA`} sub={`요구 ${ea((p2?.monthly_demand ?? 0) * ev.scenario.contract_months)} 중 ${pct(p2?.coverage_pct)}`} tone={p2 && p2.coverage_pct < 100 ? "warn" : "ok"} />
       </div>
@@ -241,7 +243,7 @@ export function MyWorkView({ v, dept, onAction, onChoose, onFocus, goTab }: MyWo
   return (
     <div className="split">
       <div className="split-main">
-        <NowCard v={v} dept={dept} actions={actions} onAction={onAction} />
+        <NowCard v={v} dept={dept} actions={actions} onAction={onAction} openTasks={tasks.length} />
         <BidFlow v={v} dept={dept} onChoose={onChoose} />
         <div className="cols">
           <Section title={`나에게 온 확인 요청 (${reqs.length})`} mode={["real", "mock"]}>

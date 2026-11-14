@@ -146,7 +146,7 @@ export function SideNav({ v, dept, current }: { v: View; dept?: Department; curr
               {p.id === "judge" ? (
                 <span className={`pill tiny ${bidTone(bid?.state)}`}>{bid ? bid.state : "접수 전"}</span>
               ) : count[p.id] !== undefined ? (
-                <span className="cnt">{count[p.id]}</span>
+                <span className="cnt" title={p.id === "my" ? `지금 입력할 사건 ${w.actions.filter((a) => a.enabled).length} · 받은 확인 요청 ${w.reqs.length} · 열린 작업 ${w.tasks.length}` : undefined}>{count[p.id]}</span>
               ) : null}
             </Link>
           ))}

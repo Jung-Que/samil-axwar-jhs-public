@@ -35,7 +35,9 @@ function codeOf(v: View, deptId: string): string | undefined {
   return (v.departments ?? []).find((d) => d.id === deptId)?.code;
 }
 
-export function flowOf(v: View): { steps: FlowStep[]; round: number; doneCount: number; now?: FlowStep } {
+// cycle = 지금 몇 번째 상신 회차인가(이슈 #77). 바이어 회신 등으로 결정이 낡아 재검토가 되면 다음 회차가 시작된다
+// (진행 수가 6/9 → 5/9로 줄어드는 것을 '뒤로 감'이 아니라 '2회차'로 보이게).
+export function flowOf(v: View): { steps: FlowStep[]; round: number; cycle: number; doneCount: number; now?: FlowStep } {
   const log = v.state.log ?? [];
   const bid = v.state.bid;
   const rank = bid ? RANK[bid.state] ?? 0 : 0;
@@ -99,7 +101,11 @@ export function flowOf(v: View): { steps: FlowStep[]; round: number; doneCount: 
     5: rank >= 2 ? ev("E8_SUBMIT_APPROVAL") : round > 0 ? `${round}회 상신 · 현재 ${bid?.state}` : undefined,
     6: rank >= 3 ? `${ev("E2_DECISION") ?? ""} · ${bid?.state}` : undefined,
     7: rank >= 4 ? ev("E7_SUBMIT_PROPOSAL") : undefined,
-    8: rank >= 4 ? `작업 ${tasksFromSubmit.length}건: ${tasksFromSubmit.map((t) => `${t.owner_role} ${t.title}`).join(" · ") || "없음"}` : undefined,
+    8: rank >= 4 || buyerAfterSubmit ? (() => {
+      const open = tasksFromSubmit.filter((t) => t.state === "열림");
+      const closed = tasksFromSubmit.length - open.length;
+      return `열린 작업 ${open.length}건${closed ? `(완료 ${closed})` : ""}: ${open.map((t) => `${t.owner_role} ${t.title.split("(")[0].trim()}`).join(" · ") || "없음"}`;
+    })() : undefined,
     9: buyerAfterSubmit ? `${ev("E4_BUYER_REPLY")} · 현재 ${bid?.state}` : undefined,
   };
 
@@ -120,7 +126,8 @@ export function flowOf(v: View): { steps: FlowStep[]; round: number; doneCount: 
   });
   // 결정이 보류면 흐름이 멈춘다(재상신 규칙은 엔진 몫)
   if (bid?.state === "보류") steps.forEach((s) => s.n === 7 && (s.desc = "결정이 보류되어 제출할 수 없습니다. 조건을 바꿔 재상신하거나 시뮬레이션에서 먼저 확인해 주세요."));
-  return { steps, round, doneCount: steps.filter((s) => s.status === "done").length, now: steps.find((s) => s.status === "now") };
+  const cycle = Math.max(1, round + (bid?.state === "재검토" ? 1 : 0));
+  return { steps, round, cycle, doneCount: steps.filter((s) => s.status === "done").length, now: steps.find((s) => s.status === "now") };
 }
 
 const STATUS_LABEL: Record<FlowStatus, string> = { done: "완료", now: "지금", open: "할 수 있음(선택)", skip: "건너뜀", wait: "대기" };
@@ -181,17 +188,22 @@ function whoDept(s: FlowStep, accounts: Account[]): string {
 // 시연 흐름 페이지
 export function FlowPage({ v, user, onSwitch }: Props) {
   const accounts = useAccounts();
-  const { steps, round, doneCount, now } = flowOf(v);
+  const { steps, cycle, doneCount, now } = flowOf(v);
   const sim = v.session.kind === "sim";
   return (
     <>
-      <Section title={`C-201 한 건 따라가기 · ${doneCount}/${steps.length}${round > 1 ? ` · 상신 ${round}회차` : ""}`} mode={["real", "mock"]}
+      <Section title={`C-201 한 건 따라가기 · ${cycle > 1 ? `${cycle}회차 · ` : ""}${doneCount}/${steps.length}`} mode={["real", "mock"]}
         note={`현재 세션(${v.session.name})의 상태를 기준으로 표시합니다. ${sim ? "시뮬레이션 세션에서는 다른 부서 단계도 대행 입력할 수 있습니다." : "기준 세션에서는 각 단계를 해당 부서 계정으로 로그인해 입력합니다."} 바이어·이사회·부서 회신 값은 모의(고정 값)입니다.`}>
         <ol className="loop-strip" aria-label="이벤트 루프">
           {LOOP.map((x, i) => (
             <li key={x} className={now?.stage === i ? "on" : ""} aria-current={now?.stage === i ? "step" : undefined}>{x}</li>
           ))}
         </ol>
+        {cycle > 1 && (
+          <p className="flow-cycle small">
+            <b>{cycle - 1}회차 완료 · {cycle}회차 진행 중</b> — 바이어 회신 등으로 결정이 낡아 재상신부터 다시 진행합니다. 1~4단계 결과는 그대로 씁니다.
+          </p>
+        )}
         {now ? (
           <p className="flow-now">
             <b>현재 {now.n}. {now.title}</b> — {who(now, accounts)}
@@ -235,10 +247,10 @@ export function FlowPage({ v, user, onSwitch }: Props) {
 export function FlowBar({ v, user, onSwitch }: Props) {
   // 맥락 줄 오른쪽에 들어간다(이슈 #73): 진행 수 · 지금 단계 · 할 사람(부서, 이름은 툴팁) · 이동 버튼
   const accounts = useAccounts();
-  const { steps, doneCount, now } = flowOf(v);
+  const { steps, cycle, doneCount, now } = flowOf(v);
   return (
     <span className="flowbar" role="note">
-      <Link to="/flow" className="flowbar-title">시연 {doneCount}/{steps.length}</Link>
+      <Link to="/flow" className="flowbar-title" title={cycle > 1 ? `${cycle - 1}회차 완료 · ${cycle}회차 진행 중` : undefined}>시연 {cycle > 1 ? `${cycle}회차 · ` : ""}{doneCount}/{steps.length}</Link>
       {now ? (
         <>
           <span className="flowbar-now" title={`${now.n}. ${now.title} · ${who(now, accounts)}`}>지금 <b>{now.n}. {now.title}</b> · {whoDept(now, accounts)}</span>
@@ -252,10 +264,12 @@ export function FlowBar({ v, user, onSwitch }: Props) {
 }
 
 // 로그인 화면의 시연 순서(상태 없이 계정 차례만)
-// n은 시연 흐름 페이지의 단계 번호(2 엔진 자동, 4 다른 부서 회신은 로그인 차례가 아니라 빠진다)
+// n은 시연 흐름 페이지의 단계 번호. role이 빈 단계(2 엔진 자동, 4 다른 부서 회신 선택)는 로그인 차례가 아니라 흐리게 보인다
 export const FLOW_ORDER: { n: number; role: string; what: string }[] = [
   { n: 1, role: "sales", what: "RFP 접수" },
+  { n: 2, role: "", what: "엔진 판단·확인 요청 생성(자동)" },
   { n: 3, role: "production", what: "확인 요청 회신" },
+  { n: 4, role: "", what: "다른 부서 회신(선택)" },
   { n: 5, role: "sales", what: "엔진 제안안 상신" },
   { n: 6, role: "board", what: "참여·대안 결정" },
   { n: 7, role: "sales", what: "제안 제출 → 작업 생성" },
