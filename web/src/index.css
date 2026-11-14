@@ -3077,3 +3077,30 @@ li:focus-within .log-fork,
   margin: 4px 0;
   padding-left: 18px;
 }
+
+/* ===== 시연 리뷰 개선 8(이슈 #83): 내 부서 요청 한 번에 회신 ===== */
+.bulk-reply {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #F2F2F2;
+}
+
+.bulk-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bulk-list li {
+  padding: 2px 0;
+}
+
+.bulk-list input {
+  width: auto;
+  margin: 0 4px 0 0;
+  vertical-align: middle;
+}

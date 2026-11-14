@@ -18,7 +18,7 @@ import { BrandMark, EmptyState, Swan, type SwanName } from "./brand";
 // 완료 알림(이슈 #59): 같은 세션에서 입찰 상태가 넘어가면 결과 한 줄과 백조를 보인다(위급·오류에는 쓰지 않는다).
 // 결과 알림(이슈 #59 → #75): 같은 세션에 새 사건이 기록되면 무엇이 바뀌었는지(입찰 상태·열린 확인 요청·작업·가예약 수,
 // 사건 변화 앞부분)를 보인다. 결정이 낡는 바이어 회신은 경고형(빨강 왼쪽 줄, 백조 없음). 거부된 사건은 오류 띠가 맡는다.
-type Notice = { kind: "ok" | "warn" | "info"; swan?: SwanName; title: string; desc: string; lines: string[]; seq: number; to?: string; toLabel?: string };
+type Notice = { kind: "ok" | "warn" | "info"; swan?: SwanName; title: string; desc: string; lines: string[]; seq: number; seqFrom?: number; to?: string; toLabel?: string };
 
 function noticeFor(prev: View, next: View): Notice | null {
   if (prev.session.id !== next.session.id) return null;
@@ -31,20 +31,23 @@ function noticeFor(prev: View, next: View): Notice | null {
   const b = next.state.bid?.state;
   const openReq = (x: View) => (x.state.requests ?? []).filter((r) => r.state !== "반영").length;
   const resv = (x: View) => (x.state.reservations ?? []).length;
-  const made = (next.state.tasks ?? []).filter((t) => t.cause_seq === ev.seq && t.state === "열림");
+  // 한 번에 여러 사건(일괄 회신)이면 이번에 새로 생긴 사건 전부를 묶어 알린다(이슈 #83)
+  const fresh = next.state.log!.slice(pl);
+  const seqs = new Set(fresh.map((e) => e.event.seq));
+  const made = (next.state.tasks ?? []).filter((t) => seqs.has(t.cause_seq) && t.state === "열림");
   const facts: string[] = [];
   if (a !== b && b) facts.push(`입찰 ${a ?? "접수 전"} → ${b}`);
   if (openReq(next) !== openReq(prev)) facts.push(`열린 확인 요청 ${openReq(prev)} → ${openReq(next)}`);
   if (made.length) facts.push(`작업 +${made.length}`);
   if (resv(next) !== resv(prev)) facts.push(`가예약 ${resv(prev)} → ${resv(next)}`);
-  const lines = (entry.changes ?? []).slice(0, 3);
+  const lines = fresh.length > 1 ? fresh.slice(0, 4).map((e) => (e.changes ?? [])[0] ?? EVENT_LABEL[e.event.type] ?? e.event.type) : (entry.changes ?? []).slice(0, 3);
   if (made.length) lines.push(`생성된 작업: ${made.map((t) => `${t.owner_role} ${t.title.split("(")[0].trim()}`).join(" · ")}`);
-  const base = { desc: facts.join(" · ") || "상태 변화는 없습니다.", lines, seq: ev.seq };
+  const base = { desc: facts.join(" · ") || "상태 변화는 없습니다.", lines, seq: ev.seq, seqFrom: fresh.length > 1 ? fresh[0].event.seq : undefined };
   switch (ev.type) {
     case "E1_RFP":
       return { ...base, kind: "ok", swan: "waiting", title: `RFP를 접수했습니다 · 확인 요청 ${openReq(next)}건이 생성되었습니다`, to: "/bids/C-201", toLabel: "판단·제안 보기" };
     case "E3_REPLY":
-      return { ...base, kind: "info", title: "회신을 반영했습니다", to: "/requests", toLabel: "확인 요청 보기" };
+      return { ...base, kind: "info", title: fresh.length > 1 ? `회신 ${fresh.length}건을 반영했습니다` : "회신을 반영했습니다", to: "/requests", toLabel: "확인 요청 보기" };
     case "E8_SUBMIT_APPROVAL":
       return { ...base, kind: "ok", swan: "waiting", title: "상신했습니다 · CEO/이사회 결정 대기", to: "/flow", toLabel: "시연 흐름 보기" };
     case "E2_DECISION":
@@ -287,7 +290,7 @@ export default function App() {
               {notice.swan && <Swan name={notice.swan} size={72} />}
               <div className="notice-text">
                 <p className="notice-title">{notice.title}</p>
-                <p className="muted small">사건 #{notice.seq} · {notice.desc}</p>
+                <p className="muted small">사건 #{notice.seqFrom ? `${notice.seqFrom}~#${notice.seq}` : notice.seq} · {notice.desc}</p>
                 {notice.lines.length > 0 && (
                   <ul className="notice-lines small">
                     {notice.lines.map((l) => <li key={l}>{l}</li>)}

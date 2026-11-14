@@ -303,6 +303,7 @@ export function RequestsView({ v, run, dept }: { v: View; run: Run; dept?: Depar
           RFP가 접수되면(E1) 부서·바이어에 보낼 확인 요청이 여기에 표시됩니다.
         </EmptyState>
       )}
+      <BulkReply v={v} run={run} dept={dept} pending={pending} />
       {pending.length > 0 && (
         <div className="scroll">
           <table className="grid text req-table">{head}<tbody>{pending.map(row)}</tbody></table>
@@ -350,21 +351,41 @@ function ClampText({ text }: { text: string }) {
 // CR-10: PL-01을 옮겨 만들 후보 라인(PL-01 자기 라인 L-01과 더마 전용 L-02 제외, 서버 otherLinesForBasic과 같다)
 const OTHER_LINES = ["L-03", "L-11", "L-12", "L-13"];
 
+// 회신 모의 기본값(개별 회신 폼과 일괄 회신이 같은 값을 쓴다, 이슈 #83)
+const REPLY_DEFAULT: Fields = { capacity_period: "annual", extra_annual: 0, means: "", masil_in_util: false, mb_ready: true, validation_weeks: 8, released_qty: 0, revised: false, release_pl01: 0, release_pl02: 0, lines: [] as string[], changeover_weeks: 4, annual_qty: 0, received: false, orders: 0 };
+
+function answerFor(id: string, a: Fields): Fields {
+  switch (id) {
+    case "CR-01": return { capacity_period: a.capacity_period };
+    case "CR-02": return { extra_annual: Number(a.extra_annual), means: a.means };
+    case "CR-03": return { masil_in_util: a.masil_in_util };
+    case "CR-07": return { mb_ready: a.mb_ready, validation_weeks: Number(a.validation_weeks) };
+    case "CR-08": return { released_qty: Number(a.released_qty) };
+    case "CR-09": return { revised: a.revised, release_pl01: a.revised ? Number(a.release_pl01) : 0, release_pl02: a.revised ? Number(a.release_pl02) : 0 };
+    case "CR-10": return { lines: a.lines, changeover_weeks: Number(a.changeover_weeks), annual_qty: Number(a.annual_qty) };
+    case "CR-11": return { received: a.received, orders: Number(a.orders) };
+  }
+  return {};
+}
+
+// 일괄 회신에서 보이는 기본값 요약
+function answerText(id: string): string {
+  switch (id) {
+    case "CR-01": return "기간 단위: 연간";
+    case "CR-02": return "연간 추가 가능 0 EA · 수단 미입력";
+    case "CR-03": return "Masil 발주가 계획에 포함: 아니오";
+    case "CR-07": return "M-B 재계약 가능 · 재검증 8주";
+    case "CR-08": return "늦출 수 있는 수량 0 EA";
+    case "CR-09": return "계약·예측 수정 없음(반환 0)";
+    case "CR-10": return "옮겨 만들 라인 없음 · 전환 4주";
+    case "CR-11": return "확정 납기 대응표 없음";
+  }
+  return "기본값";
+}
+
 function ReplyForm({ r, run, done }: { r: ConfirmRequest; run: Run; done: () => void }) {
-  const [a, setA] = useState<Fields>({ capacity_period: "annual", extra_annual: 0, means: "", masil_in_util: false, mb_ready: true, validation_weeks: 8, released_qty: 0, revised: false, release_pl01: 0, release_pl02: 0, lines: [] as string[], changeover_weeks: 4, annual_qty: 0, received: false, orders: 0 });
-  const answer = (): Fields => {
-    switch (r.request_id) {
-      case "CR-01": return { capacity_period: a.capacity_period };
-      case "CR-02": return { extra_annual: Number(a.extra_annual), means: a.means };
-      case "CR-03": return { masil_in_util: a.masil_in_util };
-      case "CR-07": return { mb_ready: a.mb_ready, validation_weeks: Number(a.validation_weeks) };
-      case "CR-08": return { released_qty: Number(a.released_qty) };
-      case "CR-09": return { revised: a.revised, release_pl01: a.revised ? Number(a.release_pl01) : 0, release_pl02: a.revised ? Number(a.release_pl02) : 0 };
-      case "CR-10": return { lines: a.lines, changeover_weeks: Number(a.changeover_weeks), annual_qty: Number(a.annual_qty) };
-      case "CR-11": return { received: a.received, orders: Number(a.orders) };
-    }
-    return {};
-  };
+  const [a, setA] = useState<Fields>({ ...REPLY_DEFAULT });
+  const answer = (): Fields => answerFor(r.request_id, a);
   const send = async () => {
     await run(() => api.event("E3_REPLY", r.to_role, { request_id: r.request_id, answer: answer() }));
     done();
@@ -450,6 +471,61 @@ function SubmitChecklist({ v }: { v: View }) {
         <p className="small bad">막힘 {blocks.length}건: {blocks.map((f) => f.rule).join(", ")} — 해소되지 않으면 제출이 거부될 수 있습니다.</p>
       ) : (
         <p className="small muted">현재 막힘이 없습니다. 제출하면 엔진이 점검표를 다시 확인합니다.</p>
+      )}
+    </div>
+  );
+}
+
+// 내 부서 요청 한 번에 회신(이슈 #83): 2건 이상이면 모의 기본값으로 차례로 기록한다. 고친 값이 필요하면 표의 개별 '회신 입력'.
+function BulkReply({ v, run, dept, pending }: { v: View; run: Run; dept?: Department; pending: ConfirmRequest[] }) {
+  const mine = pending.filter((r) => !!dept && r.to_role === dept.id && r.to_role !== "바이어" && canEvent(v, dept, "E3_REPLY", r).ok);
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  if (mine.length < 2) return null;
+  const sel = mine.filter((r) => picked[r.request_id] !== false);
+  // 한 번의 run 안에서 차례로 기록한다: 알림은 묶어서 한 번, 중간에 거부되면 멈추고 그때까지의 상태를 보인다(ApiError.view).
+  const sendAll = async () => {
+    setBusy(true);
+    setMsg(null);
+    let n = 0;
+    const ok = await run(async () => {
+      let last: View | undefined;
+      for (const r of sel) {
+        last = await api.event("E3_REPLY", r.to_role, { request_id: r.request_id, answer: answerFor(r.request_id, REPLY_DEFAULT) });
+        n += 1;
+      }
+      return last!;
+    });
+    setBusy(false);
+    if (ok === true) setOpen(false);
+    else setMsg(`${n}건을 기록하고 멈췄습니다. 위 오류를 확인해 주세요.`);
+  };
+  return (
+    <div className="bulk-reply">
+      <div className="row">
+        <b className="small">내 부서 요청 {mine.length}건</b>
+        <button className="ghost small" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "접기" : "한 번에 회신"}</button>
+        {msg && <span className="muted small">{msg}</span>}
+      </div>
+      {open && (
+        <>
+          <ul className="bulk-list small">
+            {mine.map((r) => (
+              <li key={r.request_id}>
+                <label>
+                  <input type="checkbox" checked={picked[r.request_id] !== false} onChange={(e) => setPicked({ ...picked, [r.request_id]: e.target.checked })} />{" "}
+                  <b>{r.request_id}</b> <span className="muted" title={r.question}>{answerText(r.request_id)}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <div className="row">
+            <button disabled={busy || sel.length === 0} onClick={sendAll}>선택한 {sel.length}건 회신 기록(모의 기본값)</button>
+            <span className="muted small">값을 바꾸려면 아래 표의 '회신 입력'을 사용해 주세요.</span>
+          </div>
+        </>
       )}
     </div>
   );
