@@ -13,11 +13,12 @@ export function Mode({ kind }: { kind: "real" | "mock" | "design" }) {
 // 안내문은 한 줄로 줄이고 넘치면 "자세히"로 펼친다(Note).
 export function Section({ title, mode, children, note }: { title: string; mode: ("real" | "mock" | "design")[]; children: ReactNode; note?: ReactNode }) {
   const special = mode.some((m) => m !== "real");
+  const order = { real: 0, mock: 1, design: 2 } as const; // 배지 순서를 화면마다 같게
   return (
     <section className="card">
       <header className="card-head">
         <h2>{title}</h2>
-        {special && <span className="modes">{mode.map((m) => <Mode key={m} kind={m} />)}</span>}
+        {special && <span className="modes">{[...mode].sort((x, y) => order[x] - order[y]).map((m) => <Mode key={m} kind={m} />)}</span>}
       </header>
       {note && <Note>{note}</Note>}
       {children}

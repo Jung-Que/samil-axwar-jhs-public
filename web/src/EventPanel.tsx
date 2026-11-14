@@ -45,7 +45,9 @@ function presets(v: View, type: string): { label: string; payload: Fields }[] {
 
 // 사건 입력: 고정 값(프리셋)을 골라 필드에 채우고, 필요하면 필드를 고친 뒤 기록한다.
 // only가 있으면 그 사건 종류만 보인다(결정 페이지의 E2 등, 이슈 #53).
-export function EventPanel({ v, run, focus, dept, only, title = "사건 입력" }: { v: View; run: Run; focus?: { event: string; n: number } | null; dept?: Department; only?: string[]; title?: string }) {
+export function EventPanel({ v, run, focus, dept, only, title }: { v: View; run: Run; focus?: { event: string; n: number } | null; dept?: Department; only?: string[]; title?: string }) {
+  // 기록 뒤에는 입력 칸을 잠그고 "기록됨"을 보인다(이슈 #75: 차례가 아닌 사건·같은 사건을 바로 다시 누르지 않게)
+  const [recorded, setRecorded] = useState<{ type: string; seq: number } | null>(null);
   // 부서별 권한(이슈 #43): 상태로 가능한 사건 중 내 부서가 넣을 수 있는 것만(시뮬레이션 세션은 대행 포함)
   const all = available(v);
   const state: Record<string, boolean> = only ? Object.fromEntries(Object.entries(all).filter(([k]) => only.includes(k))) : all;
@@ -90,11 +92,23 @@ export function EventPanel({ v, run, focus, dept, only, title = "사건 입력" 
     else if (type === "E0_CLOCK") payload = { sim_date: simple.sim_date };
     else if (type === "E5_NEW_ORDER") payload = { product_id: simple.product_id, qty: Number(simple.qty), customer_id: simple.customer_id };
     else if (type === "E8_SUBMIT_APPROVAL") payload = { note: simple.note };
-    await run(() => api.event(type, ACTOR[type], payload));
+    const ok = await run(() => api.event(type, ACTOR[type], payload));
+    if (ok === true) setRecorded({ type, seq: (v.state.log?.length ?? 0) + 1 });
   };
 
+  if (recorded) {
+    return (
+      <Section title={title ?? `${EVENT_LABEL[recorded.type] ?? recorded.type} 기록됨`} mode={["real"]}>
+        <p className="small">사건 #{recorded.seq} <b>{EVENT_LABEL[recorded.type] ?? recorded.type}</b>을(를) 기록했습니다. 바뀐 내용은 위 알림과 사건 로그에서 확인할 수 있습니다.</p>
+        <div className="row">
+          <button className="ghost small" onClick={() => setRecorded(null)}>다른 사건 입력</button>
+        </div>
+      </Section>
+    );
+  }
+
   return (
-    <Section title={title} mode={["real", "mock"]} note="바이어·이사회 회신은 모의 값이며, 규칙에 맞지 않는 사건은 거부되어 기록되지 않습니다.">
+    <Section title={title ?? EVENT_LABEL[type] ?? "사건 입력"} mode={["real", "mock"]} note="바이어·이사회 회신은 모의 값이며, 규칙에 맞지 않는 사건은 거부되어 기록되지 않습니다.">
       <label className="field">
         <span>사건</span>
         <select value={type} onChange={(e) => setType(e.target.value)}>
@@ -173,7 +187,7 @@ function RfpForm({ f, set }: { f: Fields; set: (f: Fields) => void }) {
           {items.map((it, i) => (
             <tr key={i}>
               <td><input value={it.product_id} onChange={(e) => upd(i, "product_id", e.target.value)} /></td>
-              <td><input type="number" value={it.annual_qty} onChange={(e) => upd(i, "annual_qty", e.target.value)} /></td>
+              <td><input type="number" value={it.annual_qty} onChange={(e) => upd(i, "annual_qty", e.target.value)} /><span className="muted small qty-hint">{Number(it.annual_qty).toLocaleString("ko-KR")} EA</span></td>
               <td><input type="number" step="0.01" value={it.unit_price_usd} onChange={(e) => upd(i, "unit_price_usd", e.target.value)} /></td>
             </tr>
           ))}

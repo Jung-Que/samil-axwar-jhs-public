@@ -12,23 +12,52 @@ import { ClockTools, ModeBand, PageHead, SessionTools, SideNav, TopBar, pageById
 import { Link, navigate, useLocation } from "./router";
 import { AccessPage, LoginPage } from "./login";
 import { FlowBar, FlowPage } from "./flowViews";
+import { EVENT_LABEL } from "./format";
 import { BrandMark, EmptyState, Swan, type SwanName } from "./brand";
 
 // 완료 알림(이슈 #59): 같은 세션에서 입찰 상태가 넘어가면 결과 한 줄과 백조를 보인다(위급·오류에는 쓰지 않는다).
-type Notice = { swan: SwanName; title: string; desc: string; to?: string; toLabel?: string };
+// 결과 알림(이슈 #59 → #75): 같은 세션에 새 사건이 기록되면 무엇이 바뀌었는지(입찰 상태·열린 확인 요청·작업·가예약 수,
+// 사건 변화 앞부분)를 보인다. 결정이 낡는 바이어 회신은 경고형(빨강 왼쪽 줄, 백조 없음). 거부된 사건은 오류 띠가 맡는다.
+type Notice = { kind: "ok" | "warn" | "info"; swan?: SwanName; title: string; desc: string; lines: string[]; seq: number; to?: string; toLabel?: string };
 
 function noticeFor(prev: View, next: View): Notice | null {
   if (prev.session.id !== next.session.id) return null;
+  const pl = prev.state.log?.length ?? 0;
+  const nl = next.state.log?.length ?? 0;
+  if (nl <= pl) return null; // 새 사건이 없으면(세션 열기·초기화) 알리지 않는다
+  const entry = next.state.log![nl - 1];
+  const ev = entry.event;
   const a = prev.state.bid?.state;
   const b = next.state.bid?.state;
-  if (!b || a === b) return null;
-  const last = next.state.log?.[next.state.log.length - 1]?.event.seq ?? 0;
-  const made = (next.state.tasks ?? []).filter((t) => t.cause_seq === last && t.state === "열림");
-  const madeText = made.length ? `작업 ${made.length}건이 생성되었습니다: ${made.map((t) => `${t.owner_role} ${t.title.split("(")[0].trim()}`).join(" · ")}` : "새로 생성된 작업이 없습니다.";
-  if (b === "상신") return { swan: "waiting", title: "상신했습니다 · CEO/이사회 결정 대기", desc: "결정이 입력되면 시연 흐름과 결정 페이지에 표시됩니다.", to: "/flow", toLabel: "시연 흐름 보기" };
-  if ((b === "승인" || b === "조건부 승인") && a === "상신") return { swan: "success", title: `결정을 기록했습니다 · ${b}`, desc: madeText, to: "/tasks", toLabel: "작업 보기" };
-  if (b === "회신 대기" && (a === "승인" || a === "조건부 승인")) return { swan: "success", title: "제안을 제출했습니다", desc: madeText, to: "/tasks", toLabel: "작업 보기" };
-  return null;
+  const openReq = (x: View) => (x.state.requests ?? []).filter((r) => r.state !== "반영").length;
+  const resv = (x: View) => (x.state.reservations ?? []).length;
+  const made = (next.state.tasks ?? []).filter((t) => t.cause_seq === ev.seq && t.state === "열림");
+  const facts: string[] = [];
+  if (a !== b && b) facts.push(`입찰 ${a ?? "접수 전"} → ${b}`);
+  if (openReq(next) !== openReq(prev)) facts.push(`열린 확인 요청 ${openReq(prev)} → ${openReq(next)}`);
+  if (made.length) facts.push(`작업 +${made.length}`);
+  if (resv(next) !== resv(prev)) facts.push(`가예약 ${resv(prev)} → ${resv(next)}`);
+  const lines = (entry.changes ?? []).slice(0, 3);
+  if (made.length) lines.push(`생성된 작업: ${made.map((t) => `${t.owner_role} ${t.title.split("(")[0].trim()}`).join(" · ")}`);
+  const base = { desc: facts.join(" · ") || "상태 변화는 없습니다.", lines, seq: ev.seq };
+  switch (ev.type) {
+    case "E1_RFP":
+      return { ...base, kind: "ok", swan: "waiting", title: `RFP를 접수했습니다 · 확인 요청 ${openReq(next)}건이 생성되었습니다`, to: "/bids/C-201", toLabel: "판단·제안 보기" };
+    case "E3_REPLY":
+      return { ...base, kind: "info", title: "회신을 반영했습니다", to: "/requests", toLabel: "확인 요청 보기" };
+    case "E8_SUBMIT_APPROVAL":
+      return { ...base, kind: "ok", swan: "waiting", title: "상신했습니다 · CEO/이사회 결정 대기", to: "/flow", toLabel: "시연 흐름 보기" };
+    case "E2_DECISION":
+      return { ...base, kind: "ok", swan: "success", title: `결정을 기록했습니다 · ${b ?? ""}`, to: "/tasks", toLabel: "작업 보기" };
+    case "E7_SUBMIT_PROPOSAL":
+      return { ...base, kind: "ok", swan: "success", title: "제안을 제출했습니다", to: "/ledger", toLabel: "약속 원장 보기" };
+    case "E4_BUYER_REPLY":
+      return b === "재검토" && a !== "재검토"
+        ? { ...base, kind: "warn", title: "바이어 회신을 반영했습니다 · 결정이 낡아 재상신이 필요합니다", to: "/bids/C-201", toLabel: "판단·제안 보기" }
+        : { ...base, kind: "info", title: "바이어 회신을 반영했습니다", to: "/bids/C-201", toLabel: "판단·제안 보기" };
+    default:
+      return { ...base, kind: "info", title: `사건을 기록했습니다 · ${EVENT_LABEL[ev.type] ?? ev.type}`, to: "/log", toLabel: "사건 로그 보기" };
+  }
 }
 
 // 로그인 뒤 돌아갈 주소(?next=). 이 앱 안의 경로만 받는다(다른 사이트로 보내지 않게).
@@ -234,14 +263,20 @@ export default function App() {
         <main className="page">
           {err && <div className="error" role="alert">{err}</div>}
           {notice && (
-            <div className="notice" role="status">
-              <Swan name={notice.swan} size={72} />
+            <div className={`notice notice-${notice.kind}`} role="status">
+              {notice.swan && <Swan name={notice.swan} size={72} />}
               <div className="notice-text">
                 <p className="notice-title">{notice.title}</p>
-                <p className="muted small">{notice.desc}</p>
+                <p className="muted small">사건 #{notice.seq} · {notice.desc}</p>
+                {notice.lines.length > 0 && (
+                  <ul className="notice-lines small">
+                    {notice.lines.map((l) => <li key={l}>{l}</li>)}
+                  </ul>
+                )}
               </div>
               <div className="row">
                 {notice.to && <Link to={notice.to} className="btn small-btn">{notice.toLabel}</Link>}
+                <Link to="/log" className="btn ghost-btn small-btn">사건 로그</Link>
                 <button className="ghost small" onClick={() => setNotice(null)}>닫기</button>
               </div>
             </div>

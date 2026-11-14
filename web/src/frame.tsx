@@ -43,8 +43,8 @@ export const pageById = (id: string): Page | undefined => PAGES.find((p) => p.id
 // 입찰 상태 표시(팔레트, 이슈 #51): 진행 = 검정 채움 · 승인·수주 = 회색 채움 · 조건부·재검토·보류 = 빨강 테두리 · 실주 = 빨강 채움.
 export function bidTone(state?: string): string {
   if (!state || state === "검토중") return "tone-gray";
-  if (state === "승인" || state === "수주") return "tone-ok";
-  if (state === "조건부 승인" || state === "재검토" || state === "보류") return "tone-warn";
+  if (state === "승인" || state === "조건부 승인" || state === "수주") return "tone-ok"; // 조건부 승인은 경고가 아니다(#75)
+  if (state === "재검토" || state === "보류") return "tone-warn";
   if (state === "실주") return "tone-bad";
   return "tone-accent";
 }

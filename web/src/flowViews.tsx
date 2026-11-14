@@ -88,7 +88,7 @@ export function flowOf(v: View): { steps: FlowStep[]; round: number; doneCount: 
     5: rank >= 2,
     6: rank >= 3,
     7: rank >= 4,
-    8: rank >= 5 || buyerAfterSubmit,
+    8: false, // 확인하는 사건이 없어 '완료'로 두지 않는다. 지나가면 '확인 안 함'(skip)
     9: rank >= 5 || buyerAfterSubmit,
   };
   const evidence: Record<number, string | undefined> = {
@@ -111,7 +111,7 @@ export function flowOf(v: View): { steps: FlowStep[]; round: number; doneCount: 
   const steps: FlowStep[] = raw.map((s) => {
     let status: FlowStatus;
     if (done[s.n]) status = "done";
-    else if (s.n === 8) status = rank >= 4 ? "open" : "wait";
+    else if (s.n === 8) status = rank >= 5 || buyerAfterSubmit ? "skip" : rank >= 4 ? "open" : "wait";
     else if (s.n === 3 && prodFirst) status = "now";
     else if (s.optional) status = !bid ? "wait" : firstReq && firstReq.n > s.n && rank < 2 ? "open" : "skip";
     else if (s === firstReq) status = prodFirst ? "open" : "now";
@@ -143,12 +143,16 @@ function useAccounts(): Account[] {
 
 function StepAction({ s, user, accounts, onSwitch }: { s: FlowStep; user: User; accounts: Account[]; onSwitch: Props["onSwitch"] }) {
   if (s.status !== "now" && s.status !== "open") return null;
-  if (s.roles.length === 0 || s.roles.includes(user.role_code)) {
+  const mine = s.roles.length === 0 || s.roles.includes(user.role_code);
+  const others = s.roles.filter((r) => r !== user.role_code);
+  // 담당 부서가 하나뿐이고 내가 그 부서면 '가기'만. 여럿이면 '가기'와 함께 다른 부서로 다시 로그인(8단계 생성된 작업 확인 등)
+  if (mine && others.length === 0) {
     return <Link to={s.to} className="btn small-btn">가기</Link>;
   }
   return (
     <div className="row">
-      {s.roles.map((r) => {
+      {mine && <Link to={s.to} className="btn small-btn">가기</Link>}
+      {others.map((r) => {
         const a = accounts.find((x) => x.role_code === r);
         return (
           <button key={r} className="ghost small" onClick={() => onSwitch(r, s.to)}>
@@ -207,7 +211,7 @@ export function FlowPage({ v, user, onSwitch }: Props) {
                   <td className="c-fit">{s.n}</td>
                   <td className="c-text-s small" title={who(s, accounts)}>{whoDept(s, accounts)}</td>
                   <td className="c-text" title={s.status === "now" || s.status === "open" ? undefined : s.desc}><b>{s.title}</b>{(s.status === "now" || s.status === "open") && <div className="muted small">{s.desc}</div>}</td>
-                  <td className="c-fit"><span className={`fs-pill fs-pill-${s.status}`}>{STATUS_LABEL[s.status]}</span></td>
+                  <td className="c-fit"><span className={`fs-pill fs-pill-${s.status}`}>{s.n === 8 && s.status === "skip" ? "확인 안 함" : STATUS_LABEL[s.status]}</span></td>
                   <td className="c-text-s small">{s.evidence ?? ""}</td>
                   <td className="c-fit"><StepAction s={s} user={user} accounts={accounts} onSwitch={onSwitch} /></td>
                 </tr>
