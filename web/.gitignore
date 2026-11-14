@@ -1,0 +1,4 @@
+# 설치·빌드 산출물(루트 .gitignore는 대회 기록 키 때문에 고치지 않으므로 여기서 뺀다)
+node_modules/
+dist/
+*.tsbuildinfo

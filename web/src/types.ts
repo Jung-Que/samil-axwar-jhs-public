@@ -1,0 +1,466 @@
+// Go 서버 /api/w05/* 응답 타입(server/w05의 JSON 태그와 같다).
+
+export type Supply = { basis: string; qty: number; conditional: boolean };
+export type MonthRow = {
+  month: string;
+  demand: number;
+  supplies: Supply[] | null;
+  supply: number;
+  firm: number;
+  schedule: number;
+  short: number;
+  backlog: number;
+  penalty_krw: number;
+};
+export type ProductEval = {
+  product_id: string;
+  line_id: string;
+  annual_qty: number;
+  unit_price_usd: number;
+  unit_krw: number;
+  material_per_ea: number;
+  cogs_per_ea: number;
+  contrib_per_ea: number;
+  monthly_demand: number;
+  months: MonthRow[];
+  schedule_total: number;
+  firm_total: number;
+  short_total: number;
+  coverage_pct: number;
+  penalty_backlog_krw: number;
+  per_lot_month_krw: number;
+  revenue_request_krw: number;
+  contrib_request_krw: number;
+  revenue_schedule_krw: number;
+  contrib_schedule_krw: number;
+  break_even_fx: number;
+};
+export type LineEval = {
+  line_id: string;
+  plant_id: string;
+  product_id: string;
+  capacity_qty: number;
+  utilization_pct: number;
+  snapshot_date: string;
+  dedicated: boolean;
+  spare_annual: number;
+  masil_protected: number;
+  masil_deducted: number;
+  new_orders: number;
+  hist_orders: number;
+  base_avail_annual: number;
+  base_monthly: number;
+  masil_deficit: number;
+};
+export type OptionEval = {
+  option_id: string;
+  type: string;
+  target_line_text: string;
+  line_id: string;
+  capex_krw: number;
+  lead_weeks: number;
+  added_annual_qty: number;
+  note: string;
+  status: string;
+  decision_date: string;
+  decision_date_assumed: boolean;
+  install_date: string;
+  qualified_date: string;
+  start_month: string;
+  monthly_qty: number;
+  validation_weeks: number;
+  pending_requests: string[] | null;
+  conditional: boolean;
+  usable: boolean;
+  phase: string;
+  payback_months: number;
+};
+export type Flag = { code: string; level: "미확인" | "위험" | "차단"; message: string; rule: string };
+export type SPO = { po_id: string; sku_id: string; product_id: string; order_date: string; qty: number; lead_weeks: number; arrive_by: string; payment_due_date: string };
+export type Commitments = {
+  in_progress_count: number;
+  in_progress_qty: number;
+  by_product: Record<string, number>;
+  count_by_product: Record<string, number>;
+  est_due: Record<string, Record<string, number>>;
+  t12_monthly_prod: Record<string, number>;
+  masil_spos: SPO[];
+};
+export type Scenario = {
+  as_of: string;
+  board_date: string;
+  sim_date: string;
+  price_cut: number;
+  delivery_start: string;
+  start_confirmed: boolean;
+  contract_months: number;
+  validation: string;
+  penalty_basis: string;
+  masil_in_util: boolean;
+  capacity_period: string;
+  unit_confirmed: boolean;
+  pl01_confirmed: boolean;
+  initial_qty_required: number;
+  options: Record<string, { status: string; decision_date?: string }>;
+  churn_answered?: boolean;
+  churn_revised?: boolean;
+  churn_release?: Record<string, number>;
+  fx_shift?: number;
+  opt_validation?: Record<string, number>;
+  sim_notes?: string[];
+  hist_orders?: Record<string, number>;
+  hist_basis?: string;
+};
+export type Evaluation = {
+  scenario: Scenario;
+  cutoff: string;
+  future_snapshot: boolean;
+  fx: number;
+  fx_date: string;
+  lines: LineEval[];
+  f1_weighted_util: number;
+  f1_simple_util: number;
+  options: OptionEval[];
+  products: Record<string, ProductEval>;
+  revenue_at: Record<string, number>;
+  contrib_at: Record<string, number>;
+  contract_annual_krw: number;
+  penalty_contract_krw: number;
+  penalty_contract_monthly_krw: number;
+  fx_down100_revenue_krw: number;
+  fx_down100_contrib_krw: number;
+  initial_gap: number;
+  commitments: Commitments;
+  flags: Flag[] | null;
+  compare_opt01?: OptCompare;
+  churn: ChurnSignal[] | null;
+};
+// R12 이탈 경보(server/w05/churn.go)
+export type ChurnMonth = {
+  month: string;
+  booking_krw: number;
+  shipment_krw: number;
+  single_ratio: number;
+  rolling_ratio: number;
+  yoy_pct: number;
+  has_yoy: boolean;
+  status: "정상" | "WATCH" | "AT_RISK";
+};
+export type ChurnSignal = {
+  customer_id: string;
+  customer_name: string;
+  revenue_share_pct: number;
+  month: string;
+  status: "정상" | "WATCH" | "AT_RISK";
+  since?: string;
+  single_ratio: number;
+  rolling_ratio: number;
+  yoy_pct: number;
+  has_yoy: boolean;
+  open_orders: number;
+  open_qty: Record<string, number>;
+  t12_booked_qty: Record<string, number>;
+  history: ChurnMonth[] | null;
+};
+// OPT-01 비교 시나리오(server/w05/compare.go, 표시용)
+export type CompareSide = {
+  label: string;
+  validation_weeks: number;
+  status: string;
+  install_date: string;
+  qualified_date: string;
+  start_month: string;
+  first_supply_month: string;
+  usable: boolean;
+  conditional: boolean;
+  opt_qty_total: number;
+  schedule_total: number;
+  short_total: number;
+  coverage_pct: number;
+  penalty_backlog_krw: number;
+  penalty_contract_krw: number;
+};
+export type CompareMonth = {
+  month: string;
+  demand: number;
+  base_opt01: number;
+  alt_opt01: number;
+  base_supply: number;
+  alt_supply: number;
+  base_schedule: number;
+  alt_schedule: number;
+  base_short: number;
+  alt_short: number;
+};
+export type OptCompare = { option_id: string; source: string; base: CompareSide; alt: CompareSide; months: CompareMonth[] | null };
+export type Bid = {
+  bid_id: string;
+  state: string;
+  received_date: string;
+  deadline: string;
+  currency: string;
+  penalty_rate_monthly: number;
+  recall_bearer: string;
+  version: number;
+  approval_route: string[] | null;
+};
+export type Condition = { code: string; text: string };
+export type MonthQty = { month: string; qty: number; basis: string[] | null; conditional: boolean };
+export type BidLine = {
+  product_id: string;
+  requested_annual_qty: number;
+  unit_price_usd: number;
+  price_cut: number;
+  qty_status: string;
+  schedule: MonthQty[];
+  proposed_total: number;
+  conditions: Condition[] | null;
+  note: string;
+};
+export type ConfirmRequest = {
+  request_id: string;
+  to_role: string;
+  question: string;
+  blocks: string[] | null;
+  due_date: string;
+  state: "요청" | "반영" | "기한 초과";
+  answer?: Record<string, unknown>;
+  opened_seq: number;
+  mock_reply: boolean;
+  max_qty?: number; // CR-08: 그 시점 PL-02 Masil 보호량(회신 상한)
+};
+export type Task = { task_id: string; owner_role: string; title: string; due_date?: string; state: string; cause_seq: number };
+export type Decision = {
+  decision_id: string;
+  approver_role: string;
+  entered_by?: string;
+  participation: string;
+  options: Record<string, string> | null;
+  conditions: string[] | null;
+  price_floor: number | null;
+  note: string;
+  decided_at: string;
+  eval_version: number;
+  content_hash: string;
+  freshness: "최신" | "낡음";
+  seq: number;
+};
+export type EventRec = { seq: number; type: string; actor_role: string; sim_date: string; payload: unknown; created_at?: string; by?: string };
+export type LogEntry = { event: EventRec; changes: string[] | null };
+export type Reservation = { product_id: string; month: string; qty: number; basis: string; state: string };
+export type State = {
+  scenario: Scenario;
+  bid: Bid | null;
+  lines: BidLine[] | null;
+  requests: ConfirmRequest[] | null;
+  tasks: Task[] | null;
+  decisions: Decision[] | null;
+  reservations: Reservation[] | null;
+  new_orders: Record<string, unknown>[] | null;
+  log: LogEntry[] | null;
+  eval_version: number;
+  evaluation: Evaluation;
+  last_blocks: string[] | null;
+  session_kind: "main" | "sim";
+};
+export type Step = { type: string; actor_role: string; label: string; payload: unknown };
+export type ScenarioInfo = { id: string; title: string; description: string; steps: Step[] };
+export type Assumption = { id: string; text: string; value: string; label: string; affects: string };
+// 수치 출처·단위·기간과 원본 간 규모 차이(server/w05/basis.go, 표시용)
+export type CapacityGap = {
+  line_id: string;
+  plant_id: string;
+  product_id: string;
+  t12_monthly: number;
+  capacity_qty: number;
+  utilization_pct: number;
+  annual_monthly_cap: number;
+  ratio_annual_pct: number;
+  ratio_monthly_pct: number;
+};
+export type DataBasis = {
+  snapshot_file: string;
+  snapshot_date: string;
+  capacity_unit: string;
+  unit_confirmed: boolean;
+  future_snapshot: boolean;
+  batch_file: string;
+  t12_from: string;
+  t12_to: string;
+  order_file: string;
+  cutoff: string;
+  agency_orders: number;
+  agency_qty: number;
+  gaps: CapacityGap[] | null;
+};
+export type View = {
+  state: State;
+  input_mode: string;
+  store: string;
+  raw_files_verified: number;
+  as_of: string;
+  board_date: string;
+  cutoff: string;
+  as_of_min: string;
+  as_of_max: string;
+  data_end: string;
+  lanes: Lane[];
+  line_board: LineRow[];
+  assumptions: Assumption[];
+  data_basis: DataBasis;
+  scenarios: ScenarioInfo[];
+  condition_codes: Record<string, string>;
+  session: SessionInfo;
+  sessions: SessionInfo[] | null;
+  departments: Department[] | null;
+};
+
+// 부서별 권한표(server/w05/permissions.go, 이슈 #43)
+export type Department = {
+  code: string; // X-W05-Role 헤더 값
+  id: string; // 사건 actor_role 이름
+  dept: string; // 부서
+  label: string;
+  duty: string;
+  events: string[] | null;
+  replies: string[] | null;
+  features: string[];
+};
+
+// 민감도 격자(server/w05/simulation.go, 이슈 #39)
+export type SweepAxis = { param: string; values: unknown[] };
+export type SweepMetric = { key: string; label: string; unit: string };
+export type SweepResult = {
+  x_param: string;
+  x_label: string;
+  x_values: string[];
+  y_param?: string;
+  y_label?: string;
+  y_values: string[];
+  metrics: SweepMetric[];
+  base: Record<string, number>;
+  cells: Record<string, number>[][];
+};
+
+// 시뮬레이션 세션(server/w05/sessions.go, 이슈 #37)
+export type SessionInfo = {
+  id: string;
+  name: string;
+  kind: "main" | "sim";
+  parent_id?: string;
+  fork_seq?: number;
+  created_at: string;
+  events: number; // -1 = 아직 읽지 않음
+};
+export type SessionKPI = {
+  session: SessionInfo;
+  as_of: string;
+  sim_date: string;
+  bid_state: string;
+  bid_version: number;
+  price_cut: number;
+  delivery_start: string;
+  pl01_status: string;
+  pl02_status: string;
+  pl01_schedule: number;
+  pl02_schedule: number;
+  pl02_coverage_pct: number;
+  penalty_backlog_krw: number;
+  penalty_contract_krw: number;
+  contrib_schedule_krw: number;
+  revenue_schedule_krw: number;
+  options: string[] | null;
+  open_requests: number;
+  open_tasks: number;
+  reservations: number;
+};
+export type MonthDiff = { month: string; a_has: boolean; b_has: boolean; a_supply: number; b_supply: number; a_schedule: number; b_schedule: number; a_short: number; b_short: number };
+export type ItemDiff = { key: string; text: string; a: string; b: string };
+export type SessionCompare = {
+  a: SessionKPI;
+  b: SessionKPI;
+  products: Record<string, MonthDiff[] | null>;
+  flags: ItemDiff[] | null;
+  requests: ItemDiff[] | null;
+  tasks: ItemDiff[] | null;
+};
+
+// 기준일 재현 보기(server/w05/boards.go)
+export type LaneItem = { text: string; source: string };
+export type LaneAction = { event: string; label: string; enabled: boolean; reason?: string; request_id?: string };
+export type Lane = { role: string; incoming: LaneItem[] | null; can: LaneAction[] | null; doing: LaneItem[] | null; blocked: LaneItem[] | null };
+export type MonthLoad = { month: string; orders: number; c201: number };
+export type LineRow = {
+  line_id: string;
+  plant_id: string;
+  product_id: string;
+  kind: "existing" | "new";
+  dedicated: boolean;
+  capacity_annual: number;
+  monthly_cap: number;
+  utilization_pct: number;
+  spare_annual: number;
+  future_snapshot: boolean;
+  batches_done: number;
+  batches_typical: number;
+  last_batch_date: string;
+  last_batch_qty: number;
+  hold_batches_90d: number;
+  t12_monthly: number;
+  open_orders: number;
+  open_qty: number;
+  masil_protected: number;
+  load: MonthLoad[];
+  status: string;
+  note?: string;
+};
+export type InboxOrder = {
+  order_id: string;
+  order_date: string;
+  customer_id: string;
+  agency_id: string;
+  sales_team: string;
+  product_id: string;
+  qty: number;
+  amount_krw: number;
+  line_id: string;
+  status: string;
+  ship_date?: string;
+  est_due?: string;
+};
+export type Inbox = {
+  as_of: string;
+  sim_date: string;
+  cutoff: string;
+  days: number;
+  today: number;
+  last7: number;
+  last30: number;
+  window_count: number;
+  qty_by_product: Record<string, number>;
+  count_by_team: Record<string, number>;
+  shipped7: number;
+  open_count: number;
+  orders: InboxOrder[] | null;
+  truncated: boolean;
+  masil: SPO[] | null;
+  bid: Bid | null;
+};
+export type BacktestRow = { month: string; estimated: number; actual: number };
+export type Backtest = {
+  cutoff: string;
+  available: boolean;
+  note: string;
+  rows: Record<string, BacktestRow[]>;
+  hit_rate: Record<string, number>;
+  orders: Record<string, number>;
+};
+// 로그인 계정(이슈 #55, server/auth.go). 비밀번호 해시는 내려오지 않는다.
+export type User = { login_id: string; name: string; role_code: string; dept_id: string; dept_label: string; created_at?: string };
+export type Account = { login_id: string; name: string; role_code: string; dept_label: string; duty: string };
+export type AccessTables = {
+  users: User[];
+  roles: { code: string; dept_id: string; dept: string; label: string; duty: string; users: number }[];
+  permissions: { role_code: string; kind: "event" | "reply" | "feature"; item: string }[];
+  store: string;
+};
