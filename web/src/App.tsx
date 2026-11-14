@@ -228,8 +228,7 @@ export default function App() {
   return (
     <div className="shell">
       <TopBar v={v} run={run} busy={busy} user={user} onLogout={() => logout()} />
-      <ModeBand v={v} run={run} busy={busy} />
-      {page?.id !== "flow" && <FlowBar v={v} user={user} dept={dept} onSwitch={switchTo} />}
+      <ModeBand v={v} run={run} busy={busy} right={page?.id !== "flow" ? <FlowBar v={v} user={user} dept={dept} onSwitch={switchTo} /> : undefined} />
       <div className="shell-body">
         <SideNav v={v} dept={dept} current={page?.id} />
         <main className="page">

@@ -229,20 +229,21 @@ export function FlowPage({ v, user, onSwitch }: Props) {
 
 // 모든 페이지 위의 한 줄: 지금 단계와 할 사람
 export function FlowBar({ v, user, onSwitch }: Props) {
+  // 맥락 줄 오른쪽에 들어간다(이슈 #73): 진행 수 · 지금 단계 · 할 사람(부서, 이름은 툴팁) · 이동 버튼
   const accounts = useAccounts();
   const { steps, doneCount, now } = flowOf(v);
   return (
-    <div className="flowbar" role="note">
-      <Link to="/flow" className="flowbar-title">시연 흐름 {doneCount}/{steps.length}</Link>
+    <span className="flowbar" role="note">
+      <Link to="/flow" className="flowbar-title">시연 {doneCount}/{steps.length}</Link>
       {now ? (
         <>
-          <span>현재 <b>{now.n}. {now.title}</b> · {who(now, accounts)}</span>
+          <span className="flowbar-now" title={`${now.n}. ${now.title} · ${who(now, accounts)}`}>지금 <b>{now.n}. {now.title}</b> · {whoDept(now, accounts)}</span>
           <StepAction s={now} user={user} accounts={accounts} onSwitch={onSwitch} />
         </>
       ) : (
         <span>모든 단계 완료 · 입찰 {v.state.bid?.state}</span>
       )}
-    </div>
+    </span>
   );
 }
 

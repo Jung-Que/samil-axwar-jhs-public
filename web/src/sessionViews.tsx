@@ -11,7 +11,7 @@ import { BASE, EChart, INK, INK2, LINE, PAPER, axis } from "./chart";
 type Run = (fn: () => Promise<View>) => Promise<unknown>;
 
 const kindLabel = (s: SessionInfo) => (s.kind === "main" ? "기준" : "시뮬레이션");
-const sessionLabel = (s: SessionInfo) => `${s.name} · ${kindLabel(s)}${s.events >= 0 ? ` · 사건 ${s.events}` : ""}`;
+const sessionLabel = (s: SessionInfo) => `${s.name}${s.kind === "sim" ? " · 시뮬레이션" : ""}${s.events >= 0 ? ` · 사건 ${s.events}` : ""}`;
 
 // 세션 비교(S2): 두 세션의 KPI·제품×월 공급/제안/부족·플래그·확인 요청·작업 차이.
 export function SessionCompareView({ v }: { v: View }) {

@@ -49,8 +49,7 @@ export function bidTone(state?: string): string {
   return "tone-accent";
 }
 
-const kindLabel = (s: SessionInfo) => (s.kind === "main" ? "기준" : "시뮬레이션");
-const sessionLabel = (s: SessionInfo) => `${s.name} · ${kindLabel(s)}${s.events >= 0 ? ` · 사건 ${s.events}` : ""}`;
+const sessionLabel = (s: SessionInfo) => `${s.name}${s.kind === "sim" ? " · 시뮬레이션" : ""}${s.events >= 0 ? ` · 사건 ${s.events}` : ""}`;
 
 // ---- 위 막대 ----
 
@@ -78,7 +77,7 @@ export function TopBar({ v, run, busy, user, onLogout }: TopProps) {
       <div className="top-field">
         <span className="top-label">업무일</span>
         <b>{v.state.scenario.sim_date}</b>
-        <span className="muted small">기준일 {v.as_of}</span>
+        {v.as_of !== v.state.scenario.sim_date && <span className="muted small top-sub">기준일 {v.as_of}</span>}
       </div>
       <div className="top-spacer" />
       <Link to="/events/new" className="btn">+ 사건 입력</Link>
@@ -94,22 +93,28 @@ export function TopBar({ v, run, busy, user, onLogout }: TopProps) {
   );
 }
 
-// 세션 띠: 기준 세션은 입력이 실제로 기록되고, 시뮬레이션 세션은 제출이 [모의]다(v3.1 목업, 같은 높이).
-export function ModeBand({ v, run, busy }: { v: View; run: Run; busy: boolean }) {
+// 맥락 줄(이슈 #73): 세션 띠와 시연 흐름 줄을 한 줄로 합친다. 왼쪽은 세션 상태(시뮬레이션이면 검정 띠, v3.1 목업),
+// 오른쪽은 시연 흐름의 지금 단계(right). 긴 설명은 툴팁으로.
+export function ModeBand({ v, run, busy, right }: { v: View; run: Run; busy: boolean; right?: ReactNode }) {
   if (v.session.kind === "main") {
     return (
       <div className="band band-main" role="status">
-        <b>기준 세션</b> · 입력 내용이 실제로 기록됩니다 · 소속 부서 권한으로만 입력할 수 있습니다
+        <span className="band-left" title="기준 세션의 입력은 실제로 기록됩니다. 소속 부서 권한으로만 입력할 수 있습니다.">
+          <b>기준 세션</b> <span className="band-sub">· 입력이 실제로 기록됩니다</span>
+        </span>
+        {right && <span className="band-right">{right}</span>}
       </div>
     );
   }
   const parent = (v.sessions ?? []).find((s) => s.id === v.session.parent_id);
   return (
     <div className="band band-sim" role="status">
-      <span className="band-swan"><Swan name="simulation" size={26} /></span>
-      <b>시뮬레이션 세션 · {v.session.name}</b> · 제출은 [모의]로 처리됩니다 · 다른 부서 대행 입력도 기록됩니다
-      {v.session.parent_id && <span> · 분기: {parent?.name ?? v.session.parent_id} 사건 {v.session.fork_seq}까지</span>}
-      <button className="small" disabled={busy} onClick={() => run(() => api.open("main"))}>기준 세션으로</button>
+      <span className="band-left" title={`제출은 [모의]로 처리되고 다른 부서 대행 입력도 기록됩니다.${v.session.parent_id ? ` 분기: ${parent?.name ?? v.session.parent_id} 사건 ${v.session.fork_seq}까지.` : ""}`}>
+        <span className="band-swan"><Swan name="simulation" size={22} /></span>
+        <b>시뮬레이션 · {v.session.name}</b> <span className="band-sub">· 제출은 [모의]</span>
+        <button className="small" disabled={busy} onClick={() => run(() => api.open("main"))}>기준 세션으로</button>
+      </span>
+      {right && <span className="band-right">{right}</span>}
     </div>
   );
 }
@@ -148,7 +153,7 @@ export function SideNav({ v, dept, current }: { v: View; dept?: Department; curr
         </div>
       ))}
       <p className="nav-foot muted tiny">
-        저장소 {v.store} · 원본 {v.raw_files_verified}개 해시 확인 · 입력 {v.input_mode}
+        <span className="sys-info" title={`저장소 ${v.store} · 원본 ${v.raw_files_verified}개 해시 확인 · 입력 ${v.input_mode}`}>시스템 정보</span>
       </p>
     </nav>
   );

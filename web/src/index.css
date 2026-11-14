@@ -2706,3 +2706,103 @@ table.grid.b2b-table td {
 table.grid .cell-sub.bad {
   color: #D7263D;
 }
+
+/* ===== 밀집도 4단계(이슈 #73): 공통 틀 — 세션 띠 + 시연 흐름 줄 = 맥락 줄 하나 ===== */
+.band {
+  justify-content: space-between;
+  gap: 4px 16px;
+  min-height: 36px;
+}
+
+.band-left,
+.band-right {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.band-right {
+  margin-left: auto;
+}
+
+.band-sub {
+  color: inherit;
+  opacity: 1;
+}
+
+.band-main .band-sub {
+  color: #4F4F4F;
+}
+
+.band-sim .band-left button {
+  margin-left: 4px;
+  background: #FFFFFF;
+  color: #111111;
+  border-color: #FFFFFF;
+}
+
+.band-swan {
+  width: 26px;
+  height: 26px;
+}
+
+/* 맥락 줄 안의 시연 흐름: 띠 배경을 그대로 쓴다 */
+.band .flowbar {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  font-size: 13px;
+}
+
+.band .flowbar .row {
+  margin-left: 0;
+}
+
+.band-sim .flowbar-title,
+.band-sim .flowbar {
+  color: #FFFFFF;
+}
+
+.band-sim .flowbar a.btn {
+  background: #FFFFFF;
+  color: #111111;
+}
+
+.band-sim .flowbar button.ghost {
+  background: #FFFFFF;
+  color: #111111;
+  border-color: #FFFFFF;
+}
+
+.flowbar-now {
+  max-width: 34em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sys-info {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+@media (max-width: 1200px) {
+  /* 위 막대가 두 줄로 접히지 않게 보조 글자를 숨긴다 */
+  .brand-text .muted,
+  .top-user-name .muted,
+  .top-sub {
+    display: none;
+  }
+
+  .topbar {
+    gap: 8px 12px;
+  }
+}
