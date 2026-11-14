@@ -167,7 +167,12 @@ export function PageHead({ page, children }: { page: Page; children?: ReactNode 
         <h1>{page.title}</h1>
         <p className="muted small">{page.desc}</p>
       </div>
-      {children && <div className="row">{children}</div>}
+      <div className="row">
+        {children}
+        <span className="page-mode" title="카드에 따로 표시가 없으면 실제로 작동하는 기능입니다. 모의·설계 단계는 카드마다 표시합니다.">
+          <span className="mode mode-real">실제 작동</span>
+        </span>
+      </div>
     </div>
   );
 }

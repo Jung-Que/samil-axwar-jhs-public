@@ -334,10 +334,10 @@ function KpiTable({ a, b }: { a: SessionKPI; b: SessionKPI }) {
   ];
   return (
     <table className="grid text">
-      <thead><tr><th>항목</th><th>A</th><th>B</th></tr></thead>
+      <thead><tr><th className="c-fit">항목</th><th className="c-text-s">A</th><th className="c-text-s">B</th></tr></thead>
       <tbody>
         {rows.map(([k, x, y]) => (
-          <tr key={k}><td>{k}</td><td>{x}</td><td className={x !== y && k !== "세션" ? "warn" : ""}>{y}</td></tr>
+          <tr key={k}><td className="c-fit">{k}</td><td className="c-text-s">{x}</td><td className={`c-text-s ${x !== y && k !== "세션" ? "warn" : ""}`}>{y}</td></tr>
         ))}
       </tbody>
     </table>
@@ -382,9 +382,9 @@ function DiffList({ title, rows }: { title: string; rows: ItemDiff[] }) {
         <p className="muted small">두 세션 사이에 차이가 없습니다.</p>
       ) : (
         <table className="grid text">
-          <thead><tr><th>항목</th><th>A</th><th>B</th></tr></thead>
+          <thead><tr><th className="c-text">항목</th><th className="c-fit">A</th><th className="c-fit">B</th></tr></thead>
           <tbody>
-            {rows.map((r) => <tr key={r.key}><td className="small">{r.text}</td><td>{r.a || "없음"}</td><td className="warn">{r.b || "없음"}</td></tr>)}
+            {rows.map((r) => <tr key={r.key}><td className="c-text small">{r.text}</td><td className="c-fit">{r.a || "없음"}</td><td className="c-fit">{r.b || "없음"}</td></tr>)}
           </tbody>
         </table>
       )}

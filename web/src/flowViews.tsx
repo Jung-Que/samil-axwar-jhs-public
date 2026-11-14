@@ -193,18 +193,17 @@ export function FlowPage({ v, user, onSwitch }: Props) {
         <div className="scroll">
           <table className="grid text flow-table">
             <thead>
-              <tr><th>#</th><th>이벤트 루프</th><th>누가</th><th>할 일</th><th>상태</th><th>근거·결과</th><th /></tr>
+              <tr><th className="c-fit">#</th><th className="c-text-s">누가</th><th className="c-text">할 일</th><th className="c-fit">상태</th><th className="c-text-s">근거·결과</th><th className="c-fit"><span className="sr-only">이동</span></th></tr>
             </thead>
             <tbody>
               {steps.map((s) => (
                 <tr key={s.n} className={`fs-${s.status}`} aria-current={s.status === "now" ? "step" : undefined}>
-                  <td>{s.n}</td>
-                  <td className="small nowrap">{LOOP[s.stage]}</td>
-                  <td className="small">{who(s, accounts)}</td>
-                  <td><b>{s.title}</b><div className="muted small">{s.desc}</div></td>
-                  <td className="nowrap"><span className={`fs-pill fs-pill-${s.status}`}>{STATUS_LABEL[s.status]}</span></td>
-                  <td className="small">{s.evidence ?? ""}</td>
-                  <td><StepAction s={s} user={user} accounts={accounts} onSwitch={onSwitch} /></td>
+                  <td className="c-fit">{s.n}</td>
+                  <td className="c-text-s small">{who(s, accounts)}</td>
+                  <td className="c-text"><b>{s.title}</b><div className="muted small">{s.desc}</div></td>
+                  <td className="c-fit"><span className={`fs-pill fs-pill-${s.status}`}>{STATUS_LABEL[s.status]}</span></td>
+                  <td className="c-text-s small">{s.evidence ?? ""}</td>
+                  <td className="c-fit"><StepAction s={s} user={user} accounts={accounts} onSwitch={onSwitch} /></td>
                 </tr>
               ))}
             </tbody>

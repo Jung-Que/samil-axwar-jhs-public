@@ -248,15 +248,16 @@ export function RequestsView({ v, run, dept }: { v: View; run: Run; dept?: Depar
         </EmptyState>
       )}
       {rs.length > 0 && <table className="grid text">
-        <thead><tr><th>ID</th><th>대상</th><th>질문</th><th>막는 판단</th><th>기한</th><th>상태</th><th /></tr></thead>
+        <thead><tr><th className="c-fit">ID</th><th className="c-fit">대상</th><th className="c-text">질문</th><th className="c-fit">막는 판단</th><th className="c-fit">기한</th><th className="c-fit">상태</th><th className="c-fit"><span className="sr-only">회신</span></th></tr></thead>
         <tbody>
           {rs.map((r) => {
             const p = canEvent(v, dept, "E3_REPLY", r);
             return (
               <tr key={r.request_id} className={dept && r.to_role === dept.id ? "row-strong" : ""}>
-                <td>{r.request_id}</td><td>{r.to_role}</td><td>{r.question}</td><td className="small">{(r.blocks ?? []).join(", ")}</td><td>{r.due_date}</td>
-                <td><span className={`pill pill-${slug(r.state)}`}>{r.state}</span>{r.mock_reply && <span className="muted small"> 모의</span>}</td>
-                <td>
+                <td className="c-fit">{r.request_id}</td><td className="c-fit">{r.to_role}</td><td className="c-text">{r.question}</td>
+                <td className="c-fit small" title={(r.blocks ?? []).join(", ")}><span className="clip">{(r.blocks ?? []).join(", ")}</span></td><td className="c-fit">{r.due_date}</td>
+                <td className="c-fit"><span className={`pill pill-${slug(r.state)}`}>{r.state}</span>{r.mock_reply && <span className="muted small"> 모의</span>}</td>
+                <td className="c-fit">
                   {r.state !== "반영" && r.to_role !== "바이어" && (
                     <button className="ghost small" disabled={!p.ok} title={p.reason ?? ""} onClick={() => setOpen(open === r.request_id ? null : r.request_id)}>
                       {p.proxy ? "대행 회신" : "회신 입력"}

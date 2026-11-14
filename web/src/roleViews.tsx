@@ -324,19 +324,19 @@ export function PermissionTable({ v, current }: { v: View; current?: string }) {
       <table className="grid text">
         <thead>
           <tr>
-            <th>권한</th>
-            <th>기준 세션 입력 사건</th>
-            <th>회신</th>
-            <th>기능</th>
+            <th className="c-fit">권한</th>
+            <th className="c-text-s">기준 세션 입력 사건</th>
+            <th className="c-text-s">회신</th>
+            <th className="c-text">기능</th>
           </tr>
         </thead>
         <tbody>
           {(v.departments ?? []).map((d) => (
             <tr key={d.code} className={d.code === current ? "row-strong" : ""}>
-              <td className="nowrap">{d.dept === d.label ? d.label : `${d.dept} · ${d.label}`}</td>
-              <td className="small">{(d.events ?? []).filter((e) => e !== "E3_REPLY").map((e) => EVENT_LABEL[e] ?? e).join(" · ") || "-"}</td>
-              <td className="small">{(d.replies ?? []).join(" · ") || "-"}</td>
-              <td className="small">{d.features.map((f) => FEATURE_LABEL[f] ?? f).join(" · ")}</td>
+              <td className="c-fit">{d.dept === d.label ? d.label : `${d.dept} · ${d.label}`}</td>
+              <td className="c-text-s small">{(d.events ?? []).filter((e) => e !== "E3_REPLY").map((e) => EVENT_LABEL[e] ?? e).join(" · ") || "-"}</td>
+              <td className="c-text-s small">{(d.replies ?? []).join(" · ") || "-"}</td>
+              <td className="c-text small">{d.features.map((f) => FEATURE_LABEL[f] ?? f).join(" · ")}</td>
             </tr>
           ))}
         </tbody>

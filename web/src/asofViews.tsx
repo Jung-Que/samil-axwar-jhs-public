@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import type { Backtest, Inbox, Lane, LaneAction, LineRow, View } from "./types";
-import { ColHead, Section, batchSource } from "./panels";
+import { ColHead, Section, TableSrc, batchSource } from "./panels";
 import { PRODUCT_LABEL, ea, slug } from "./format";
 import { BASE, EChart, INK, INK2, LINE, RED, axis } from "./chart";
 
@@ -113,14 +113,14 @@ export function InboxView({ v }: { v: View }) {
       <div className="scroll">
         <table className="grid">
           <thead>
-            <tr><th>접수일</th><th>주문</th><th>고객</th><th>팀</th><th>제품군</th><th>라인</th><th>수량</th><th>금액(백만)</th><th>상태</th><th>추정 납기 / 출하일</th></tr>
+            <tr><th>접수일</th><th className="c-left">주문</th><th className="c-left">고객</th><th className="c-left">팀</th><th className="c-left">제품군</th><th className="c-left">라인</th><th>수량</th><th>금액(백만)</th><th className="c-left">상태</th><th>추정 납기 / 출하일</th></tr>
           </thead>
           <tbody>
             {orders.map((o) => (
               <tr key={o.order_id}>
-                <td>{o.order_date}</td><td>{o.order_id}</td><td>{o.customer_id === "NONE" ? o.agency_id : o.customer_id}</td><td>{o.sales_team}</td>
-                <td>{o.product_id}</td><td>{o.line_id}</td><td>{ea(o.qty)}</td><td>{ea(Math.round(o.amount_krw / 1e6))}</td>
-                <td><span className={`pill pill-${slug(o.status)}`}>{o.status}</span></td>
+                <td>{o.order_date}</td><td className="c-left">{o.order_id}</td><td className="c-left">{o.customer_id === "NONE" ? o.agency_id : o.customer_id}</td><td className="c-left">{o.sales_team}</td>
+                <td className="c-left">{o.product_id}</td><td className="c-left">{o.line_id}</td><td>{ea(o.qty)}</td><td>{ea(Math.round(o.amount_krw / 1e6))}</td>
+                <td className="c-left"><span className={`pill pill-${slug(o.status)}`}>{o.status}</span></td>
                 <td>{o.ship_date ?? o.est_due ?? "-"}</td>
               </tr>
             ))}
@@ -160,7 +160,7 @@ export function LineBoardView({ v }: { v: View }) {
         <table className="grid">
           <thead>
             <tr>
-              <th>라인</th><th>할 수 있는 작업</th>
+              <th>라인</th><th className="c-left">할 수 있는 작업</th>
               <ColHead main="이번 달 배치" sub="배치 실적 · 완료/관행 횟수" />
               <ColHead main="최근 배치" sub="배치 실적 · 날짜 EA" />
               <ColHead main="보류(90일)" sub="배치 실적 · 건" />
@@ -169,14 +169,14 @@ export function LineBoardView({ v }: { v: View }) {
               {months.map((m) => <ColHead key={m} main={`${m} 부하`} sub="추정 납기 + 가예약 · EA/월 (÷ 월 생산)" />)}
               <ColHead main="여유" sub={`능력 스냅샷 ${b.snapshot_date} · EA/년`} />
               <ColHead main="Masil 보호" sub={`발주 ~${b.cutoff} · EA`} />
-              <ColHead main="상태" sub="부하 ÷ 월 생산(A-21)" />
+              <ColHead main="상태" sub="부하 ÷ 월 생산(A-21)" className="c-left" />
             </tr>
           </thead>
           <tbody>
             {rows.map((r: LineRow) => (
               <tr key={r.line_id} className={r.kind === "new" ? "row-new" : ""}>
                 <td>{r.line_id} <span className="muted small">{r.plant_id}</span></td>
-                <td>{PRODUCT_LABEL[r.product_id] ?? r.product_id}{r.dedicated ? " · F1 전용" : ""}</td>
+                <td className="c-left">{PRODUCT_LABEL[r.product_id] ?? r.product_id}{r.dedicated ? " · F1 전용" : ""}</td>
                 <td>{r.kind === "new" ? "-" : `${r.batches_done}/${r.batches_typical}회`}</td>
                 <td>{r.last_batch_date ? `${r.last_batch_date.slice(5)} ${ea(r.last_batch_qty)}` : "-"}</td>
                 <td className={r.hold_batches_90d ? "bad" : ""}>{r.kind === "new" ? "-" : r.hold_batches_90d}</td>
@@ -189,12 +189,13 @@ export function LineBoardView({ v }: { v: View }) {
                 ))}
                 <td>{r.kind === "new" ? "-" : ea(r.spare_annual)}{r.future_snapshot && r.kind !== "new" && <span className="src">미래 자료</span>}</td>
                 <td>{r.masil_protected ? ea(r.masil_protected) : "-"}</td>
-                <td><span className={`pill status-${slug(r.status)}`}>{r.status}</span>{r.note && <div className="muted small">{r.note}</div>}</td>
+                <td className="c-left"><span className={`pill status-${slug(r.status)}`} title={r.note || undefined}>{r.status}</span>{r.note && <span className="note-mark" title={r.note}> 메모</span>}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      <TableSrc>배치·보류·월 생산 = {batchSource(v)} · 진행 주문 = 수주 기록 ~{b.cutoff} · 부하 = 추정 납기 + C-201 가예약(EA/월, ÷ 월 생산) · 여유 = 능력 스냅샷 {b.snapshot_date}(EA/년) · Masil 보호 = 발주 ~{b.cutoff} · 상태 = 다음 달 부하 ÷ 월 생산(A-21)</TableSrc>
     </Section>
   );
 }

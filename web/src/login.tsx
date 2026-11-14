@@ -108,15 +108,15 @@ export function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
           </div>
           <table className="grid text">
             <thead>
-              <tr><th>아이디</th><th>이름</th><th>부서</th><th /></tr>
+              <tr><th className="c-fit">아이디</th><th className="c-fit">이름</th><th className="c-text-s">부서</th><th className="c-fit"><span className="sr-only">선택</span></th></tr>
             </thead>
             <tbody>
               {accounts.map((a) => (
                 <tr key={a.login_id} className={a.login_id === id ? "row-strong" : ""}>
-                  <td className="nowrap"><code>{a.login_id}</code></td>
-                  <td className="nowrap">{a.name}</td>
-                  <td>{a.dept_label}{a.role_code === wantRole && <span className="pill tiny tone-accent"> 다음 차례</span>}</td>
-                  <td><button type="button" className="ghost small" aria-label={`${a.name} 계정 선택`} onClick={() => pick(a)}>선택</button></td>
+                  <td className="c-fit"><code>{a.login_id}</code></td>
+                  <td className="c-fit">{a.name}</td>
+                  <td className="c-text-s">{a.dept_label}{a.role_code === wantRole && <span className="pill tiny tone-accent"> 다음 차례</span>}</td>
+                  <td className="c-fit"><button type="button" className="ghost small" aria-label={`${a.name} 계정 선택`} onClick={() => pick(a)}>선택</button></td>
                 </tr>
               ))}
             </tbody>
@@ -142,16 +142,16 @@ export function AccessPage({ v, user }: { v: View; user: User }) {
         <div className="scroll">
           <table className="grid text">
             <thead>
-              <tr><th>아이디</th><th>이름</th><th>역할(부서)</th><th>담당 업무</th><th>생성일</th></tr>
+              <tr><th className="c-fit">아이디</th><th className="c-fit">이름</th><th className="c-fit">역할(부서)</th><th className="c-text">담당 업무</th><th className="c-fit">생성일</th></tr>
             </thead>
             <tbody>
               {(t?.users ?? []).map((u) => (
                 <tr key={u.login_id} className={u.login_id === user.login_id ? "row-strong" : ""}>
-                  <td className="nowrap"><code>{u.login_id}</code>{u.login_id === user.login_id && <span className="muted small"> · 현재 로그인</span>}</td>
-                  <td className="nowrap">{u.name}</td>
-                  <td className="nowrap">{u.dept_label} <span className="muted small">{u.role_code}</span></td>
-                  <td className="small">{duty(u.role_code)}</td>
-                  <td className="small nowrap">{u.created_at?.slice(0, 10) ?? ""}</td>
+                  <td className="c-fit"><code>{u.login_id}</code>{u.login_id === user.login_id && <span className="muted small"> · 현재 로그인</span>}</td>
+                  <td className="c-fit">{u.name}</td>
+                  <td className="c-fit">{u.dept_label} <span className="muted small">{u.role_code}</span></td>
+                  <td className="c-text small">{duty(u.role_code)}</td>
+                  <td className="c-fit small">{u.created_at?.slice(0, 10) ?? ""}</td>
                 </tr>
               ))}
             </tbody>

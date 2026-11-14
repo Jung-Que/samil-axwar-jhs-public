@@ -446,6 +446,11 @@ table.grid td input {
   gap: 14px;
 }
 
+/* 칸 안의 표가 옆 칸을 덮지 않게(이슈 #69: 약속 원장 겹침) */
+.cols > * {
+  min-width: 0;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -1908,4 +1913,130 @@ a.btn.ghost-btn {
   color: #111111;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* ===== 밀집도 1단계(이슈 #69) ===== */
+/* 표 열 종류: 내용 폭(코드·대상·날짜·상태·버튼·숫자) / 글 열(최소 폭, 줄바꿈) / 짧은 글 열 / 말줄임(전체는 title) */
+table.grid th.c-fit,
+table.grid td.c-fit {
+  width: 1%;
+  white-space: nowrap;
+}
+
+table.grid th.c-text,
+table.grid td.c-text {
+  min-width: 16em;
+  white-space: normal;
+}
+
+table.grid th.c-text-s,
+table.grid td.c-text-s {
+  min-width: 9em;
+  white-space: normal;
+}
+
+table.grid th.c-clip,
+table.grid td.c-clip {
+  max-width: 14em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+table.grid th.c-left,
+table.grid td.c-left {
+  text-align: left;
+}
+
+table.grid th.c-num,
+table.grid td.c-num {
+  text-align: right;
+}
+
+/* 표 안 배지·버튼·코드 꼬리표는 줄바꿈하지 않는다 */
+table.grid .pill,
+table.grid .tag,
+table.grid .rule,
+table.grid button,
+table.grid a.btn {
+  white-space: nowrap;
+}
+
+/* 열 제목 출처는 툴팁(점선 밑줄), 표 아래 한 줄로 모은다 */
+.th-main[title] {
+  text-decoration: underline dotted #4F4F4F;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+.table-src {
+  margin: 2px 0 8px;
+  font-size: 12px;
+  color: #4F4F4F;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* 카드 안내문: 한 줄 + 자세히 */
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.note p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.note-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+button.note-more {
+  flex: none;
+  min-height: 0;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: #111111;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.page-mode {
+  align-self: flex-end;
+}
+
+.note-mark {
+  font-size: 12px;
+  color: #4F4F4F;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+/* 칸 안 말줄임: 표 칸의 max-width는 자동 배치에서 무시되므로 안쪽 상자에 건다. 전체는 칸의 title */
+.clip {
+  display: inline-block;
+  max-width: 7.5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: top;
 }
